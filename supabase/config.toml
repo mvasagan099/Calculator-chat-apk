@@ -1,0 +1,13 @@
+project_id = "calculator-messenger"
+[functions.livekit-token]
+verify_jwt = false
+[functions.validate-media]
+verify_jwt = false
+[functions.delete-account]
+verify_jwt = false
+[functions.maintenance]
+verify_jwt = false
+[functions.dispatch-push]
+verify_jwt = false
+[functions.livekit-webhook]
+verify_jwt = false

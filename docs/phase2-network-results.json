@@ -1,0 +1,31 @@
+{
+  "checked_at": "2026-10-15T16:56:45.307518+00:00",
+  "proxy_configured": true,
+  "checks": [
+    {
+      "url": "https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom",
+      "curl_exit_code": 56,
+      "http_status_lines": [
+        "HTTP/1.1 403 Forbidden"
+      ],
+      "connect_tunnel_denied": true
+    },
+    {
+      "url": "https://dl.google.com/android/repository/repository2-3.xml",
+      "curl_exit_code": 0,
+      "http_status_lines": [
+        "HTTP/1.1 200 OK",
+        "HTTP/2 200 "
+      ],
+      "connect_tunnel_denied": false
+    },
+    {
+      "url": "https://api.github.com/repos/mvasagan099/Calculator-chat-apk",
+      "curl_exit_code": 56,
+      "http_status_lines": [
+        "HTTP/1.1 403 Forbidden"
+      ],
+      "connect_tunnel_denied": true
+    }
+  ]
+}

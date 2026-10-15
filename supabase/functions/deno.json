@@ -1,0 +1,8 @@
+{
+  "compilerOptions": { "strict": true },
+  "imports": {
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.117.3",
+    "livekit-server-sdk": "npm:livekit-server-sdk@2.19.1",
+    "jose": "npm:jose@6.1.0"
+  }
+}

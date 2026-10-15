@@ -1,0 +1,57 @@
+[!] Flutter (Channel [user-branch], 3.44.0, on Debian GNU/Linux 13 (trixie) 6.18.44, locale C.UTF-8) [35ms]
+    ! Flutter version 3.44.0 on channel [user-branch] at /workspace/toolchains/flutter-sdk
+      Currently on an unknown channel. Run `flutter channel` to switch to an official channel.
+      If that doesn't fix the issue, reinstall Flutter by following instructions at https://flutter.dev/setup.
+    ! Upstream repository unknown source is not a standard remote.
+      Set environment variable "FLUTTER_GIT_URL" to unknown source to dismiss this error.
+    • Framework revision 559ffa3f75 (5 months ago), 2026-05-15 14:13:13 -0700
+    • Engine revision 4c525dac5e
+    • Dart version 3.12.0
+    • DevTools version 2.57.0
+    • Feature flags: enable-web, enable-linux-desktop, enable-macos-desktop, enable-windows-desktop, enable-android, enable-ios, cli-animations, enable-native-assets, enable-swift-package-manager, omit-legacy-version-file, enable-lldb-debugging, enable-uiscene-migration, enable-riscv64
+    • If those were intentional, you can disregard the above warnings; however it is recommended to use "git" directly to perform update checks and upgrades.
+
+[✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0) [2.0s]
+    • Android SDK at /workspace/toolchains/android-sdk
+    • Emulator version 36.3.10.0 (build_id 14472402) (CL:N/A)
+    • Platform android-36, build-tools 36.0.0
+    • ANDROID_HOME = /workspace/toolchains/android-sdk
+    • ANDROID_SDK_ROOT = /workspace/toolchains/android-sdk
+    • Java binary at: /workspace/toolchains/jdk21/bin/java
+      This JDK is specified by the JAVA_HOME environment variable.
+      To manually set the JDK path, use: `flutter config --jdk-dir="path/to/jdk"`.
+    • Java version OpenJDK Runtime Environment Temurin-21.0.12.1+1 (build 21.0.12.1+1-LTS)
+    • All Android licenses accepted.
+
+[✗] Chrome - develop for the web (Cannot find Chrome executable at google-chrome) [10ms]
+    ! Cannot find Chrome. Try setting CHROME_EXECUTABLE to a Chrome executable.
+
+[✗] Linux toolchain - develop for Linux desktop [63ms]
+    ✗ clang++ is required for Linux development.
+      It is likely available from your distribution (e.g.: apt install clang), or can be downloaded from https://releases.llvm.org/
+    ✗ CMake is required for Linux development.
+      It is likely available from your distribution (e.g.: apt install cmake), or can be downloaded from https://cmake.org/download/
+    ✗ ninja is required for Linux development.
+      It is likely available from your distribution (e.g.: apt install ninja-build), or can be downloaded from https://github.com/ninja-build/ninja/releases
+    • pkg-config version 1.8.1
+    ✗ GTK 3.0 development libraries are required for Linux development.
+      They are likely available from your distribution (e.g.: apt install libgtk-3-dev)
+    ! Unable to access driver information using 'eglinfo'.
+      It is likely available from your distribution (e.g.: apt install mesa-utils)
+
+[✓] Proxy Configuration [24ms]
+    • HTTP_PROXY is set
+    • NO_PROXY is localhost,127.0.0.1,::1
+    • NO_PROXY contains localhost
+    • NO_PROXY contains 127.0.0.1
+    • NO_PROXY contains ::1
+
+[✓] Connected device (1 available) [61ms]
+    • Linux (desktop) • linux • linux-x64 • Debian GNU/Linux 13 (trixie) 6.18.44
+
+[!] Network resources [309ms]
+    ✗ An HTTP error occurred while checking "https://storage.googleapis.com/": Proxy failed to establish tunnel (403 Forbidden)
+    ✗ An HTTP error occurred while checking "https://maven.google.com/": Proxy failed to establish tunnel (403 Forbidden)
+    ✗ An HTTP error occurred while checking "https://cocoapods.org/": Proxy failed to establish tunnel (403 Forbidden)
+
+! Doctor found issues in 4 categories.

@@ -1,0 +1,12 @@
+Check supabase/functions/_shared/push_payload_test.ts
+Check supabase/functions/_shared/security_test.ts
+running 2 tests from ./supabase/functions/_shared/push_payload_test.ts
+message, group and missed-call payloads never include private previews ... ok (641µs)
+incoming calls use the dedicated channel and short TTL ... ok (99µs)
+running 3 tests from ./supabase/functions/_shared/security_test.ts
+reject unauthenticated function calls before accessing service credentials ... ok (23ms)
+reject malformed IDs, body methods, oversized and non-object JSON ... ok (1ms)
+attachment byte validation rejects spoofed MIME and executable payloads ... ok (665µs)
+
+ok | 5 passed | 0 failed (139ms)
+

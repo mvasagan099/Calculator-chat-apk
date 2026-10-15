@@ -1,0 +1,26 @@
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+config/*.json
+!config/example.json
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+*.log
+supabase/.temp/
+.idea/
+*.iml
+
+.flutter-plugins-dependencies
+
+# Public Firebase console input / generated native identifiers are owner-specific.
+android/app/google-services.json
+android/app/src/main/res/values/firebase_public.xml
+__pycache__/

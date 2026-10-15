@@ -1,0 +1,16 @@
+BLOCKED: User A signs up
+BLOCKED: User B signs up
+BLOCKED: User A finds User B
+BLOCKED: User A sends a message
+BLOCKED: User B receives the message
+BLOCKED: User B replies
+BLOCKED: Delivery and read-state updates
+BLOCKED: Image upload and download
+BLOCKED: Audio message delivery
+BLOCKED: Group creation and messaging
+BLOCKED: Unauthorized database reads and writes rejected
+BLOCKED: Blocked interactions rejected
+BLOCKED: Voice media connects
+BLOCKED: Video media connects
+BLOCKED: Notifications reach background devices
+BLOCKED: Android unlock protection remains enforced

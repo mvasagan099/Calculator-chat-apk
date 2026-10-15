@@ -1,0 +1,15 @@
+name: Verify
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.6
+      - run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/tests/hosted.ts
+      - run: deno test --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
+      - run: ./scripts/test-database.sh
