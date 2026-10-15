@@ -1,6 +1,17 @@
 # Validation evidence and release checklist
 
-## Executed in this cloud instance
+## Current Phase 4 evidence
+
+Full Flutter suite: **66 passed, one hosted integration skipped**. Analysis passes. Ten migrations and seven real PostgreSQL suites pass; eight Edge entry points and both hosted runners type-check; five Edge tests and 11 public-config tests pass. The separate official native Signal/JNI probe passes 17 checks. These are distinct test scopes; the Flutter app is not E2EE-enabled. See [PHASE4_SECURITY.md](PHASE4_SECURITY.md) for the scenario/status table and current logs.
+
+```sh
+SIGNAL_PROTOTYPE_CACHE=/workspace/toolchains/libsignal-prototype python3 scripts/test-signal-prototype.py
+deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/tests/hosted*.ts
+```
+
+The native runner verifies pinned Maven artifacts before loading them and uses in-memory test stores. The six new hosted privacy scenarios are BLOCKED without staging configuration; they are not mocks. Renderer tests use an explicit transport adapter and cannot prove Android video, Storage delivery or screenshot behavior. Auth gate tests use an HTTP adapter and do not verify real password/token services. Actual signed APK/device/provider checks remain blocked.
+
+## Historical Phase 3 evidence
 
 - Flutter 3.44.0 / Dart 3.12.0 analysis: passed, no issues at the last recorded run; rerun after changes.
 - Flutter unit/widget suite: **53 passed, one hosted integration test explicitly skipped** in the last recorded full run. It covers arithmetic precedence/errors, salted PIN verification, persistent throttling, corrupt-storage failure, calculator interaction, cold lock/route protection, both authorization gates, background/inactivity relocking, encrypted cache restoration/tamper rejection/account binding, serialized cache writes, retained-modal masking, onboarding navigation and landscape layout. The Phase 1 additions cover confirmed 4–8 digit PIN setup, leading-zero PINs, verifier namespace isolation, failed secure writes, full local navigation/search/theme changes without a backend client, arithmetic results that resemble a PIN, restart persistence, deep-link/background/back-button protection, compact/landscape layouts and late verification after relock/disposal. Test PIN derivations use a reduced work factor for speed; production remains 600,000 iterations. Fourteen call-controller regression tests cover cancellation during token/permission/connection/native-start waits, immediate local teardown before a pending server response, stale accepted/accept responses, cleanup across new calls and same-ID retries, control failures, transport loss, terminal server events and disposal. These controller tests use test-only adapters; they do not exercise real LiveKit capture or the Android foreground service.
@@ -11,7 +22,7 @@
 
 Tests do not establish that a hosted Supabase project, Firebase delivery or real LiveKit calls work. No providers were configured and no physical Android devices were attached. The updated Kotlin permission and foreground-service code has not compiled successfully in this instance. The source includes an Android integration calculator test, but it has not run on a device. CI configuration exists; no completed remote workflow or artifact has been observed.
 
-Latest outputs: [analysis](phase3-analysis.txt), [Flutter tests](phase3-flutter-tests.txt), [debug build](phase3-debug-build.txt), [Edge checks](phase3-edge-check.txt), [Edge tests](phase3-edge-tests.txt), [PostgreSQL suites](phase3-database.txt), and [hosted results](phase3-hosted-results.json). Phase 1/2 historical logs are retained; no release build was attempted in Phase 3 without a keystore. See the [Phase 3 acceptance matrix](PHASE3_BETA_READINESS.md#acceptance-matrix).
+Historical Phase 3 outputs: [analysis](phase3-analysis.txt), [Flutter tests](phase3-flutter-tests.txt), [debug build](phase3-debug-build.txt), [Edge checks](phase3-edge-check.txt), [Edge tests](phase3-edge-tests.txt), [PostgreSQL suites](phase3-database.txt), and [hosted results](phase3-hosted-results.json). Phase 1/2 historical logs are retained; no release build was attempted in Phase 3 without a keystore. See the [Phase 3 acceptance matrix](PHASE3_BETA_READINESS.md#acceptance-matrix).
 
 Phase 3 adds 11 tests for equal-timestamp ordering, transient/terminal retry classification, scoped paginated-history refresh, encrypted outbox/wallpaper restoration across repository restart with an HTTP adapter, presence expiration/disposal/network failures, terminal call retry/account isolation and exact bounded download streams. The PostgreSQL media suite now rejects cross-conversation attachment-path reuse and checks the independently validated destination copy. These local results do not establish hosted transfer or call success.
 

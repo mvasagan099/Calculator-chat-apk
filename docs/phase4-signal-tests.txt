@@ -1,0 +1,18 @@
+PASS: native prekey agreement and two-party decryption
+PASS: one-time prekey consumed
+PASS: bidirectional session ratchet
+PASS: offline out-of-order delivery
+PASS: replay rejected by libsignal
+PASS: ciphertext tampering rejected
+PASS: failed authentication does not consume valid message
+PASS: signed prekey rotation with the same identity
+PASS: delayed old-session message after rotation
+PASS: identity change requires trust decision
+PASS: identity verification number changes
+PASS: serialized session recovery
+PASS: independent recipient-device session
+PASS: other device cannot decrypt recipient ciphertext
+PASS: attachment key transported through Signal; GCM integrity checked
+PASS: attachment metadata substitution rejected
+PASS: attachment tampering rejected
+RESULT: 17 native-library prototype checks passed; app E2EE is NOT enabled

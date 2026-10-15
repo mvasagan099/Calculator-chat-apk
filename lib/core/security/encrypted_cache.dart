@@ -3,9 +3,16 @@ import 'dart:io';
 import 'package:cryptography/cryptography.dart';
 import 'package:path_provider/path_provider.dart';
 import 'pin_vault.dart';
+import 'local_retention.dart';
 
 class EncryptedCache {
-  EncryptedCache(this.userId, this.store, {this.directory});
+  EncryptedCache(
+    this.userId,
+    this.store, {
+    this.directory,
+    DateTime Function()? clock,
+  }) : clock = clock ?? DateTime.now;
+  final DateTime Function() clock;
   final String userId;
   final SecretStore store;
   final Directory? directory;
@@ -48,9 +55,12 @@ class EncryptedCache {
         data = {}; /* Corrupt caches never replace the server. */
       }
     }
+    pruneLocalData(data, clock());
+    if (data.isNotEmpty) await save();
   }
 
   Future<void> save() {
+    pruneLocalData(data, clock());
     final snapshot = jsonEncode(data);
     _writes = _writes.catchError((Object _) {}).then((_) async {
       final box = await _cipher.encrypt(
@@ -72,9 +82,21 @@ class EncryptedCache {
     return _writes;
   }
 
+  /// Release references after outstanding writes; encrypted history and the
+  /// Keystore-wrapped key remain for the next authenticated unlock.
+  Future<void> forget() async {
+    await _writes.catchError((Object _) {});
+    data = {};
+    _key = null;
+    _file = null;
+  }
+
   Future<void> clear() async {
     await _writes.catchError((Object _) {});
     data = {};
+    _file ??= File(
+      '${(directory ?? await getApplicationSupportDirectory()).path}/cache-$userId.bin',
+    );
     if (await _file!.exists()) await _file!.delete();
     await store.delete('cache.key.$userId');
   }

@@ -15,6 +15,6 @@ for migration in supabase/migrations/*.sql; do
  docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < "$migration"
 done
 docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/remote_preflight.sql
-for test in supabase/tests/authorization.sql supabase/tests/media.sql supabase/tests/status.sql supabase/tests/calls.sql; do
+for test in supabase/tests/authorization.sql supabase/tests/media.sql supabase/tests/status.sql supabase/tests/calls.sql supabase/tests/retention.sql supabase/tests/devices.sql supabase/tests/privacy_preferences.sql; do
  docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < "$test"
 done

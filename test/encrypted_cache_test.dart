@@ -54,4 +54,27 @@ void main() {
       await dir.delete(recursive: true);
     }
   });
+  test(
+    'forget releases plaintext references without deleting encrypted history; clear works while forgotten',
+    () async {
+      final dir = await Directory.systemTemp.createTemp('cache-forget-test');
+      try {
+        final secrets = MemorySecrets();
+        final cache = EncryptedCache('owner', secrets, directory: dir);
+        await cache.initialize();
+        cache.data['private'] = 'text';
+        await cache.save();
+        await cache.forget();
+        expect(cache.data, isEmpty);
+        final restored = EncryptedCache('owner', secrets, directory: dir);
+        await restored.initialize();
+        expect(restored.data['private'], 'text');
+        await cache.clear();
+        expect(await File('${dir.path}/cache-owner.bin').exists(), isFalse);
+        expect(await secrets.read('cache.key.owner'), isNull);
+      } finally {
+        await dir.delete(recursive: true);
+      }
+    },
+  );
 }

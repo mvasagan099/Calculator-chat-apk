@@ -1,0 +1,1152 @@
+GRANT
+DO
+CREATE SCHEMA
+CREATE SCHEMA
+CREATE SCHEMA
+CREATE SCHEMA
+CREATE TABLE
+CREATE FUNCTION
+GRANT
+GRANT
+CREATE FUNCTION
+GRANT
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+GRANT
+GRANT
+CREATE TABLE
+ALTER TABLE
+GRANT
+GRANT
+CREATE PUBLICATION
+BEGIN
+CREATE EXTENSION
+CREATE SCHEMA
+REVOKE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE INDEX
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+GRANT
+GRANT
+DO
+GRANT
+CREATE POLICY
+GRANT
+CREATE POLICY
+CREATE POLICY
+GRANT
+CREATE POLICY
+GRANT
+CREATE POLICY
+GRANT
+CREATE POLICY
+CREATE POLICY
+GRANT
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+GRANT
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+GRANT
+CREATE POLICY
+GRANT
+CREATE POLICY
+GRANT
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+ALTER PUBLICATION
+CREATE POLICY
+CREATE POLICY
+REVOKE
+DO
+COMMIT
+BEGIN
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+INSERT 0 3
+CREATE FUNCTION
+GRANT
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE POLICY
+CREATE FUNCTION
+REVOKE
+GRANT
+DO
+REVOKE
+COMMIT
+BEGIN
+CREATE TABLE
+ALTER TABLE
+REVOKE
+GRANT
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+GRANT
+REVOKE
+COMMIT
+BEGIN
+ALTER TABLE
+CREATE FUNCTION
+REVOKE
+GRANT
+COMMIT
+BEGIN
+CREATE TABLE
+ALTER TABLE
+REVOKE
+GRANT
+CREATE POLICY
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE TRIGGER
+CREATE TRIGGER
+REVOKE
+COMMIT
+BEGIN
+ALTER TABLE
+COMMIT
+BEGIN
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+REVOKE
+GRANT
+COMMIT
+BEGIN
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+ALTER TABLE
+CREATE INDEX
+CREATE TABLE
+ALTER TABLE
+REVOKE
+GRANT
+GRANT
+CREATE POLICY
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+REVOKE
+GRANT
+GRANT
+CREATE POLICY
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+DROP POLICY
+CREATE POLICY
+DROP POLICY
+CREATE POLICY
+DROP POLICY
+CREATE POLICY
+CREATE FUNCTION
+REVOKE
+GRANT
+DROP POLICY
+CREATE POLICY
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+GRANT
+REVOKE
+GRANT
+REVOKE
+COMMIT
+BEGIN
+CREATE TABLE
+CREATE TABLE
+CREATE TABLE
+ALTER TABLE
+REVOKE
+GRANT
+GRANT
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+GRANT
+CREATE POLICY
+DO
+CREATE POLICY
+CREATE POLICY
+DO
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+ALTER TABLE
+CREATE FUNCTION
+CREATE TRIGGER
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+GRANT
+REVOKE
+GRANT
+CREATE FUNCTION
+REVOKE
+GRANT
+REVOKE
+COMMIT
+BEGIN
+ALTER TABLE
+UPDATE 0
+ALTER TABLE
+ALTER TABLE
+GRANT
+CREATE POLICY
+CREATE FUNCTION
+REVOKE
+GRANT
+DROP POLICY
+CREATE POLICY
+CREATE FUNCTION
+CREATE FUNCTION
+CREATE FUNCTION
+REVOKE
+COMMIT
+BEGIN
+ database_name | database_role
+---------------+---------------
+ postgres      | postgres
+(1 row)
+
+ migration_history_exists
+--------------------------
+ f
+(1 row)
+
+ table_schema |      table_name
+--------------+----------------------
+ public       | account_devices
+ public       | call_history
+ public       | call_participants
+ public       | calls
+ public       | contacts
+ public       | conversation_members
+ public       | conversations
+ public       | group_invitations
+ public       | groups
+ public       | media_validations
+ public       | message_attachments
+ public       | message_edits
+ public       | message_hides
+ public       | message_mentions
+ public       | message_reactions
+ public       | message_receipts
+ public       | message_tombstones
+ public       | messages
+ public       | notification_jobs
+ public       | privacy_events
+ public       | profiles
+ public       | push_tokens
+ public       | status_mutes
+ public       | status_updates
+ public       | status_views
+ public       | user_blocks
+ public       | user_reports
+ public       | user_settings
+ storage      | buckets
+ storage      | objects
+(30 rows)
+
+ schema_name |      table_name      | rls_enabled
+-------------+----------------------+-------------
+ public      | account_devices      | t
+ public      | call_history         | t
+ public      | call_participants    | t
+ public      | calls                | t
+ public      | contacts             | t
+ public      | conversation_members | t
+ public      | conversations        | t
+ public      | group_invitations    | t
+ public      | groups               | t
+ public      | media_validations    | t
+ public      | message_attachments  | t
+ public      | message_edits        | t
+ public      | message_hides        | t
+ public      | message_mentions     | t
+ public      | message_reactions    | t
+ public      | message_receipts     | t
+ public      | message_tombstones   | t
+ public      | messages             | t
+ public      | notification_jobs    | t
+ public      | privacy_events       | t
+ public      | profiles             | t
+ public      | push_tokens          | t
+ public      | status_mutes         | t
+ public      | status_updates       | t
+ public      | status_views         | t
+ public      | user_blocks          | t
+ public      | user_reports         | t
+ public      | user_settings        | t
+ storage     | buckets              | f
+ storage     | objects              | t
+(30 rows)
+
+ schemaname |      tablename       |         policyname          |      roles      |  cmd   |                                                                                               qual                                                                                                |                                                                                            with_check
+------------+----------------------+-----------------------------+-----------------+--------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ public     | account_devices      | devices_owner               | {authenticated} | SELECT | ((user_id = auth.uid()) AND (private.session_allowed() OR (session_id = private.jwt_session())))                                                                                                  |
+ public     | call_history         | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | call_history         | history_owner               | {authenticated} | SELECT | (user_id = auth.uid())                                                                                                                                                                            |
+ public     | call_participants    | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | call_participants    | participants_read           | {authenticated} | SELECT | (user_id = auth.uid())                                                                                                                                                                            |
+ public     | calls                | calls_member                | {authenticated} | SELECT | (EXISTS ( SELECT 1                                                                                                                                                                               +|
+            |                      |                             |                 |        |    FROM call_participants p                                                                                                                                                                      +|
+            |                      |                             |                 |        |   WHERE ((p.call_id = calls.id) AND (p.user_id = auth.uid()))))                                                                                                                                   |
+ public     | calls                | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | contacts             | contacts_owner              | {authenticated} | ALL    | (owner_id = auth.uid())                                                                                                                                                                           | (owner_id = auth.uid())
+ public     | contacts             | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | conversation_members | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | conversation_members | members_preferences         | {authenticated} | UPDATE | (user_id = auth.uid())                                                                                                                                                                            | (user_id = auth.uid())
+ public     | conversation_members | members_read                | {authenticated} | SELECT | private.is_member(conversation_id)                                                                                                                                                                |
+ public     | conversations        | conversations_member        | {authenticated} | SELECT | private.is_member(id)                                                                                                                                                                             |
+ public     | conversations        | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | group_invitations    | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | group_invitations    | invitations_read            | {authenticated} | SELECT | ((invitee_id = auth.uid()) OR private.is_admin(conversation_id))                                                                                                                                  |
+ public     | groups               | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | groups               | groups_member               | {authenticated} | SELECT | private.is_member(conversation_id)                                                                                                                                                                |
+ public     | media_validations    | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | message_attachments  | attachments_member          | {authenticated} | SELECT | (private.message_member(message_id) AND (EXISTS ( SELECT 1                                                                                                                                       +|
+            |                      |                             |                 |        |    FROM messages m                                                                                                                                                                               +|
+            |                      |                             |                 |        |   WHERE ((m.id = message_attachments.message_id) AND (NOT m.view_once)))))                                                                                                                        |
+ public     | message_attachments  | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | message_edits        | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | message_edits        | edits_owner                 | {authenticated} | SELECT | (private.message_member(message_id) AND (EXISTS ( SELECT 1                                                                                                                                       +|
+            |                      |                             |                 |        |    FROM messages m                                                                                                                                                                               +|
+            |                      |                             |                 |        |   WHERE ((m.id = message_edits.message_id) AND (m.sender_id = auth.uid())))))                                                                                                                     |
+ public     | message_hides        | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | message_hides        | hides_owner                 | {authenticated} | ALL    | (user_id = auth.uid())                                                                                                                                                                            | ((user_id = auth.uid()) AND private.message_member(message_id))
+ public     | message_mentions     | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | message_mentions     | mentions_member             | {authenticated} | SELECT | private.message_member(message_id)                                                                                                                                                                |
+ public     | message_reactions    | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | message_reactions    | reactions_member            | {authenticated} | SELECT | private.message_member(message_id)                                                                                                                                                                |
+ public     | message_receipts     | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | message_receipts     | receipts_member             | {authenticated} | SELECT | private.message_member(message_id)                                                                                                                                                                |
+ public     | message_tombstones   | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | message_tombstones   | tombstones_member           | {authenticated} | SELECT | private.is_member(conversation_id)                                                                                                                                                                |
+ public     | messages             | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | messages             | messages_member             | {authenticated} | SELECT | (private.is_member(conversation_id) AND ((expires_at IS NULL) OR (expires_at > now())))                                                                                                           |
+ public     | notification_jobs    | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | privacy_events       | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | privacy_events       | privacy_events_member       | {authenticated} | SELECT | private.is_member(conversation_id)                                                                                                                                                                |
+ public     | profiles             | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | profiles             | profiles_read               | {authenticated} | SELECT | true                                                                                                                                                                                              |
+ public     | profiles             | profiles_update             | {authenticated} | UPDATE | (id = auth.uid())                                                                                                                                                                                 | (id = auth.uid())
+ public     | push_tokens          | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | push_tokens          | tokens_owner                | {authenticated} | ALL    | (user_id = auth.uid())                                                                                                                                                                            | (user_id = auth.uid())
+ public     | status_mutes         | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | status_mutes         | status_mutes_owner          | {authenticated} | ALL    | (owner_id = auth.uid())                                                                                                                                                                           | (owner_id = auth.uid())
+ public     | status_updates       | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | status_updates       | statuses_view               | {authenticated} | SELECT | private.can_status(id)                                                                                                                                                                            |
+ public     | status_views         | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | status_views         | status_views_read           | {authenticated} | SELECT | ((user_id = auth.uid()) OR (EXISTS ( SELECT 1                                                                                                                                                    +|
+            |                      |                             |                 |        |    FROM status_updates s                                                                                                                                                                         +|
+            |                      |                             |                 |        |   WHERE ((s.id = status_views.status_id) AND (s.user_id = auth.uid())))))                                                                                                                         |
+ public     | user_blocks          | blocks_owner                | {authenticated} | ALL    | (blocker_id = auth.uid())                                                                                                                                                                         | (blocker_id = auth.uid())
+ public     | user_blocks          | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | user_reports         | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | user_reports         | reports_owner               | {authenticated} | ALL    | (reporter_id = auth.uid())                                                                                                                                                                        | (reporter_id = auth.uid())
+ public     | user_settings        | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ public     | user_settings        | settings_owner              | {authenticated} | ALL    | (user_id = auth.uid())                                                                                                                                                                            | (user_id = auth.uid())
+ realtime   | messages             | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ realtime   | messages             | online_publication_guard    | {authenticated} | INSERT |                                                                                                                                                                                                   | ((extension <> 'presence'::text) OR (EXISTS ( SELECT 1                                                                                                                                           +
+            |                      |                             |                 |        |                                                                                                                                                                                                   |    FROM user_settings                                                                                                                                                                            +
+            |                      |                             |                 |        |                                                                                                                                                                                                   |   WHERE ((user_settings.user_id = auth.uid()) AND user_settings.online_visible))))
+ realtime   | messages             | private_conversation_events | {authenticated} | SELECT | ((extension = ANY (ARRAY['broadcast'::text, 'presence'::text])) AND (topic ~ '^conversation:[0-9a-f-]{36}$'::text) AND private.is_member((split_part(topic, ':'::text, 2))::uuid))                |
+ realtime   | messages             | private_conversation_send   | {authenticated} | INSERT |                                                                                                                                                                                                   | ((extension = ANY (ARRAY['broadcast'::text, 'presence'::text])) AND (topic ~ '^conversation:[0-9a-f-]{36}$'::text) AND private.is_member((split_part(topic, ':'::text, 2))::uuid))
+ storage    | objects              | avatars_delete              | {authenticated} | DELETE | ((bucket_id = 'avatars'::text) AND (split_part(name, '/'::text, 1) = (auth.uid())::text))                                                                                                         |
+ storage    | objects              | avatars_read                | {authenticated} | SELECT | ((bucket_id = 'avatars'::text) AND ((split_part(name, '/'::text, 1) = (auth.uid())::text) OR ((EXISTS ( SELECT 1                                                                                 +|
+            |                      |                             |                 |        |    FROM profiles p                                                                                                                                                                               +|
+            |                      |                             |                 |        |   WHERE (p.avatar_path = objects.name))) AND private.photo_visible(private.valid_uuid(split_part(name, '/'::text, 1))))))                                                                         |
+ storage    | objects              | avatars_write               | {authenticated} | INSERT |                                                                                                                                                                                                   | ((bucket_id = 'avatars'::text) AND (split_part(name, '/'::text, 1) = (auth.uid())::text))
+ storage    | objects              | chat_media_delete           | {authenticated} | DELETE | ((bucket_id = 'chat-media'::text) AND (split_part(name, '/'::text, 2) = (auth.uid())::text) AND private.is_member(private.valid_uuid(split_part(name, '/'::text, 1))) AND (NOT (EXISTS ( SELECT 1+|
+            |                      |                             |                 |        |    FROM (message_attachments a                                                                                                                                                                   +|
+            |                      |                             |                 |        |      JOIN messages m ON ((m.id = a.message_id)))                                                                                                                                                 +|
+            |                      |                             |                 |        |   WHERE ((a.object_path = objects.name) AND (m.deleted_at IS NULL))))) AND (NOT (EXISTS ( SELECT 1                                                                                               +|
+            |                      |                             |                 |        |    FROM groups g                                                                                                                                                                                 +|
+            |                      |                             |                 |        |   WHERE (g.avatar_path = objects.name)))))                                                                                                                                                        |
+ storage    | objects              | chat_media_read             | {authenticated} | SELECT | ((bucket_id = 'chat-media'::text) AND private.chat_object_readable(name))                                                                                                                         |
+ storage    | objects              | chat_media_write            | {authenticated} | INSERT |                                                                                                                                                                                                   | ((bucket_id = 'chat-media'::text) AND private.is_member(private.valid_uuid(split_part(name, '/'::text, 1))) AND (split_part(name, '/'::text, 2) = (auth.uid())::text) AND (NOT (EXISTS ( SELECT 1+
+            |                      |                             |                 |        |                                                                                                                                                                                                   |    FROM conversation_members m                                                                                                                                                                   +
+            |                      |                             |                 |        |                                                                                                                                                                                                   |   WHERE ((m.conversation_id = private.valid_uuid(split_part(objects.name, '/'::text, 1))) AND private.blocked(m.user_id, auth.uid()))))))
+ storage    | objects              | device_access_guard         | {authenticated} | ALL    | private.session_allowed()                                                                                                                                                                         | private.session_allowed()
+ storage    | objects              | status_media_delete         | {authenticated} | DELETE | ((bucket_id = 'status-media'::text) AND (split_part(name, '/'::text, 1) = (auth.uid())::text))                                                                                                    |
+ storage    | objects              | status_media_read           | {authenticated} | SELECT | ((bucket_id = 'status-media'::text) AND ((split_part(name, '/'::text, 1) = (auth.uid())::text) OR (EXISTS ( SELECT 1                                                                             +|
+            |                      |                             |                 |        |    FROM status_updates s                                                                                                                                                                         +|
+            |                      |                             |                 |        |   WHERE ((s.object_path = objects.name) AND private.can_status(s.id))))))                                                                                                                         |
+ storage    | objects              | status_media_write          | {authenticated} | INSERT |                                                                                                                                                                                                   | ((bucket_id = 'status-media'::text) AND (split_part(name, '/'::text, 1) = (auth.uid())::text))
+(69 rows)
+
+ table_schema |      table_name      |    grantee    | privilege_type
+--------------+----------------------+---------------+----------------
+ public       | account_devices      | authenticated | SELECT
+ public       | call_history         | authenticated | SELECT
+ public       | call_participants    | authenticated | SELECT
+ public       | calls                | authenticated | SELECT
+ public       | contacts             | authenticated | DELETE
+ public       | contacts             | authenticated | INSERT
+ public       | contacts             | authenticated | SELECT
+ public       | conversation_members | authenticated | SELECT
+ public       | conversations        | authenticated | SELECT
+ public       | group_invitations    | authenticated | SELECT
+ public       | groups               | authenticated | SELECT
+ public       | message_attachments  | authenticated | SELECT
+ public       | message_edits        | authenticated | SELECT
+ public       | message_hides        | authenticated | DELETE
+ public       | message_hides        | authenticated | INSERT
+ public       | message_hides        | authenticated | SELECT
+ public       | message_mentions     | authenticated | SELECT
+ public       | message_reactions    | authenticated | SELECT
+ public       | message_receipts     | authenticated | SELECT
+ public       | message_tombstones   | authenticated | SELECT
+ public       | messages             | authenticated | SELECT
+ public       | notification_jobs    | authenticated | SELECT
+ public       | privacy_events       | authenticated | SELECT
+ public       | profiles             | authenticated | SELECT
+ public       | push_tokens          | authenticated | DELETE
+ public       | push_tokens          | authenticated | INSERT
+ public       | push_tokens          | authenticated | SELECT
+ public       | push_tokens          | authenticated | UPDATE
+ public       | status_mutes         | authenticated | DELETE
+ public       | status_mutes         | authenticated | INSERT
+ public       | status_mutes         | authenticated | SELECT
+ public       | status_updates       | authenticated | SELECT
+ public       | status_views         | authenticated | SELECT
+ public       | user_blocks          | authenticated | DELETE
+ public       | user_blocks          | authenticated | INSERT
+ public       | user_blocks          | authenticated | SELECT
+ public       | user_reports         | authenticated | INSERT
+ public       | user_reports         | authenticated | SELECT
+ public       | user_settings        | authenticated | SELECT
+ storage      | objects              | authenticated | DELETE
+ storage      | objects              | authenticated | INSERT
+ storage      | objects              | authenticated | SELECT
+(42 rows)
+
+ nspname |                proname                 | prosecdef |      proconfig       | anon_execute
+---------+----------------------------------------+-----------+----------------------+--------------
+ private | bind_push_session                      | t         | {"search_path=\"\""} | f
+ private | blocked                                | t         | {"search_path=\"\""} | f
+ private | call_members_allowed                   | t         | {"search_path=\"\""} | f
+ private | can_status                             | t         | {"search_path=\"\""} | f
+ private | capture_mentions                       | t         | {"search_path=\"\""} | f
+ private | chat_object_readable                   | t         | {"search_path=\"\""} | f
+ private | check_avatar_validation                | t         | {"search_path=\"\""} | f
+ private | check_media_validation                 | t         | {"search_path=\"\""} | f
+ private | check_status_validation                | t         | {"search_path=\"\""} | f
+ private | device_guarded_accept_invitation       | t         | {"search_path=\"\""} | f
+ private | device_guarded_ack_messages            | t         | {"search_path=\"\""} | f
+ private | device_guarded_authorize_call          | t         | {"search_path=\"\""} | f
+ private | device_guarded_conversation_list       | t         | {"search_path=\"\""} | f
+ private | device_guarded_create_direct           | t         | {"search_path=\"\""} | f
+ private | device_guarded_create_group            | t         | {"search_path=\"\""} | f
+ private | device_guarded_create_status           | t         | {"search_path=\"\""} | f
+ private | device_guarded_delete_message          | t         | {"search_path=\"\""} | f
+ private | device_guarded_delete_status           | t         | {"search_path=\"\""} | f
+ private | device_guarded_edit_message            | t         | {"search_path=\"\""} | f
+ private | device_guarded_manage_group            | t         | {"search_path=\"\""} | f
+ private | device_guarded_peer_presence           | t         | {"search_path=\"\""} | f
+ private | device_guarded_react_message           | t         | {"search_path=\"\""} | f
+ private | device_guarded_send_message            | t         | {"search_path=\"\""} | f
+ private | device_guarded_send_view_once_message  | t         | {"search_path=\"\""} | f
+ private | device_guarded_set_disappearing_policy | t         | {"search_path=\"\""} | f
+ private | device_guarded_start_call              | t         | {"search_path=\"\""} | f
+ private | device_guarded_transition_call         | t         | {"search_path=\"\""} | f
+ private | device_guarded_view_status             | t         | {"search_path=\"\""} | f
+ private | is_admin                               | t         | {"search_path=\"\""} | f
+ private | is_member                              | t         | {"search_path=\"\""} | f
+ private | jwt_session                            | f         | {"search_path=\"\""} | f
+ private | limit_metadata                         | t         | {"search_path=\"\""} | f
+ private | limit_operation                        | t         | {"search_path=\"\""} | f
+ private | message_member                         | t         | {"search_path=\"\""} | f
+ private | message_privacy_insert                 | t         | {"search_path=\"\""} | f
+ private | new_user                               | t         | {"search_path=\"\""} | f
+ private | photo_visible                          | t         | {"search_path=\"\""} | f
+ private | require_session                        | t         | {"search_path=\"\""} | f
+ private | session_allowed                        | t         | {"search_path=\"\""} | f
+ private | session_allowed_for                    | t         | {"search_path=\"\""} | f
+ private | valid_uuid                             | f         | {"search_path=\"\""} | f
+ public  | accept_invitation                      | t         | {"search_path=\"\""} | f
+ public  | ack_messages                           | t         | {"search_path=\"\""} | f
+ public  | authorize_call                         | t         | {"search_path=\"\""} | f
+ public  | begin_device_security                  | t         | {"search_path=\"\""} | f
+ public  | claim_notification_jobs                | t         | {"search_path=\"\""} | f
+ public  | claim_view_once                        | t         | {"search_path=\"\""} | f
+ public  | complete_media_cleanup                 | t         | {"search_path=\"\""} | f
+ public  | conversation_list                      | t         | {"search_path=\"\""} | f
+ public  | create_direct                          | t         | {"search_path=\"\""} | f
+ public  | create_group                           | t         | {"search_path=\"\""} | f
+ public  | create_status                          | t         | {"search_path=\"\""} | f
+ public  | delete_message                         | t         | {"search_path=\"\""} | f
+ public  | delete_status                          | t         | {"search_path=\"\""} | f
+ public  | device_access_status                   | t         | {"search_path=\"\""} | f
+ public  | device_heartbeat                       | t         | {"search_path=\"\""} | f
+ public  | edit_message                           | t         | {"search_path=\"\""} | f
+ public  | expire_messages                        | t         | {"search_path=\"\""} | f
+ public  | maintenance                            | t         | {"search_path=\"\""} | f
+ public  | manage_account_device                  | t         | {"search_path=\"\""} | f
+ public  | manage_group                           | t         | {"search_path=\"\""} | f
+ public  | notification_tokens                    | t         | {"search_path=\"\""} | f
+ public  | peer_presence                          | t         | {"search_path=\"\""} | f
+ public  | purge_account                          | t         | {"search_path=\"\""} | f
+ public  | react_message                          | t         | {"search_path=\"\""} | f
+ public  | request_device_approval                | t         | {"search_path=\"\""} | f
+ public  | retention_media_jobs                   | t         | {"search_path=\"\""} | f
+ public  | revoke_this_device                     | t         | {"search_path=\"\""} | f
+ public  | send_message                           | t         | {"search_path=\"\""} | f
+ public  | send_view_once_message                 | t         | {"search_path=\"\""} | f
+ public  | set_disappearing_policy                | t         | {"search_path=\"\""} | f
+ public  | start_call                             | t         | {"search_path=\"\""} | f
+ public  | storage_gc_candidates                  | t         | {"search_path=\"\""} | f
+ public  | transition_call                        | t         | {"search_path=\"\""} | f
+ public  | view_status                            | t         | {"search_path=\"\""} | f
+(75 rows)
+
+      pubname      | schemaname |      tablename
+-------------------+------------+----------------------
+ supabase_realtime | public     | calls
+ supabase_realtime | public     | conversation_members
+ supabase_realtime | public     | conversations
+ supabase_realtime | public     | group_invitations
+ supabase_realtime | public     | message_reactions
+ supabase_realtime | public     | message_receipts
+ supabase_realtime | public     | messages
+ supabase_realtime | public     | status_updates
+(8 rows)
+
+      id      | public | file_size_limit |                                                             allowed_mime_types
+--------------+--------+-----------------+--------------------------------------------------------------------------------------------------------------------------------------------
+ chat-media   | f      |        26214400 | {image/jpeg,image/png,image/webp,video/mp4,audio/mp4,audio/mpeg,audio/aac,audio/ogg,application/pdf,text/plain,application/zip,text/vcard}
+ avatars      | f      |         5242880 | {image/jpeg,image/png,image/webp}
+ status-media | f      |        26214400 | {image/jpeg,image/png,image/webp,video/mp4}
+(3 rows)
+
+ extname  | extversion
+----------+------------
+ pgcrypto | 1.3
+(1 row)
+
+ROLLBACK
+BEGIN
+INSERT 0 3
+SET
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000001
+(1 row)
+
+              set_config
+--------------------------------------
+ 318aca4a-b5ca-4d9f-b2be-f8b838237429
+(1 row)
+
+             send_message
+--------------------------------------
+ 10000000-0000-0000-0000-000000000001
+(1 row)
+
+DO
+              set_config
+--------------------------------------
+ 06337ac3-cd51-4728-90a4-63f2d495a38a
+(1 row)
+
+ manage_group
+--------------
+
+(1 row)
+
+              set_config
+--------------------------------------
+ 9e5bd848-711f-4aa5-954c-5498b25e14b9
+(1 row)
+
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000003
+(1 row)
+
+DO
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000002
+(1 row)
+
+          accept_invitation
+--------------------------------------
+ 06337ac3-cd51-4728-90a4-63f2d495a38a
+(1 row)
+
+ ack_messages
+--------------
+
+(1 row)
+
+DO
+ transition_call
+-----------------
+
+(1 row)
+
+ transition_call
+-----------------
+
+(1 row)
+
+INSERT 0 1
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000001
+(1 row)
+
+DO
+ edit_message
+--------------
+
+(1 row)
+
+ delete_message
+----------------
+
+(1 row)
+
+DO
+RESET
+DO
+ROLLBACK
+Authorization, idempotency, receipts, blocks, group roles and call transitions passed.
+BEGIN
+INSERT 0 3
+SET
+              set_config
+--------------------------------------
+ 20000000-0000-0000-0000-000000000001
+(1 row)
+
+              set_config
+--------------------------------------
+ fa939a2c-59da-4a0b-b1d5-be238234dc99
+(1 row)
+
+                                     set_config
+------------------------------------------------------------------------------------
+ fa939a2c-59da-4a0b-b1d5-be238234dc99/20000000-0000-0000-0000-000000000001/test.pdf
+(1 row)
+
+INSERT 0 1
+DO
+RESET
+INSERT 0 1
+SET
+             send_message
+--------------------------------------
+ 30000000-0000-0000-0000-000000000001
+(1 row)
+
+              set_config
+--------------------------------------
+ 20000000-0000-0000-0000-000000000002
+(1 row)
+
+DO
+              set_config
+--------------------------------------
+ 20000000-0000-0000-0000-000000000003
+(1 row)
+
+DO
+              set_config
+--------------------------------------
+ 20000000-0000-0000-0000-000000000001
+(1 row)
+
+              set_config
+--------------------------------------
+ 8e600f84-baf1-4d7d-bc73-06a496109d71
+(1 row)
+
+DO
+                                       set_config
+-----------------------------------------------------------------------------------------
+ 8e600f84-baf1-4d7d-bc73-06a496109d71/20000000-0000-0000-0000-000000000001/forwarded.pdf
+(1 row)
+
+INSERT 0 1
+RESET
+INSERT 0 1
+SET
+             send_message
+--------------------------------------
+ 30000000-0000-0000-0000-000000000002
+(1 row)
+
+              set_config
+--------------------------------------
+ 20000000-0000-0000-0000-000000000003
+(1 row)
+
+DO
+              set_config
+--------------------------------------
+ 20000000-0000-0000-0000-000000000001
+(1 row)
+
+ delete_message
+----------------
+
+(1 row)
+
+              set_config
+--------------------------------------
+ 20000000-0000-0000-0000-000000000002
+(1 row)
+
+DO
+ROLLBACK
+Validated-media ownership, storage isolation, forgery denial, destination-scoped forwarding and deleted-media denial passed.
+BEGIN
+INSERT 0 3
+SET
+              set_config
+--------------------------------------
+ 40000000-0000-0000-0000-000000000001
+(1 row)
+
+INSERT 0 1
+              set_config
+--------------------------------------
+ b1344f01-b84d-4e24-b079-4b0e64286f31
+(1 row)
+
+              set_config
+--------------------------------------
+ 40000000-0000-0000-0000-000000000003
+(1 row)
+
+DO
+              set_config
+--------------------------------------
+ 40000000-0000-0000-0000-000000000002
+(1 row)
+
+DO
+ view_status
+-------------
+
+(1 row)
+
+INSERT 0 1
+DO
+RESET
+UPDATE 1
+SET
+              set_config
+--------------------------------------
+ 40000000-0000-0000-0000-000000000002
+(1 row)
+
+DELETE 1
+DO
+ROLLBACK
+Contact-scoped status privacy, view tracking, blocking and expiry passed.
+BEGIN
+INSERT 0 3
+SET
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000001
+(1 row)
+
+              set_config
+--------------------------------------
+ 9438acc6-5281-41ee-a8ae-301e8cfd59b3
+(1 row)
+
+              set_config
+--------------------------------------
+ 955ed59f-dd49-491d-8abd-90eda92a7320
+(1 row)
+
+                       authorize_call
+------------------------------------------------------------
+ {"room_name": "call_711306ed-163d-4918-bf60-00b7cfb4e80f"}
+(1 row)
+
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000003
+(1 row)
+
+DO
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000002
+(1 row)
+
+DO
+INSERT 0 1
+DO
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000001
+(1 row)
+
+DO
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000002
+(1 row)
+
+DELETE 1
+ transition_call
+-----------------
+
+(1 row)
+
+                       authorize_call
+------------------------------------------------------------
+ {"room_name": "call_711306ed-163d-4918-bf60-00b7cfb4e80f"}
+(1 row)
+
+RESET
+DELETE 1
+SET
+              set_config
+--------------------------------------
+ 00000000-0000-0000-0000-000000000001
+(1 row)
+
+DO
+RESET
+INSERT 0 1
+UPDATE 1
+SET
+DO
+RESET
+UPDATE 1
+SET
+ transition_call
+-----------------
+
+(1 row)
+
+DO
+ROLLBACK
+Call token authorization, blocks, current membership, expiry and terminal state passed.
+BEGIN
+INSERT 0 3
+SET
+              set_config
+--------------------------------------
+ 40000000-0000-0000-0000-000000000001
+(1 row)
+
+              set_config
+--------------------------------------
+ 17a15720-1674-41e1-bff6-00b827b34bc6
+(1 row)
+
+ set_disappearing_policy
+-------------------------
+
+(1 row)
+
+             send_message
+--------------------------------------
+ 41000000-0000-0000-0000-000000000001
+(1 row)
+
+DO
+ set_disappearing_policy
+-------------------------
+
+(1 row)
+
+             send_message
+--------------------------------------
+ 41000000-0000-0000-0000-000000000002
+(1 row)
+
+DO
+RESET
+UPDATE 1
+SET
+DO
+              set_config
+--------------------------------------
+ 40000000-0000-0000-0000-000000000003
+(1 row)
+
+DO
+RESET
+ expire_messages
+-----------------
+               1
+(1 row)
+
+SET
+              set_config
+--------------------------------------
+ 40000000-0000-0000-0000-000000000001
+(1 row)
+
+DO
+                                     set_config
+------------------------------------------------------------------------------------
+ 17a15720-1674-41e1-bff6-00b827b34bc6/40000000-0000-0000-0000-000000000001/once.png
+(1 row)
+
+INSERT 0 1
+RESET
+INSERT 0 1
+SET
+        send_view_once_message
+--------------------------------------
+ 41000000-0000-0000-0000-000000000004
+(1 row)
+
+        send_view_once_message
+--------------------------------------
+ 41000000-0000-0000-0000-000000000004
+(1 row)
+
+DO
+RESET
+DO
+                                                                 claim_view_once
+--------------------------------------------------------------------------------------------------------------------------------------------------
+ {"mime_type": "image/png", "size_bytes": 8, "object_path": "17a15720-1674-41e1-bff6-00b827b34bc6/40000000-0000-0000-0000-000000000001/once.png"}
+(1 row)
+
+DO
+SET
+              set_config
+--------------------------------------
+ 40000000-0000-0000-0000-000000000002
+(1 row)
+
+DO
+RESET
+ complete_media_cleanup
+------------------------
+
+(1 row)
+
+ROLLBACK
+Expiration snapshot, RLS-before-cleanup, tombstones, view-once claims and cleanup authorization passed.
+BEGIN
+INSERT 0 2
+SET
+              set_config
+--------------------------------------
+ 50000000-0000-0000-0000-000000000001
+(1 row)
+
+                      set_config
+-------------------------------------------------------
+ {"session_id":"51000000-0000-0000-0000-000000000001"}
+(1 row)
+
+              set_config
+--------------------------------------
+ 6066be8b-1255-4233-9eec-b72caae093fe
+(1 row)
+
+             send_message
+--------------------------------------
+ 52000000-0000-0000-0000-000000000001
+(1 row)
+
+INSERT 0 1
+RESET
+ manage_account_device
+-----------------------
+
+(1 row)
+
+SET
+                      set_config
+-------------------------------------------------------
+ {"session_id":"51000000-0000-0000-0000-000000000002"}
+(1 row)
+
+DO
+                                                                                                                                                                                                                                                                                      request_device_approval
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"device": {"id": "b97c5d9e-b272-41d0-933a-20eba10f292d", "name": "Second device", "user_id": "50000000-0000-0000-0000-000000000001", "device_id": "53000000-0000-0000-0000-000000000002", "link_code": "e0b65b1a9d0549ee22ef9210", "revoked_at": null, "session_id": "51000000-0000-0000-0000-000000000002", "approved_at": null, "last_seen_at": "2026-10-15T18:24:12.030916+00:00", "requested_at": "2026-10-15T18:24:12.030916+00:00", "request_expires_at": "2026-10-15T18:34:12.030916+00:00"}, "enforced": true, "authorized": false, "session_id": "51000000-0000-0000-0000-000000000002"}
+(1 row)
+
+              set_config
+--------------------------------------
+ b97c5d9e-b272-41d0-933a-20eba10f292d
+(1 row)
+
+        set_config
+--------------------------
+ e0b65b1a9d0549ee22ef9210
+(1 row)
+
+RESET
+UPDATE 1
+SET
+                                                                                                                                                                                                                                                                                      request_device_approval
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+ {"device": {"id": "b97c5d9e-b272-41d0-933a-20eba10f292d", "name": "Second device", "user_id": "50000000-0000-0000-0000-000000000001", "device_id": "53000000-0000-0000-0000-000000000002", "link_code": "45a91d851247d8647bd15b0d", "revoked_at": null, "session_id": "51000000-0000-0000-0000-000000000002", "approved_at": null, "last_seen_at": "2026-10-15T18:24:12.030916+00:00", "requested_at": "2026-10-15T18:24:12.030916+00:00", "request_expires_at": "2026-10-15T18:34:12.030916+00:00"}, "enforced": true, "authorized": false, "session_id": "51000000-0000-0000-0000-000000000002"}
+(1 row)
+
+DO
+RESET
+DO
+DO
+ manage_account_device
+-----------------------
+
+(1 row)
+
+SET
+DO
+             send_message
+--------------------------------------
+ 52000000-0000-0000-0000-000000000002
+(1 row)
+
+INSERT 0 1
+DO
+RESET
+ manage_account_device
+-----------------------
+
+(1 row)
+
+SET
+DO
+RESET
+DO
+ manage_account_device
+-----------------------
+
+(1 row)
+
+DO
+ROLLBACK
+Opt-in device approval, RPC/RLS guards, push binding, identity-replacement denial and revocation passed.
+BEGIN
+INSERT 0 2
+UPDATE 1
+INSERT 0 1
+INSERT 0 1
+UPDATE 1
+SET
+              set_config
+--------------------------------------
+ 60000000-0000-0000-0000-000000000001
+(1 row)
+
+              set_config
+--------------------------------------
+ 2adb5537-830e-4f1a-8a0c-454e6e3318ae
+(1 row)
+
+UPDATE 1
+DO
+INSERT 0 1
+DO
+RESET
+UPDATE 1
+INSERT 0 1
+SET
+DO
+ manage_group
+--------------
+
+(1 row)
+
+ROLLBACK
+Profile-photo Storage privacy, online publication and recipient-controlled invitation privacy passed.

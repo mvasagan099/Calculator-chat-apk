@@ -2,7 +2,7 @@
 
 Phase 1 defaults to a local preview without provider initialization. For connected mode set `LOCAL_UI_PREVIEW` to `false` in the public build configuration, as in `config/example.json`. No provider projects were supplied. These steps must be completed in accounts you control. Keep client identifiers and server credentials separate. Neither saving an environment draft nor building source provisions these services.
 
-Phase 3 has not changed or deployed the seven migrations or six Edge entry points. No confirmed remote project, Firebase console configuration, LiveKit credentials or staging accounts are available. Local SQL/Edge tests pass; deployment and actual two-user behavior remain BLOCKED. [Current evidence](PHASE3_BETA_READINESS.md).
+Phase 4 retains the original seven migrations and adds three; eight Edge entry points require coordinated deployment. No deployment was performed here. No confirmed remote project, Firebase console configuration, LiveKit credentials or staging accounts are available. Local SQL/Edge tests pass; deployment and actual two-user behavior remain BLOCKED. [Current evidence](PHASE4_SECURITY.md).
 
 The ignored `config/local.json` generated for this phase's build is **preview only**. Prepare a separate ignored file with real public identifiers, then validate connected mode before testing providers:
 
@@ -26,7 +26,7 @@ The Firebase input is Android console configuration, never a service account. Om
    supabase db push --linked --dry-run
    ```
 
-   Run `supabase/remote_preflight.sql` in that project's SQL editor to inspect tables, RLS/policies, grants, publication and buckets without reading user data. Review the remote migration versions, schema and any naming conflicts against the seven local migrations. On an existing deployment, back up first and review function/policy replacements and data effects. Do not automatically repair migration history, reset a remote database, drop unknown objects or use `--include-all` to force mismatched history. Fresh migrations assume a compatible/new schema and do not backfill profiles for pre-existing Auth users. Resolve drift explicitly before applying anything. Then, only on the confirmed reviewed target:
+   Run `supabase/remote_preflight.sql` in that project's SQL editor to inspect tables, RLS/policies, grants, publication and buckets without reading user data. Review the remote migration versions, schema and any naming conflicts against the ten local migrations. On an existing deployment, back up first and review function/policy replacements and data effects. Do not automatically repair migration history, reset a remote database, drop unknown objects or use `--include-all` to force mismatched history. Fresh migrations assume a compatible/new schema and do not backfill profiles for pre-existing Auth users. Resolve drift explicitly before applying anything. Then, only on the confirmed reviewed target:
 
    ```sh
    supabase login
@@ -34,7 +34,7 @@ The Firebase input is Android console configuration, never a service account. Om
    supabase db push
    ```
 
-   This applies the seven versioned migrations. They create user-data tables, indexes, constraints, Auth profile trigger, RLS, private Storage buckets, authenticated RPCs, and Realtime publication entries. Review migrations before applying to an existing project. The application uses public profile discovery by username/public ID; email addresses are never in public profiles.
+   This applies the ten versioned migrations. They create user-data tables, indexes, constraints, Auth profile trigger, RLS, private Storage buckets, authenticated RPCs, and Realtime publication entries. Review migrations before applying to an existing project. The application uses public profile discovery by username/public ID; email addresses are never in public profiles.
 3. In Realtime settings enable private-channel authorization and disable public-channel access. Database changes use the caller's RLS; typing/presence use private `conversation:<uuid>` topics. Message history lives in PostgreSQL.
 4. Set server secrets securely using the dashboard or `supabase secrets set --env-file <ignored-file>`. Built-in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are supplied by Supabase. Add:
 
@@ -56,6 +56,8 @@ The Firebase input is Android console configuration, never a service account. Om
    supabase functions deploy livekit-webhook
    supabase functions deploy maintenance
    supabase functions deploy dispatch-push
+   supabase functions deploy view-once
+   supabase functions deploy device-security
    ```
 
    `verify_jwt=false` is deliberate: user functions verify the supplied bearer using Auth `getUser`, supporting current Supabase signing keys; workers require `x-worker-secret`; the webhook verifies LiveKit's signature and body hash. There is no unauthenticated privileged entry point.
@@ -64,7 +66,7 @@ The Firebase input is Android console configuration, never a service account. Om
 
 Buckets reject oversize and unsupported MIME uploads. `validate-media` downloads with the user's token, checks file signatures/UTF-8 and records a server-only validation; message/status/profile writes require that validation. These checks are not malware scanning or full file-format sandboxing. Add a malware-scanning/quarantine pipeline if required for your release and never execute received files. Individual attachments are limited to 25 MB; avatars to 5 MB. Clients do not render HTML attachments.
 
-Workers delete objects through the Storage API, not direct object-table deletes. They clean expired status media, soft-deleted media, old orphan uploads/avatars, stale push tokens, edit history and notification/rate-limit records. Normal messages are retained until a permitted deletion/account cleanup; edit-history retention is 30 days and old notification jobs seven days. Account deletion requires password reauthentication, removes owned media, erases authored message bodies, transfers lone-admin groups where possible and deletes the Auth user/profile with cascading user rows.
+Workers delete objects through the Storage API, not direct object-table deletes. They clean expired status media, soft-deleted media, old orphan uploads/avatars, stale push tokens, edit history and notification/rate-limit records. Messages without an expiration policy are retained until a permitted deletion/account cleanup; expiring/view-once media also follows the Phase 4 retention jobs; edit-history retention is 30 days and old notification jobs seven days. Account deletion requires password reauthentication, removes owned media, erases authored message bodies, transfers lone-admin groups where possible and deletes the Auth user/profile with cascading user rows.
 
 The default worker processes 50 notifications per batch, leases jobs and retries failed dispatch up to eight times. Monitor exhausted jobs. FCM has at-least-once delivery characteristics; the app uses stable notification tags for calls and the database uses unique recipient/resource jobs. High-volume deployments need worker concurrency/load testing and an operational dead-letter queue.
 
@@ -104,3 +106,29 @@ For runtime testing, also allow your exact Supabase HTTPS/WSS hostname, LiveKit 
 ## Current missing configuration
 
 No authorized Supabase link, public URL/key, remote schema/history access, Firebase Android console config, FCM service account, LiveKit endpoint/key/secret, Cron/Vault worker secrets, verified disposable accounts or release keystore is available. No remote migration/function has been deployed. Put server secrets in Supabase, public identifiers in build configuration/GitHub repository variables, and test passwords only in ignored hosted-test configuration. See HOSTED_TESTS.md and PHASE2_VERIFICATION.md for exact blocked results and owner steps.
+
+## Phase 4 coordinated rollout
+
+The total is now **ten migrations and eight Edge Functions**. The original seven are unchanged. New files `202610150008_message_privacy.sql`, `202610150009_device_access.sql` and `202610150010_privacy_preferences.sql` add retention/view-once policy, session approval and privacy controls. Review against the confirmed remote schema/history using the existing preflight/dry-run procedure. Migration 009 relocates existing client RPC implementations into private guarded functions while preserving public signatures/defaults; review remote custom functions before deployment. No data reset or historical E2EE conversion is performed.
+
+Apply the reviewed schema first, then deploy **all** updated functions: `livekit-token`, `livekit-webhook`, `validate-media`, `delete-account`, `maintenance`, `dispatch-push`, **`view-once`**, **`device-security`**. User functions depend on `device_access_status`; the updated push worker depends on session-filtered token selection. Do not enable device approval before the complete coordinated rollout. The new functions validate Auth server-side with `verify_jwt=false` using the same established pattern; never expose service credentials to clients.
+
+Keep the documented maintenance schedule running. It purges expired rows in batches, deletes queued objects through Storage and acknowledges deletion jobs only after success. Test backlog/failures, tombstones and process crashes in staging. Existing data remains under its previous message policy; profile/invitation defaults preserve prior visibility, and existing last-seen opt-outs seed the new online preference.
+
+Device approval is opt-in, uses the signed JWT `session_id`, and requires current approved access plus fresh password proof for sensitive changes. It is not hardware attestation or E2EE key linking. A lost-all-approved-devices recovery procedure still needs owner identity verification and security review; no client self-approval bypass exists. Do not enable this protection on a real account until recovery and provider behavior have been exercised.
+
+### Phase 4 staging privacy validation
+
+`supabase/tests/hosted_privacy.ts` performs real Auth/DB/Storage/Edge requests using the existing ignored `config/hosted-test.json` fields and exact staging-target/write consent from HOSTED_TESTS.md. Its first three cases exercise policy snapshots and view-once opening/denial. It does not pretend to wait 24 hours or prove Android playback. For the device-activation cases, additionally set both `ALLOW_DEVICE_APPROVAL_ACTIVATION: true` and `DISPOSABLE_SECURITY_TEST_ACCOUNTS: true`, **only for throwaway accounts on a dedicated staging project**.
+
+Activation is intentionally not undone by a client API. Cleanup revokes other test sessions and signs the clients out; the primary account may then require verified owner backend recovery/deletion before reuse. Do not run those cases against personal, shared or production accounts. No activation occurred in this environment.
+
+```sh
+deno run --config supabase/functions/deno.json \
+  --allow-read=config/hosted-test.json,test/fixtures \
+  --allow-write=docs/phase4-hosted-results.json \
+  --allow-net=YOUR_PROJECT.supabase.co \
+  supabase/tests/hosted_privacy.ts
+```
+
+Omit network permission and config to record an honest BLOCKED report. Exit codes are 0 PASS, 1 FAIL, 2 BLOCKED. Logs omit provider response bodies and credentials. The runner restores the prior conversation policy, soft-deletes its own messages and removes its upload where possible; tombstones, direct-conversation metadata, device-policy/audit rows and Auth accounts can remain. An unavailable cleanup is FAIL requiring owner review. App E2EE, actual native rendering, push delivery and calls remain separate tests.

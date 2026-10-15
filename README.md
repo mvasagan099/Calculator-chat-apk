@@ -6,7 +6,13 @@ A Flutter Android app that opens as a functional calculator and unlocks a privat
 
 Android 10/API 29 and above. Flutter 3.44.0, Dart 3.12.0, Riverpod, GoRouter and Supabase Flutter. Light/dark themes and responsive portrait/landscape layouts are included.
 
-## Phase 3 status
+## Phase 4 status
+
+**Application E2EE remains disabled.** The isolated official Signal Java/JNI prototype passes 17 genuine protocol/integrity checks; no Flutter crypto bridge, encrypted message transport or cryptographic multi-device identity is being represented as complete. Existing direct/group messages and media remain server-readable. See the [encryption assessment and design](docs/ENCRYPTION_DESIGN.md).
+
+Connected-mode source now includes disappearing messages, view-once photos/videos, opt-in device/session approval and revocation, separate online/photo/invitation privacy, and stronger cache/media cleanup. **66 Flutter tests, seven PostgreSQL suites, five Edge tests and the native probe pass locally.** Hosted/new provider flows and Android behavior remain blocked. The [Phase 4 feature-status report](docs/PHASE4_SECURITY.md) separates implementation from verified scope and gives the coordinated rollout steps.
+
+## Phase 3 status (historical)
 
 Connected-mode improvements include encrypted local chat wallpapers, stable message ordering, paginated-history refresh, safer offline retries/read acknowledgments, presence privacy and lifecycle cleanup, bounded attachment forwarding/downloads, audio/recorder cleanup and call-end retry. **53 Flutter tests, five Edge tests, four PostgreSQL suites and 11 public-config tests pass.** One hosted Flutter test is skipped; the hosted runner reports 16 BLOCKED scenarios.
 
@@ -45,7 +51,7 @@ Expected paths after a successful build:
 - `build/app/outputs/flutter-apk/app-debug.apk`
 - `build/app/outputs/flutter-apk/app-release.apk`
 
-**No APK exists in this environment.** The debug command was retried in Phase 3 and remains blocked by proxy HTTP 403 during CONNECT to `storage.googleapis.com/download.flutter.io`. A release was not attempted this phase because signing credentials are absent. Compilation and installation are not verified. See the [latest debug log](docs/phase3-debug-build.txt), [Phase 3 report](docs/PHASE3_BETA_READINESS.md) and [release instructions](docs/RELEASE.md).
+**No APK exists in this environment.** The debug command was retried in Phase 4 and remains blocked by proxy HTTP 403 during CONNECT to `storage.googleapis.com/download.flutter.io`. A release was not attempted this phase because signing credentials are absent. Compilation and installation are not verified. See the [latest debug log](docs/phase4-debug-build.txt), [Phase 4 report](docs/PHASE4_SECURITY.md) and [release instructions](docs/RELEASE.md).
 
 Debug signing uses Android's standard development key. A distributable release requires your private signing configuration in ignored `android/key.properties`. Without it, the release configuration is unsigned; no production credentials or debug-signing fallback are invented.
 
@@ -72,7 +78,7 @@ Phase 1 is selected by the `LOCAL_UI_PREVIEW` Dart define, which defaults to `tr
 ./scripts/flutterw run --dart-define-from-file=config/local.json
 ```
 
-Follow the [Phase 2 handoff](docs/PHASE2.md), [current verification report](docs/PHASE3_BETA_READINESS.md), [hosted-test guide](docs/HOSTED_TESTS.md) and [provider setup guide](docs/DEPLOYMENT.md). Connected mode requires account authentication and a separate account-bound PIN. A local preview PIN never authorizes a Supabase session.
+Follow the [Phase 2 handoff](docs/PHASE2.md), [current verification report](docs/PHASE4_SECURITY.md), [hosted-test guide](docs/HOSTED_TESTS.md) and [provider setup guide](docs/DEPLOYMENT.md). Connected mode requires account authentication and a separate account-bound PIN. A local preview PIN never authorizes a Supabase session.
 
 Never put Supabase service-role keys, LiveKit secrets, Firebase service-account JSON, signing passwords or private keystores in Flutter config or Git. Client configuration is compiled into APKs and is public.
 
@@ -86,7 +92,7 @@ See [test evidence](docs/TESTING.md) and [security model](docs/SECURITY.md). The
 
 ```sh
 ./scripts/test-database.sh
-deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
+deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/tests/hosted*.ts
 deno test --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
 ```
 

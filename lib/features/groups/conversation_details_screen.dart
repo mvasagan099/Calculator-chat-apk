@@ -282,6 +282,7 @@ class _ConversationDetailsScreenState
                     client: ref.read(supabaseProvider),
                     attachment: message.attachment!,
                     kind: message.kind,
+                    expiresAt: message.expiresAt,
                   ),
                 ),
           ],

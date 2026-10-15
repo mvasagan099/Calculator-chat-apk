@@ -1,14 +1,26 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../security/lock_controller.dart';
 import '../security/pin_vault.dart';
+import 'device_access_service.dart';
 
 class AuthService extends ChangeNotifier {
   AuthService(this.client, this.lock, this.store) {
     _sessionUser = client?.auth.currentUser?.id;
+    _tokenSession = tokenSession(client?.auth.currentSession);
+    scheduleExpiry();
     _subscription = client?.auth.onAuthStateChange.listen((event) {
       final nextUser = event.session?.user.id;
+      final nextSession = tokenSession(event.session);
+      if (nextSession != _tokenSession || nextUser != _sessionUser) {
+        _tokenSession = nextSession;
+        ++_accessGeneration;
+        deviceAuthorized = false;
+        lock.lock();
+      }
+      scheduleExpiry();
       if (nextUser != _sessionUser) {
         _sessionUser = nextUser;
         ownerMatches = false;
@@ -24,7 +36,8 @@ class AuthService extends ChangeNotifier {
         recovery = true;
         lock.lock();
       }
-      notifyListeners();
+      if (nextUser != null) unawaited(refreshDeviceAccess());
+      if (!_disposed) notifyListeners();
     });
   }
   final SupabaseClient? client;
@@ -37,20 +50,106 @@ class AuthService extends ChangeNotifier {
     final owner = await store.read('pin.owner');
     if (_sessionUser == uid) {
       ownerMatches = uid != null && owner == uid;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
   DateTime? _freshAt;
+  static String? tokenSession(Session? session) {
+    if (session == null) return null;
+    try {
+      return (jsonDecode(
+                utf8.decode(
+                  base64Url.decode(
+                    base64Url.normalize(session.accessToken.split('.')[1]),
+                  ),
+                ),
+              )
+              as Map<String, dynamic>)['session_id']
+          as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _tokenSession;
+  Timer? _expiry;
+  int _accessGeneration = 0;
+  void scheduleExpiry() {
+    _expiry?.cancel();
+    final seconds = client?.auth.currentSession?.expiresAt;
+    if (seconds == null) return;
+    final remaining = DateTime.fromMillisecondsSinceEpoch(
+      seconds * 1000,
+    ).difference(DateTime.now());
+    _expiry = Timer(remaining.isNegative ? Duration.zero : remaining, () {
+      if (!_disposed && client?.auth.currentSession?.isExpired != false) {
+        deviceAuthorized = false;
+        lock.lock();
+        notifyListeners();
+      }
+    });
+  }
+
+  bool _disposed = false;
+  bool deviceAuthorized = false;
+  Map<String, dynamic>? deviceStatus;
+  DeviceAccessService? _deviceAccess;
+  DeviceAccessService get deviceAccess =>
+      _deviceAccess ??= DeviceAccessService(client!, store);
+  Future<void> refreshDeviceAccess({bool initial = false}) async {
+    final generation = ++_accessGeneration;
+    final owner = client?.auth.currentUser?.id;
+    if (owner == null) {
+      deviceAuthorized = false;
+      return;
+    }
+    final token = client!.auth.currentSession?.accessToken;
+    try {
+      var status = await deviceAccess.status();
+      final pending = status['device'] as Map<String, dynamic>?;
+      final expires = DateTime.tryParse(pending?['request_expires_at'] ?? '');
+      if (status['enforced'] == true &&
+          status['authorized'] != true &&
+          (pending == null ||
+              (pending['revoked_at'] == null &&
+                  pending['approved_at'] == null &&
+                  expires != null &&
+                  !expires.isAfter(DateTime.now())))) {
+        status = await deviceAccess.request();
+      }
+      if (_disposed ||
+          generation != _accessGeneration ||
+          client?.auth.currentUser?.id != owner ||
+          token != client?.auth.currentSession?.accessToken) {
+        return;
+      }
+      deviceStatus = status;
+      final wasAuthorized = deviceAuthorized;
+      deviceAuthorized = status['authorized'] == true;
+      if (!deviceAuthorized || !wasAuthorized) lock.lock();
+    } catch (_) {
+      if (_disposed || generation != _accessGeneration) return;
+      if (initial || client?.auth.currentSession?.isExpired != false) {
+        deviceAuthorized = false;
+        lock.lock();
+      }
+    }
+    if (!_disposed) notifyListeners();
+  }
+
   bool recovery = false;
   bool ownerMatches = false;
   Future<void> initialize() async {
     ownerMatches =
         await store.read('pin.owner') == client?.auth.currentUser?.id &&
         signedIn;
+    if (signedIn) await refreshDeviceAccess(initial: true);
   }
 
-  bool get signedIn => client?.auth.currentUser != null;
+  bool get signedIn =>
+      client?.auth.currentUser != null &&
+      client?.auth.currentSession?.isExpired == false;
   bool get recentlyAuthenticated =>
       signedIn &&
       _freshUser == client!.auth.currentUser!.id &&
@@ -71,11 +170,33 @@ class AuthService extends ChangeNotifier {
       lock.hasPin = false;
     }
     ownerMatches = owner == response.user?.id;
+    deviceAuthorized = false;
+    await refreshDeviceAccess(initial: true);
+    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> reauthenticate(String password) async {
+    final owner = client?.auth.currentUser?.id;
+    final session = tokenSession(client?.auth.currentSession);
+    if (!signedIn || !deviceAuthorized) {
+      throw StateError('Approved sign-in required');
+    }
+    await deviceAccess.manage('reauthenticate', password);
+    if (_disposed ||
+        !signedIn ||
+        !deviceAuthorized ||
+        client?.auth.currentUser?.id != owner ||
+        tokenSession(client?.auth.currentSession) != session) {
+      throw StateError('Session changed');
+    }
+    _freshUser = owner;
+    _freshAt = DateTime.now();
+    lock.lock();
     notifyListeners();
   }
 
   Future<void> configurePin(String pin) async {
-    if (!recentlyAuthenticated) {
+    if (!recentlyAuthenticated || !deviceAuthorized) {
       throw StateError('Sign in again before setting a PIN');
     }
     await lock.vault.configure(pin);
@@ -90,12 +211,20 @@ class AuthService extends ChangeNotifier {
   Future<void> signOut() async {
     lock.lock();
     _freshUser = null;
+    final revoking = client == null
+        ? Future<void>.value()
+        : deviceAccess.revokeCurrent().catchError((Object _) {});
+    deviceAuthorized = false;
     await client?.auth.signOut();
-    notifyListeners();
+    await revoking;
+    if (!_disposed) notifyListeners();
   }
 
   @override
   void dispose() {
+    _disposed = true;
+    _expiry?.cancel();
+    ++_accessGeneration;
     _subscription?.cancel();
     super.dispose();
   }

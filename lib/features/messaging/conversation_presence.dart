@@ -56,13 +56,13 @@ class SupabasePresenceTransport implements PresenceTransport {
 
   @override
   Future<void> track() async {
-    // The same privacy control governs public last-seen and online visibility.
+    // Online publication has its own server-stored privacy preference.
     final settings = await client
         .from('user_settings')
-        .select('last_seen_visible')
+        .select('online_visible')
         .eq('user_id', owner)
         .single();
-    if (active && settings['last_seen_visible'] == true) {
+    if (active && settings['online_visible'] == true) {
       await channel.track({
         'online_at': DateTime.now().toUtc().toIso8601String(),
       });

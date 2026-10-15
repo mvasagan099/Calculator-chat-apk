@@ -17,6 +17,8 @@ import '../media/attachment_view.dart';
 import 'conversation_presence.dart';
 import 'structured_content.dart';
 import 'chat_backdrop.dart';
+import 'expiration_banner.dart';
+import '../media/view_once_viewer.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.id});
@@ -50,6 +52,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   List<ChatMessage>? searchResults;
   StreamSubscription<Amplitude>? amplitude;
   final levels = <double>[];
+  Timer? retentionTimer;
+  DateTime? retentionDeadline;
+  void scheduleRetention(List<ChatMessage> rows) {
+    final times =
+        rows
+            .where((m) => m.expiresAt != null && !m.expired)
+            .map((m) => m.expiresAt!)
+            .toList()
+          ..sort();
+    final deadline = times.firstOrNull;
+    if (deadline == retentionDeadline) return;
+    retentionTimer?.cancel();
+    retentionDeadline = deadline;
+    if (deadline != null) {
+      final repository = ref.read(messengerProvider);
+      retentionTimer = Timer(
+        deadline.difference(DateTime.now()) + const Duration(milliseconds: 20),
+        () {
+          retentionDeadline = null;
+          if (mounted) {
+            setState(() {
+              if (reply?.expired == true) reply = null;
+            });
+            unawaited(repository.purgeExpiredLocal().catchError((Object _) {}));
+          }
+        },
+      );
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -108,6 +140,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    retentionTimer?.cancel();
     input.dispose();
     amplitude?.cancel();
     recorder.cancel();
@@ -176,7 +209,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         onProgress: (value) {
           if (mounted) setState(() => uploadProgress = value);
         },
-      ).pick(widget.id, source);
+      ).pick(widget.id, source.replaceAll('_once', ''));
       if (upload != null && mounted) {
         await ref
             .read(messengerProvider)
@@ -185,7 +218,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               '',
               kind: upload.kind,
               attachment: upload.attachment,
-              replyTo: reply?.id,
+              replyTo: source.endsWith('_once') ? null : reply?.id,
+              viewOnce: source.endsWith('_once'),
             );
       }
     } finally {
@@ -374,6 +408,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // checks membership in both the source and destination conversations.
     for (final m in rows) {
       if (!mounted) return;
+      if (m.viewOnce || m.expired) {
+        throw StateError('This media cannot be forwarded');
+      }
       if (m.deleted) continue;
       if (m.attachment != null) {
         final client = ref.read(supabaseProvider);
@@ -416,6 +453,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> actions(ChatMessage m) async {
     final own = m.senderId == ref.read(messengerProvider).uid;
+    if (m.viewOnce) {
+      await showModalBottomSheet<void>(
+        context: context,
+        builder: (c) => SafeArea(
+          child: ListTile(
+            title: const Text('Delete for me'),
+            onTap: () {
+              Navigator.pop(c);
+              act(context, () => ref.read(messengerProvider).hide(m.id));
+            },
+          ),
+        ),
+      );
+      return;
+    }
     await showModalBottomSheet<void>(
       context: context,
       builder: (c) => SafeArea(
@@ -635,14 +687,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       style: TextStyle(fontStyle: FontStyle.italic),
                     )
                   else ...[
-                    if (m.attachment != null)
+                    if (m.viewOnce)
+                      ViewOnceTile(message: m)
+                    else if (m.attachment != null)
                       AttachmentView(
                         key: ValueKey(m.id),
                         client: ref.read(supabaseProvider),
                         attachment: m.attachment!,
                         kind: m.kind,
+                        expiresAt: m.expiresAt,
                       ),
-                    if (m.body.isNotEmpty)
+                    if (!m.viewOnce && m.body.isNotEmpty)
                       if (m.kind == 'contact' || m.kind == 'location')
                         StructuredContent(message: m)
                       else
@@ -784,6 +839,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       style: wallpaper,
       child: Column(
         children: [
+          ExpirationBanner(cid: widget.id, canChange: direct || admin),
           if (uploading) LinearProgressIndicator(value: uploadProgress),
           if (searchResults != null)
             ListTile(
@@ -801,11 +857,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   for (final m in older) m.id: m,
                   for (final m in s.data ?? <ChatMessage>[]) m.id: m,
                 };
+                scheduleRetention(merged.values.toList());
                 final rows =
-                    searchResults ??
+                    searchResults?.where((m) => !m.expired).toList() ??
                     (merged.values
                         .where(
-                          (m) => !ref.read(messengerProvider).isHidden(m.id),
+                          (m) =>
+                              !m.expired &&
+                              !ref.read(messengerProvider).isHidden(m.id),
                         )
                         .toList()
                       ..sort(ChatMessage.newestFirst));
@@ -977,7 +1036,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                           ).textTheme.labelSmall,
                                         ),
                                       ),
-                                    bubble(m, quoted: merged[m.replyTo]),
+                                    bubble(
+                                      m,
+                                      quoted:
+                                          merged[m.replyTo]?.expired == false
+                                          ? merged[m.replyTo]
+                                          : null,
+                                    ),
                                   ],
                                 );
                               },
@@ -1057,6 +1122,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     itemBuilder: (_) => [
                       for (final item in {
                         'image': 'Image',
+                        if (direct) 'image_once': 'View-once photo',
+                        if (direct) 'video_once': 'View-once video',
                         'camera': 'Camera',
                         'video': 'Video',
                         'file': 'File or audio',

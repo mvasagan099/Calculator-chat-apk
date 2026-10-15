@@ -36,6 +36,8 @@ Future<String?> askText(
         controller: controller,
         autofocus: true,
         obscureText: secret,
+        autocorrect: !secret,
+        enableSuggestions: !secret,
         decoration: InputDecoration(hintText: hint),
         maxLines: secret ? 1 : 3,
       ),

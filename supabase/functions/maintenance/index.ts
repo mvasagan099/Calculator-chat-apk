@@ -10,6 +10,25 @@ import { dispatchPush } from "../_shared/push.ts";
 serve(async (req) => {
   if (!workerAuthorized(req)) throw new HttpError(401, "Unauthorized");
   const admin = adminClient();
+  const { error: expiryError } = await admin.rpc("expire_messages");
+  if (expiryError) throw expiryError;
+  const { data: retention, error: retentionError } = await admin.rpc(
+    "retention_media_jobs",
+  );
+  if (retentionError) throw retentionError;
+  const retentionPaths = (retention ?? []).map((item: { path: string }) =>
+    item.path
+  );
+  if (retentionPaths.length) {
+    const { error: deleteError } = await admin.storage.from("chat-media")
+      .remove(retentionPaths);
+    if (deleteError) throw deleteError;
+    const { error: acknowledgeError } = await admin.rpc(
+      "complete_media_cleanup",
+      { paths: retentionPaths },
+    );
+    if (acknowledgeError) throw acknowledgeError;
+  }
   const { error: maintenanceError } = await admin.rpc("maintenance");
   if (maintenanceError) throw maintenanceError;
   const { data: endedCalls } = await admin.from("calls").select("id,room_name")

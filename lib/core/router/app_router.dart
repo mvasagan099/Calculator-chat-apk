@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
+import '../../features/devices/device_screens.dart';
 import '../widgets/privacy_gate.dart';
 import '../services/device_settings.dart';
 import '../../features/calculator/calculator_screen.dart';
@@ -26,6 +27,8 @@ class AppRouter {
         final path = state.uri.path;
         if (auth.recovery) return path == '/password' ? null : '/password';
         if (path == '/' || path == '/auth' || path == '/recover') return null;
+        if (path == '/devices') return auth.signedIn ? null : '/auth';
+        if (auth.signedIn && !auth.deviceAuthorized) return '/devices';
         if (path == '/password') return '/';
         if (path == '/pin') {
           return auth.recentlyAuthenticated ? null : '/recover';
@@ -51,6 +54,14 @@ class AppRouter {
         GoRoute(
           path: '/recover',
           builder: (_, _) => AuthScreen(auth: auth, recoverPin: true),
+        ),
+        GoRoute(
+          path: '/devices',
+          builder: (_, _) => DeviceApprovalScreen(auth: auth),
+        ),
+        GoRoute(
+          path: '/device-sessions',
+          builder: (_, _) => guard(DeviceSessionsScreen(auth: auth)),
         ),
         GoRoute(
           path: '/pin',
@@ -118,7 +129,8 @@ class AppRouter {
   late final GoRouter router;
   Widget guard(Widget child) => PrivacyGate(
     lock: auth.lock,
-    authenticated: () => auth.signedIn && auth.ownerMatches,
+    authenticated: () =>
+        auth.signedIn && auth.ownerMatches && auth.deviceAuthorized,
     authChanges: auth,
     child: child,
   );
@@ -127,6 +139,7 @@ class AppRouter {
     if (!auth.lock.unlocked ||
         !auth.lock.hasPin ||
         !auth.ownerMatches ||
+        !auth.deviceAuthorized ||
         !auth.signedIn ||
         notifications.pending == null ||
         resolving) {
@@ -159,6 +172,7 @@ class AppRouter {
           auth.lock.unlocked &&
           auth.lock.hasPin &&
           auth.ownerMatches &&
+          auth.deviceAuthorized &&
           auth.signedIn) {
         router.go(path);
       }

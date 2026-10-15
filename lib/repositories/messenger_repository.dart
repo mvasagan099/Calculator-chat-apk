@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../core/security/encrypted_cache.dart';
 import '../core/security/pin_vault.dart';
 import '../models/message.dart';
+import '../core/security/local_retention.dart';
 
 class MessengerRepository {
   MessengerRepository(
@@ -22,7 +23,8 @@ class MessengerRepository {
   String? _cacheOwner;
   bool _flushing = false, _disposed = false;
   Completer<void>? _flushDone;
-  Future<void>? _preparing;
+  Future<void>? _preparing, _suspending;
+  int _sessionEpoch = 0;
   Timer? _retryTimer;
   final _hiddenIds = <String>{};
   bool isHidden(String id) => _hiddenIds.contains(id);
@@ -32,6 +34,7 @@ class MessengerRepository {
   final _timers = <Timer>{};
   Future<void> prepare() async {
     if (_disposed) throw StateError('Messaging session closed');
+    await _suspending;
     if (_preparing != null) await _preparing;
     if (_cacheOwner == uid && _cache != null) return;
     _preparing = _initialize();
@@ -44,11 +47,14 @@ class MessengerRepository {
 
   Future<void> _initialize() async {
     final owner = uid;
+    final epoch = _sessionEpoch;
     final cache = _cacheFactory(owner);
     await cache.initialize();
     await _connection?.cancel();
     await _flushDone?.future;
-    if (_disposed || client.auth.currentUser?.id != owner) {
+    if (_disposed ||
+        epoch != _sessionEpoch ||
+        client.auth.currentUser?.id != owner) {
       throw StateError('Messaging session changed');
     }
     _hiddenIds.clear();
@@ -103,9 +109,11 @@ class MessengerRepository {
     RealtimeChannel? channel;
     Timer? refresh, debounce;
     final owner = client.auth.currentUser?.id;
+    final epoch = _sessionEpoch;
     var fetching = false, again = false, closed = false;
     Future<void> load() async {
       if (closed ||
+          epoch != _sessionEpoch ||
           _disposed ||
           owner == null ||
           client.auth.currentUser?.id != owner) {
@@ -118,11 +126,16 @@ class MessengerRepository {
       fetching = true;
       try {
         final value = await fetch();
-        if (!closed && !_disposed && client.auth.currentUser?.id == owner) {
+        if (!closed &&
+            epoch == _sessionEpoch &&
+            !_disposed &&
+            client.auth.currentUser?.id == owner) {
           controller.add(value);
         }
       } catch (e, st) {
-        if (!closed && !_disposed) controller.addError(e, st);
+        if (!closed && epoch == _sessionEpoch && !_disposed) {
+          controller.addError(e, st);
+        }
       } finally {
         fetching = false;
         if (again) {
@@ -149,7 +162,10 @@ class MessengerRepository {
                     value: cid,
                   ),
             callback: (_) {
-              if (closed || _disposed || client.auth.currentUser?.id != owner) {
+              if (closed ||
+                  epoch != _sessionEpoch ||
+                  _disposed ||
+                  client.auth.currentUser?.id != owner) {
                 return;
               }
               if (debounce != null) _timers.remove(debounce);
@@ -195,6 +211,17 @@ class MessengerRepository {
     await prepare();
     _cache!.data['wallpaper.$cid'] = value;
     await _cache!.save();
+  }
+
+  Future<void> purgeExpiredLocal() async {
+    if (_cache == null) return;
+    pruneLocalData(_cache!.data, DateTime.now());
+    await _cache!.save();
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
+  void rememberExpiration(String cid, int seconds) {
+    _cache?.data['expiration.$cid'] = seconds;
   }
 
   static const messageSelect =
@@ -264,7 +291,11 @@ class MessengerRepository {
       }
       final list =
           byId.values
-              .where((m) => !_hiddenIds.contains(m['id']))
+              .where(
+                (m) =>
+                    !_hiddenIds.contains(m['id']) &&
+                    !recordExpired(m, DateTime.now()),
+              )
               .map(ChatMessage.fromJson)
               .toList()
             ..sort(ChatMessage.newestFirst);
@@ -333,9 +364,21 @@ class MessengerRepository {
     String kind = 'text',
     String? replyTo,
     bool forwarded = false,
+    bool viewOnce = false,
     Map<String, dynamic>? attachment,
   }) async {
     await prepare();
+    if (viewOnce &&
+        (forwarded ||
+            !['image', 'video'].contains(kind) ||
+            attachment == null)) {
+      throw ArgumentError('View-once requires an original photo or video');
+    }
+    final duration = _cache!.data['expiration.$cid'] as int? ?? 0;
+    final seconds = viewOnce
+        ? (duration == 0 ? 86400 : duration.clamp(60, 86400))
+        : duration;
+    final created = DateTime.now().toUtc();
     final id = const Uuid().v4();
     final item = <String, dynamic>{
       'id': id,
@@ -343,7 +386,12 @@ class MessengerRepository {
       'sender_id': uid,
       'body': body,
       'kind': kind,
-      'created_at': DateTime.now().toUtc().toIso8601String(),
+      'created_at': created.toIso8601String(),
+      'expires_at': seconds > 0
+          ? created.add(Duration(seconds: seconds)).toIso8601String()
+          : null,
+      'expiration_seconds': seconds,
+      'view_once': viewOnce,
       'reply_to': replyTo,
       'forwarded': forwarded,
       'pending': true,
@@ -369,6 +417,7 @@ class MessengerRepository {
     final completion = Completer<void>();
     _flushDone = completion;
     try {
+      await purgeExpiredLocal();
       final attempted = <String>{};
       while (true) {
         if (_disposed || client.auth.currentUser?.id != _cacheOwner) break;
@@ -385,16 +434,25 @@ class MessengerRepository {
         try {
           await client
               .rpc(
-                'send_message',
-                params: {
-                  'cid': item['conversation_id'],
-                  'mid': item['id'],
-                  'content': item['body'],
-                  'message_kind': item['kind'],
-                  'reply': item['reply_to'],
-                  'is_forwarded': item['forwarded'],
-                  'attachment': item['attachment'],
-                },
+                item['view_once'] == true
+                    ? 'send_view_once_message'
+                    : 'send_message',
+                params: item['view_once'] == true
+                    ? {
+                        'cid': item['conversation_id'],
+                        'mid': item['id'],
+                        'attachment': item['attachment'],
+                        'media_kind': item['kind'],
+                      }
+                    : {
+                        'cid': item['conversation_id'],
+                        'mid': item['id'],
+                        'content': item['body'],
+                        'message_kind': item['kind'],
+                        'reply': item['reply_to'],
+                        'is_forwarded': item['forwarded'],
+                        'attachment': item['attachment'],
+                      },
               )
               .timeout(const Duration(seconds: 15));
           await _saveOutbox(
@@ -458,19 +516,12 @@ class MessengerRepository {
     if (!_changes.isClosed) _changes.add(null);
   }
 
-  Future<void> clearLocal() async {
-    _retryTimer?.cancel();
-    await _connection?.cancel();
-    await _preparing;
-    await _flushDone?.future;
-    await _cache?.clear();
-    _cache = null;
-    _cacheOwner = null;
-    _hiddenIds.clear();
+  Future<void> suspend() {
+    return _suspending ??= _suspend().whenComplete(() => _suspending = null);
   }
 
-  Future<void> dispose() async {
-    _disposed = true;
+  Future<void> _suspend() async {
+    ++_sessionEpoch;
     _retryTimer?.cancel();
     for (final timer in _timers) {
       timer.cancel();
@@ -482,6 +533,43 @@ class MessengerRepository {
     await _connection?.cancel();
     await _preparing?.catchError((Object _) {});
     await _flushDone?.future;
+    await _cache?.forget();
+    _cache = null;
+    _hiddenIds.clear();
+  }
+
+  Future<void> clearLocal() async {
+    await _suspending;
+    _retryTimer?.cancel();
+    await _connection?.cancel();
+    await _preparing;
+    await _flushDone?.future;
+    if (_cache != null) {
+      await _cache!.clear();
+    } else if (_cacheOwner != null) {
+      await _cacheFactory(_cacheOwner!).clear();
+    }
+    _cache = null;
+    _cacheOwner = null;
+    _hiddenIds.clear();
+  }
+
+  Future<void> dispose() async {
+    _disposed = true;
+    await _suspending;
+    _retryTimer?.cancel();
+    for (final timer in _timers) {
+      timer.cancel();
+    }
+    _timers.clear();
+    final channels = _channels.toList();
+    _channels.clear();
+    await Future.wait(channels.map(client.removeChannel));
+    await _connection?.cancel();
+    await _preparing?.catchError((Object _) {});
+    await _flushDone?.future;
+    await _cache?.forget();
+    _cache = null;
     await _changes.close();
   }
 }

@@ -162,9 +162,18 @@ class MediaService {
     }
   }
 
-  Future<String> signedUrl(Map<String, dynamic> attachment) => client.storage
-      .from('chat-media')
-      .createSignedUrl(attachment['object_path'], 120);
+  Future<String> signedUrl(Map<String, dynamic> attachment) {
+    var lifetime = 120;
+    if (attachment['expires_at'] != null) {
+      final expiry = DateTime.tryParse(attachment['expires_at']);
+      if (expiry == null) throw StateError('Media unavailable');
+      lifetime = expiry.difference(DateTime.now()).inSeconds.clamp(0, 120);
+      if (lifetime == 0) throw StateError('Media expired');
+    }
+    return client.storage
+        .from('chat-media')
+        .createSignedUrl(attachment['object_path'], lifetime);
+  }
 }
 
 class _UploadRequest extends http.BaseRequest {

@@ -13,10 +13,12 @@ import 'core/router/app_router.dart';
 import 'core/security/pin_vault.dart';
 import 'core/security/lock_controller.dart';
 import 'core/security/session_storage.dart';
+import 'core/security/private_media_files.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/device_settings.dart';
 import 'core/services/private_session.dart';
 import 'features/notifications/notification_service.dart';
+import 'features/devices/device_screens.dart';
 import 'providers/app_providers.dart';
 
 Future<void> main() async {
@@ -32,6 +34,7 @@ Future<void> main() async {
   );
   await lock.secureWindow();
   try {
+    await PrivateMediaFiles().clear();
     await lock.initialize();
   } catch (_) {
     runApp(
@@ -144,9 +147,11 @@ class _MessengerAppState extends State<MessengerApp> {
                 !auth.lock.unlocked ||
                 !auth.lock.hasPin ||
                 !auth.signedIn ||
-                !auth.ownerMatches;
+                !auth.ownerMatches ||
+                !auth.deviceAuthorized;
             final Widget surface = switch (path) {
               '/auth' => AuthScreen(auth: auth),
+              '/devices' => DeviceApprovalScreen(auth: auth),
               '/recover' => AuthScreen(auth: auth, recoverPin: true),
               '/pin' =>
                 auth.recentlyAuthenticated
@@ -175,11 +180,13 @@ class _MessengerAppState extends State<MessengerApp> {
         if (auth.signedIn &&
             auth.lock.unlocked &&
             auth.lock.hasPin &&
-            auth.ownerMatches) {
+            auth.ownerMatches &&
+            auth.deviceAuthorized) {
           content = PrivateSession(
             key: ValueKey(auth.client!.auth.currentUser!.id),
             router: routing.router,
             notifications: widget.notifications,
+            auth: auth,
             child: content,
           );
         }

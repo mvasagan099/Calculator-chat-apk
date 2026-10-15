@@ -42,10 +42,22 @@ class _AuthScreenState extends State<AuthScreen> {
           setState(() => signup = false);
         }
       } else {
-        await widget.auth.signIn(email.text, password.text);
+        if (widget.recoverPin &&
+            widget.auth.signedIn &&
+            widget.auth.deviceAuthorized &&
+            email.text.trim().toLowerCase() ==
+                widget.auth.client!.auth.currentUser!.email?.toLowerCase()) {
+          await widget.auth.reauthenticate(password.text);
+        } else {
+          await widget.auth.signIn(email.text, password.text);
+        }
         if (mounted) {
           context.go(
-            widget.recoverPin || !widget.auth.lock.hasPin ? '/pin' : '/',
+            !widget.auth.deviceAuthorized
+                ? '/devices'
+                : widget.recoverPin || !widget.auth.lock.hasPin
+                ? '/pin'
+                : '/',
           );
         }
       }

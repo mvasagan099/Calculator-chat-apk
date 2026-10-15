@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/app_providers.dart';
+import 'auth_service.dart';
+import '../../repositories/messenger_repository.dart';
 import '../../features/notifications/notification_service.dart';
 
 class PrivateSession extends ConsumerStatefulWidget {
@@ -11,10 +13,12 @@ class PrivateSession extends ConsumerStatefulWidget {
     required this.child,
     required this.router,
     required this.notifications,
+    required this.auth,
   });
   final Widget child;
   final GoRouter router;
   final NotificationService notifications;
+  final AuthService auth;
   @override
   ConsumerState<PrivateSession> createState() => _PrivateSessionState();
 }
@@ -22,6 +26,7 @@ class PrivateSession extends ConsumerStatefulWidget {
 class _PrivateSessionState extends ConsumerState<PrivateSession> {
   final subscriptions = <StreamSubscription>[];
   Timer? heartbeat;
+  MessengerRepository? repository;
   final handled = <String>{};
   @override
   void initState() {
@@ -33,9 +38,13 @@ class _PrivateSessionState extends ConsumerState<PrivateSession> {
     if (!mounted) return;
     final client = ref.read(supabaseProvider);
     final repo = ref.read(messengerProvider);
+    repository = repo;
     final owner = client.auth.currentUser?.id;
     if (owner == null) return;
-    bool active() => mounted && client.auth.currentUser?.id == owner;
+    bool active() =>
+        mounted &&
+        widget.auth.deviceAuthorized &&
+        client.auth.currentUser?.id == owner;
     try {
       await repo.prepare();
       if (!active()) return;
@@ -49,8 +58,19 @@ class _PrivateSessionState extends ConsumerState<PrivateSession> {
         await widget.notifications.register(client);
       }
       if (!active()) return;
+      subscriptions.add(
+        client
+            .from('account_devices')
+            .stream(primaryKey: ['id'])
+            .eq('user_id', owner)
+            .listen((_) {
+              if (mounted) unawaited(widget.auth.refreshDeviceAccess());
+            }, onError: (Object _) {}),
+      );
       void beat() {
         if (!active()) return;
+        unawaited(widget.auth.refreshDeviceAccess());
+        unawaited(client.rpc('device_heartbeat').catchError((Object _) {}));
         unawaited(
           client
               .from('user_settings')
@@ -124,6 +144,11 @@ class _PrivateSessionState extends ConsumerState<PrivateSession> {
       subscription.cancel();
     }
     heartbeat?.cancel();
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    unawaited(
+      repository?.suspend().catchError((Object _) {}) ?? Future.value(),
+    );
     super.dispose();
   }
 

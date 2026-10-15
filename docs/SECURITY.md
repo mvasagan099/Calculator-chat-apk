@@ -25,3 +25,13 @@ Presence callbacks, session startup and repository channels/timers are account/l
 Terminal call updates retry under their original account while the controller lives. They are not a durable process-death queue: losing the process or signing out can leave server state until existing scheduled cleanup (accepted calls have a two-hour cap) and LiveKit room closure. Do not claim instant remote termination during outages. New location declarations authorize only foreground one-time sharing; Bluetooth permission is requested explicitly for audio routing. Native compilation and OEM permission/background behavior remain unverified.
 
 See the [Phase 3 evidence and remaining release blockers](PHASE3_BETA_READINESS.md). Local tests are not an independent penetration test, hosted RLS certification, malware scanner, performance benchmark or E2EE implementation.
+
+## Phase 4 — implemented controls and disabled E2EE
+
+Read [PHASE4_SECURITY.md](PHASE4_SECURITY.md) and [ENCRYPTION_DESIGN.md](ENCRYPTION_DESIGN.md). The official native Signal probe is verified only in its test scope; direct/group messages and media remain readable by authorized infrastructure. There is no production encrypted transport, key-directory/backup implementation, identity-verification UI or E2EE claim for LiveKit.
+
+New additive migrations enforce message expiration before cleanup, tombstones against stale retry resurrection, single service-side view-once claims and ordinary Storage denial. Worker cleanup is eventual; existing signed URLs/external copies/backups can outlive application access. View-once cannot prevent another camera or a modified recipient from retaining content.
+
+Optional device approval adds restrictive table/Storage/Realtime policies, guards definer RPCs and Edge Functions, binds push registrations to signed JWT session IDs and filters revoked registrations. Enabling it requires a coordinated deployment and a retained approved device. This is account-access security, not cryptographic device authentication; revocation does not erase offline copies or instantly evict existing LiveKit streams/capabilities. Password-confirmed actions use an isolated verification session. Hosted verification and a reviewed lost-approved-device recovery procedure remain required before broad rollout.
+
+Repository suspension releases plaintext/cache-key references after pending operations settle. Known-expired content is pruned from encrypted caches/outboxes, media renderers close on expiry/relock, and private viewer files/cache entries are removed best effort. Dart/native/GPU/flash erasure is not guaranteed. Keep provider/runtime logs free of passwords, tokens, message bodies, decryption keys and signed media URLs.

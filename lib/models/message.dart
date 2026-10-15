@@ -16,10 +16,16 @@ class ChatMessage {
     this.receipts = const [],
     this.pending = false,
     this.failed = false,
+    this.expiresAt,
+    this.viewOnce = false,
+    this.viewOnceOpenedAt,
   });
   final String id, conversationId, body, kind;
   final String? senderId, replyTo, senderName;
   final DateTime createdAt;
+  final DateTime? expiresAt, viewOnceOpenedAt;
+  final bool viewOnce;
+  bool get expired => expiresAt != null && !expiresAt!.isAfter(DateTime.now());
   final bool deleted, edited, forwarded, pending, failed;
   final Map<String, dynamic>? attachment;
   final List<Map<String, dynamic>> reactions, receipts;
@@ -55,5 +61,8 @@ class ChatMessage {
         .cast<Map<String, dynamic>>(),
     pending: j['pending'] ?? false,
     failed: j['failed'] ?? false,
+    expiresAt: DateTime.tryParse(j['expires_at'] ?? ''),
+    viewOnce: j['view_once'] ?? false,
+    viewOnceOpenedAt: DateTime.tryParse(j['view_once_opened_at'] ?? ''),
   );
 }

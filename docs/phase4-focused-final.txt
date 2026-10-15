@@ -1,0 +1,14 @@
+00:00 +0: loading /workspace/Calculator-chat-apk/test/view_once_viewer_test.dart
+00:00 +0: /workspace/Calculator-chat-apk/test/view_once_viewer_test.dart: Transport adapter: view-once relock closes displayed content permanently
+00:00 +1: /workspace/Calculator-chat-apk/test/private_media_guard_test.dart: retained media renderer is destroyed on manual relock
+00:00 +2: /workspace/Calculator-chat-apk/test/private_media_guard_test.dart: retained media renderer is destroyed on manual relock
+00:00 +3: /workspace/Calculator-chat-apk/test/private_media_guard_test.dart: retained media renderer is destroyed on expiration
+00:01 +4: /workspace/Calculator-chat-apk/test/auth_device_test.dart: HTTP adapter: approval is an independent gate, with no auto-unlock
+00:01 +5: /workspace/Calculator-chat-apk/test/auth_device_test.dart: HTTP adapter: revocation locks an already unlocked calculator session
+00:01 +6: /workspace/Calculator-chat-apk/test/auth_device_test.dart: HTTP adapter: unavailable initial authorization fails closed; an existing approved session tolerates temporary loss
+00:01 +7: /workspace/Calculator-chat-apk/test/encrypted_cache_test.dart: cache persists authenticated ciphertext and fails closed on tampering
+00:01 +8: /workspace/Calculator-chat-apk/test/encrypted_cache_test.dart: queued writes retain the most recent outbox
+00:01 +9: /workspace/Calculator-chat-apk/test/encrypted_cache_test.dart: forget releases plaintext references without deleting encrypted history; clear works while forgotten
+00:01 +10: /workspace/Calculator-chat-apk/test/local_retention_test.dart: offline cached/outbox content expires and view-once bodies are never cached
+00:01 +11: /workspace/Calculator-chat-apk/test/local_retention_test.dart: invalid expiration fails closed while legacy records survive
+00:01 +12: All tests passed!

@@ -8,6 +8,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/widgets/actions.dart';
 import 'media_service.dart';
+import 'private_media_guard.dart';
 
 class AttachmentView extends StatefulWidget {
   const AttachmentView({
@@ -15,18 +16,25 @@ class AttachmentView extends StatefulWidget {
     required this.client,
     required this.attachment,
     required this.kind,
+    this.expiresAt,
   });
   final SupabaseClient client;
   final Map<String, dynamic> attachment;
   final String kind;
+  final DateTime? expiresAt;
   @override
   State<AttachmentView> createState() => _AttachmentViewState();
 }
 
 class _AttachmentViewState extends State<AttachmentView> {
+  Map<String, dynamic> get attachment => {
+    ...widget.attachment,
+    if (widget.expiresAt != null)
+      'expires_at': widget.expiresAt!.toUtc().toIso8601String(),
+  };
   late final Future<String> url = MediaService(
     widget.client,
-  ).signedUrl(widget.attachment);
+  ).signedUrl(attachment);
   AudioPlayer? player;
   bool playing = false, preparingAudio = false;
   StreamSubscription<PlayerState>? _playerState;
@@ -57,9 +65,7 @@ class _AttachmentViewState extends State<AttachmentView> {
       });
       try {
         // A URL created when the bubble mounted may already have expired.
-        final source = await MediaService(
-          widget.client,
-        ).signedUrl(widget.attachment);
+        final source = await MediaService(widget.client).signedUrl(attachment);
         if (!mounted) return;
         await current.setUrl(source);
         if (!mounted) return;
@@ -88,7 +94,7 @@ class _AttachmentViewState extends State<AttachmentView> {
 
   @override
   Widget build(BuildContext context) {
-    final a = widget.attachment;
+    final a = attachment;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -102,15 +108,18 @@ class _AttachmentViewState extends State<AttachmentView> {
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => Scaffold(
-                          appBar: AppBar(),
-                          body: Center(
-                            child: InteractiveViewer(
-                              child: Image.network(
-                                s.data!,
-                                cacheWidth: 2160,
-                                errorBuilder: (_, _, _) =>
-                                    const Icon(Icons.broken_image),
+                        builder: (_) => PrivateMediaGuard(
+                          expiresAt: widget.expiresAt,
+                          builder: (_) => Scaffold(
+                            appBar: AppBar(),
+                            body: Center(
+                              child: InteractiveViewer(
+                                child: Image.network(
+                                  s.data!,
+                                  cacheWidth: 2160,
+                                  errorBuilder: (_, _, _) =>
+                                      const Icon(Icons.broken_image),
+                                ),
                               ),
                             ),
                           ),
@@ -171,7 +180,12 @@ class _AttachmentViewState extends State<AttachmentView> {
               if (context.mounted) {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => VideoViewer(url: source)),
+                  MaterialPageRoute(
+                    builder: (_) => PrivateMediaGuard(
+                      expiresAt: widget.expiresAt,
+                      builder: (_) => VideoViewer(url: source),
+                    ),
+                  ),
                 );
               }
             }),

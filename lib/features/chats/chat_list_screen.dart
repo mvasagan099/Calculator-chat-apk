@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/security/local_retention.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
@@ -14,6 +16,37 @@ class ChatListScreen extends ConsumerStatefulWidget {
 
 class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   late Stream<List<Map<String, dynamic>>> stream;
+  Timer? expiryTimer;
+  DateTime? expiryDeadline;
+  void scheduleExpiration(List<Map<String, dynamic>> rows) {
+    final times =
+        rows
+            .map((row) => DateTime.tryParse(row['preview_expires_at'] ?? ''))
+            .whereType<DateTime>()
+            .where((time) => time.isAfter(DateTime.now()))
+            .toList()
+          ..sort();
+    final next = times.firstOrNull;
+    if (next == expiryDeadline) return;
+    expiryTimer?.cancel();
+    expiryDeadline = next;
+    if (next != null) {
+      expiryTimer = Timer(
+        next.difference(DateTime.now()) + const Duration(milliseconds: 20),
+        () {
+          expiryDeadline = null;
+          if (mounted) setState(() {});
+        },
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    expiryTimer?.cancel();
+    super.dispose();
+  }
+
   String query = '';
   bool archived = false;
   @override
@@ -74,7 +107,18 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               if (!s.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
+              scheduleExpiration(s.data!);
               final rows = s.data!
+                  .map((source) {
+                    final row = Map<String, dynamic>.from(source);
+                    if (recordExpired({
+                      'expires_at': row['preview_expires_at'],
+                    }, DateTime.now())) {
+                      row['preview'] = null;
+                      row['unread'] = 0;
+                    }
+                    return row;
+                  })
                   .where(
                     (c) =>
                         c['archived'] == archived &&

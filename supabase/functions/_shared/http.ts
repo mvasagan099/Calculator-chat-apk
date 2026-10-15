@@ -35,6 +35,12 @@ export async function authenticated(req: Request) {
   );
   const { data, error } = await userClient.auth.getUser(token);
   if (error || !data.user) throw new HttpError(401, "Session invalid");
+  const { data: access, error: accessError } = await userClient.rpc(
+    "device_access_status",
+  );
+  if (accessError || access?.authorized !== true) {
+    throw new HttpError(403, "Approved device required");
+  }
   return { user: data.user, client: userClient, admin: adminClient() };
 }
 export class HttpError extends Error {

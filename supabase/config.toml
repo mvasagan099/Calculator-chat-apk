@@ -11,3 +11,9 @@ verify_jwt = false
 verify_jwt = false
 [functions.livekit-webhook]
 verify_jwt = false
+
+[functions.view-once]
+verify_jwt = false
+
+[functions.device-security]
+verify_jwt = false

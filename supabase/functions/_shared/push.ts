@@ -37,9 +37,12 @@ export async function dispatchPush() {
         Date.now() - Date.parse(call.created_at) < 45000;
     } else if (job.kind === "message") {
       const { data: message } = await admin.from("messages").select(
-        "conversation_id,sender_id,deleted_at",
+        "conversation_id,sender_id,deleted_at,expires_at",
       ).eq("id", job.resource_id).single();
-      if (!message || message.deleted_at) relevant = false;
+      if (
+        !message || message.deleted_at ||
+        (message.expires_at && Date.parse(message.expires_at) <= Date.now())
+      ) relevant = false;
       else {
         const { data: member } = await admin.from("conversation_members")
           .select("muted").eq("conversation_id", message.conversation_id).eq(
@@ -54,10 +57,11 @@ export async function dispatchPush() {
         relevant = relevant && !!member && !member.muted && !blocks?.length;
       }
     }
-    const { data: tokens } = await admin.from("push_tokens").select("token").eq(
-      "user_id",
-      job.recipient_id,
+    const { data: tokens, error: tokenError } = await admin.rpc(
+      "notification_tokens",
+      { recipient: job.recipient_id },
     );
+    if (tokenError) throw tokenError;
     let success = true;
     if (relevant) {
       for (const { token } of tokens ?? []) {

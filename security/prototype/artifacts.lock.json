@@ -1,0 +1,17 @@
+[
+  {
+    "url": "https://repo.maven.apache.org/maven2/org/signal/libsignal-client/0.86.5/libsignal-client-0.86.5.jar",
+    "sha256": "d300c272dae155b21ae8988f51b6b493001cd2d83f5d2f9ae15e743c7ff971bd",
+    "bytes": 105854021
+  },
+  {
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.1.0/kotlin-stdlib-2.1.0.jar",
+    "sha256": "d6f91b7b0f306cca299fec74fb7c34e4874d6f5ec5b925a0b4de21901e119c3f",
+    "bytes": 1690048
+  },
+  {
+    "url": "https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.10.2/kotlinx-coroutines-core-jvm-1.10.2.jar",
+    "sha256": "5ca175b38df331fd64155b35cd8cae1251fa9ee369709b36d42e0a288ccce3fd",
+    "bytes": 1479317
+  }
+]

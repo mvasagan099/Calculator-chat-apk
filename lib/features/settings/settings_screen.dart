@@ -248,6 +248,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             const Divider(),
+            ListTile(
+              title: const Text('Devices and sessions'),
+              leading: const Icon(Icons.devices),
+              onTap: () => context.push('/device-sessions'),
+            ),
+            const ListTile(
+              title: Text('End-to-end encryption'),
+              subtitle: Text(
+                'Not enabled. Private chats and media are accessible to the server.',
+              ),
+            ),
             const ListTile(title: Text('Account privacy')),
             SwitchListTile(
               title: const Text('Read receipts'),
@@ -256,11 +267,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   act(context, () => preference('read_receipts', v)),
             ),
             SwitchListTile(
-              title: const Text('Share last seen and online'),
+              title: const Text('Share last seen'),
               value: settings['last_seen_visible'],
               onChanged: (v) =>
                   act(context, () => preference('last_seen_visible', v)),
             ),
+            SwitchListTile(
+              title: const Text('Share online status'),
+              value: settings['online_visible'],
+              onChanged: (value) =>
+                  act(context, () => preference('online_visible', value)),
+            ),
+            for (final entry in {
+              'photo_privacy': 'Profile photo visibility',
+              'invitation_privacy': 'Group invitations',
+            }.entries)
+              ListTile(
+                title: Text(entry.value),
+                trailing: DropdownButton<String>(
+                  value: settings[entry.key],
+                  items: [
+                    for (final value in ['everyone', 'contacts', 'nobody'])
+                      DropdownMenuItem(value: value, child: Text(value)),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      act(context, () => preference(entry.key, value));
+                    }
+                  },
+                ),
+              ),
             SwitchListTile(
               title: const Text('Share updates with contacts'),
               value: settings['status_privacy'] == 'contacts',
@@ -346,7 +382,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Confirm account password',
                   secret: true,
                 );
-                if (password == null) return;
+                if (password == null || !context.mounted) return;
+                final account = widget.auth.client!.auth.currentUser!.id;
+                final repository = ref.read(messengerProvider);
                 await ref.read(callProvider).end();
                 final result = await ref
                     .read(supabaseProvider)
@@ -355,7 +393,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (result.status != 200) {
                   throw StateError('Account could not be deleted');
                 }
-                await ref.read(messengerProvider).clearLocal();
+                await repository.clearLocal();
+                await widget.auth.store.delete('device.id.$account');
                 await widget.auth.lock.vault.clear();
                 await widget.auth.store.delete('pin.owner');
                 widget.auth.lock.hasPin = false;
