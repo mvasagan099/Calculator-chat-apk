@@ -56,7 +56,7 @@ Recorded Phase 1 logs: [debug](phase1-debug-build.txt), [release](phase1-release
 
 The workflow file is `.github/workflows/android-debug.yml`, displayed as **Android debug APK**. It uses pinned checkout/Java/Android/upload Actions and clones the official Flutter 3.44.0 tag, requiring commit `559ffa3f75e7402d65a8def9c28389a9b2e6fe42`. No application dependency upgrades or untrusted mirrors are used.
 
-After publishing the source/workflow to the selected repository and enabling Actions:
+The source/workflow is published on `codex/phase2-apk-verification`. After enabling Actions if needed:
 
 1. A push/PR builds `preview` automatically. For an explicit run open **Actions → Android debug APK → Run workflow**, select the source branch and mode. Manual dispatch requires the workflow to be present on the repository's default branch.
 2. For `connected`, set repository **variables** `SUPABASE_URL` and `SUPABASE_ANON_KEY` to real public identifiers. To include Firebase, set `FIREBASE_ANDROID_CONFIG` to the public Android console JSON. Optional separate Firebase public variables must match that JSON. Never add service-role keys, test passwords, LiveKit secrets or service-account JSON to these variables.
@@ -64,7 +64,7 @@ After publishing the source/workflow to the selected repository and enabling Act
 4. Download from the completed run's **Artifacts** section. With authenticated GitHub CLI/API access:
 
    ```sh
-   gh run list --repo mvasagan099/Calculator-chat-apk --workflow android-debug.yml
+   gh run list --repo mvasagan099/Calculator-chat-apk --workflow android-debug.yml --branch codex/phase2-apk-verification
    gh run download RUN_ID --repo mvasagan099/Calculator-chat-apk \
      --name calculator-messenger-debug-preview --dir downloaded-apk
    cd downloaded-apk

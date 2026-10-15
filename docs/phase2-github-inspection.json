@@ -1,0 +1,6 @@
+{
+  "public_actions_page_status": 404,
+  "authenticated_api_access": "proxy CONNECT 403",
+  "workflow_run_id": null,
+  "artifact_observed": false
+}

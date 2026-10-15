@@ -77,3 +77,5 @@ Use two physical Android devices, two independent verified accounts, production-
 | Signed release install/start | Valid certificate; same privacy/security behavior with R8 | Blocked: no APK/signing configuration |
 
 Additional release work: load/latency and battery testing, large-group pagination, attachment-transfer UX/accessibility review, service/provider failure injection, OEM background restrictions, TLS/TURN-only connectivity, dedicated security review, verified HTTPS app links, backup/restore behavior and production monitoring. Optional phone OTP, address-book sync, group calls and E2EE are not implemented.
+
+Current source/workflow publication: `codex/phase2-apk-verification` (initial publication `6c3c6af`; follow-up changes are on the same branch). Git read/push succeeded, but GitHub API access is proxy-blocked and no completed workflow/artifact has been inspected. This is not a CI build PASS.

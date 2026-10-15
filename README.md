@@ -45,7 +45,7 @@ Debug signing uses Android's standard development key. A distributable release r
 
 ## GitHub Actions build fallback
 
-`.github/workflows/android-debug.yml` installs the exact official Flutter version, runs locked dependency resolution, analysis and tests, builds a signed debug APK and verifies its signature, application ID, minimum API and known secret formats. On success it uploads **calculator-messenger-debug-preview** or **calculator-messenger-debug-connected**, including SHA-256 and metadata. Build logs are uploaded on failure. Workflow lint passed; no completed workflow artifact is claimed. See [download/run instructions](docs/RELEASE.md).
+`.github/workflows/android-debug.yml` installs the exact official Flutter version, runs locked dependency resolution, analysis and tests, builds a signed debug APK and verifies its signature, application ID, minimum API and known secret formats. On success it uploads **calculator-messenger-debug-preview** or **calculator-messenger-debug-connected**, including SHA-256 and metadata. Build logs are uploaded on failure. Workflow lint passed and the source was pushed to [codex/phase2-apk-verification](https://github.com/mvasagan099/Calculator-chat-apk/tree/codex/phase2-apk-verification). GitHub API access is blocked, so no completed workflow artifact is claimed. See [download/run instructions](docs/RELEASE.md).
 
 For connected builds, first prepare public config and Android Firebase resources:
 
@@ -84,4 +84,4 @@ deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
 deno test --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
 ```
 
-Use the existing checkout in future cloud tasks; no additional worktree is needed. The debug workflow is prepared for publication to a dedicated build branch; workflow execution and artifacts must be verified separately.
+Use the existing checkout in future cloud tasks; no additional worktree is needed. The source and debug workflow were pushed to `codex/phase2-apk-verification`; workflow execution and artifacts must be verified separately.

@@ -127,6 +127,11 @@ class NotificationService extends ChangeNotifier {
       return;
     }
     await registration?.cancel();
+    if (_disposed ||
+        generation != _registrationGeneration ||
+        client.auth.currentUser?.id != uid) {
+      return;
+    }
     registration = FirebaseMessaging.instance.onRegistered.listen((
       newToken,
     ) async {

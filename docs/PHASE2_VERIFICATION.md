@@ -6,7 +6,7 @@ Recorded 2026-10-15. The repository was preserved in its existing checkout, with
 
 - Inspected all seven migrations, six Edge Function entry points, Android configuration, notification/call code and setup/security documentation.
 - Rechecked the official Flutter SDK tag: 3.44.0 resolves to `559ffa3f75e7402d65a8def9c28389a9b2e6fe42`, matching the retained SDK. Full JDK 21, Android SDK/build-tools 36, NDK 28.2 and CMake are present. Android licenses are accepted.
-- Added `android-debug.yml`: exact official Flutter Git checkout, pinned Actions, locked dependencies, analysis/tests, signed debug APK, signature/package/minimum-API inspection, known-secret-format scanning, SHA-256 and diagnostics artifacts. Actionlint passed. This does not claim a workflow run or APK exists.
+- Added `android-debug.yml`: exact official Flutter Git checkout, pinned Actions, locked dependencies, analysis/tests, signed debug APK, signature/package/minimum-API inspection, known-secret-format scanning, SHA-256 and diagnostics artifacts. Actionlint passed. Source and workflow were pushed to `codex/phase2-apk-verification` at initial publication commit `6c3c6af`. A completed workflow or APK has not been observed.
 - Added public-config validation and matching native Firebase resource generation from the Firebase Android console configuration. This supports native process startup before Dart initialization; package/project/sender/app identifiers must agree. Automatic FCM registration is disabled until explicit registration. No Firebase project was fabricated.
 - Hardened notification registration cancellation, generic routing payloads and account-owner/PIN gates. Added client and server notification privacy tests.
 - Added real-provider staging acceptance with explicit target/write consent, sanitized PASS/FAIL/BLOCKED/NOT TESTED output, valid image/audio fixtures and best-effort cleanup. Added read-only remote-schema preflight.
@@ -31,7 +31,9 @@ A direct check of `dl.google.com` succeeds; the authoritative Flutter embedding 
 | Edge security/privacy tests | PASS | Five tests; no real FCM delivery |
 | PostgreSQL migration/security checks | PASS | Seven migrations, four real PostgreSQL suites |
 | Public build-config tests | PASS | 11 tests; no provider credentials verified |
-| Workflow lint | PASS | actionlint 1.7.7; workflow not executed here |
+| Workflow lint | PASS | actionlint 1.7.7; GitHub run status inaccessible |
+| Git publication | PASS | Dedicated build branch pushed; existing main was not modified |
+| GitHub run/artifact inspection | BLOCKED | API HTTPS CONNECT 403; no run ID/artifact/checksum observed |
 | Local debug APK | BLOCKED | Official Flutter Maven host proxy CONNECT 403 |
 | Signed release APK | BLOCKED | No private keystore/config; not attempted this phase |
 | APK file size, package, signature, checksum | BLOCKED | No APK exists to inspect locally |
@@ -46,8 +48,22 @@ The 16 hosted scenarios are individually BLOCKED in [hosted-results.json](hosted
 ## Owner steps
 
 1. Review/save the environment's network settings so the saved official Flutter domains become effective in the runtime. Permit `api.github.com` for authenticated workflow status/artifact operations. A new task/publication may be needed; recheck the actual CONNECT response before another build.
-2. Publish the source/workflow to the authorized GitHub repository, enable Actions if needed and run **Android debug APK**. Automatic push/PR builds use local preview mode. The exact success artifact is `calculator-messenger-debug-preview`; manual connected builds use `calculator-messenger-debug-connected`. Logs use `calculator-messenger-build-logs-RUN_ID`. RELEASE.md has the download procedure. No artifact/run link is invented.
+2. Open the published [build branch](https://github.com/mvasagan099/Calculator-chat-apk/tree/codex/phase2-apk-verification) and its Actions page. Enable Actions if needed, inspect the push-triggered build or run **Android debug APK** after making the workflow available on the default branch. Automatic push/PR builds use local preview mode. The exact success artifact is `calculator-messenger-debug-preview`; manual connected builds use `calculator-messenger-debug-connected`. Logs use `calculator-messenger-build-logs-RUN_ID`. RELEASE.md has the download procedure. No artifact/run link is invented.
 3. Create/confirm a dedicated Supabase staging project, review its remote schema/history before migration, then deploy the existing backend using DEPLOYMENT.md. Add only public client identifiers to build config.
 4. Register the exact Firebase Android package, provide its console `google-services.json` as public config input, and store the FCM service account only in Supabase. Configure LiveKit URL/key/secret and signed webhook on the server, plus Cron/Vault workers.
 5. Provide two disposable verified staging accounts and run HOSTED_TESTS.md. Connect two Android devices, install the verified debug APK, and execute the privacy/messaging/call/notification checklist. Record actual results.
 6. Supply a private release keystore through secure local/CI signing configuration only when ready for signed release validation. No production keystore or password was invented.
+
+## Calculator privacy evidence
+
+| Path | Automated evidence | Real provider/device result |
+| --- | --- | --- |
+| Arithmetic, correct/incorrect PIN, arithmetic result resembling PIN | PASS | NOT TESTED on Android |
+| Confirmed setup, restart verifier persistence, storage failure | PASS with test storage | Android Keystore behavior NOT TESTED |
+| Background/inactivity/manual relock, late PIN completion | PASS in widget/controller tests | OS lifecycle NOT TESTED |
+| Back navigation/deep-link gate, retained-dialog privacy mask | PASS in local UI tests | Real notification-tap integration BLOCKED |
+| Account authentication gate | PASS at gate-unit level | Real session expiry/login/logout/recovery BLOCKED |
+| Biometric unlock and recent-app preview | Native/plugin code present | NOT TESTED on hardware |
+| Notification text/routing content privacy | PASS client/server policy tests | Foreground/background/terminated delivery NOT TESTED |
+
+Saved environment updates: official-host/GitHub API network destinations, public Supabase/Firebase configuration requirement names and current startup instructions. No secret values were saved; install instructions were retained. Draft persistence requires owner review/application/publication and does not demonstrate live egress access.

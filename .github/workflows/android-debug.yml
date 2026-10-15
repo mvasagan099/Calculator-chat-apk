@@ -71,18 +71,17 @@ jobs:
           set -o pipefail
           flutter build apk --debug --no-pub --dart-define-from-file=config/ci-public.json 2>&1 | tee build-evidence/debug-build.txt
       - name: Verify artifact and signature
-        run: python3 scripts/verify-apk.py build/app/outputs/flutter-apk/app-debug.apk --android-sdk "$ANDROID_HOME" --output-dir build-evidence
+        run: |
+          python3 scripts/verify-apk.py build/app/outputs/flutter-apk/app-debug.apk --android-sdk "$ANDROID_HOME" --output-dir build-evidence/apk
+          cp build/app/outputs/flutter-apk/app-debug.apk build-evidence/apk/app-debug.apk
       - name: Upload verified installable debug APK
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: calculator-messenger-debug-${{ steps.config.outputs.mode }}
           if-no-files-found: error
           retention-days: 14
-          path: |
-            build/app/outputs/flutter-apk/app-debug.apk
-            build-evidence/app-debug.apk.sha256
-            build-evidence/apk-metadata.txt
-            build-evidence/apk-signature.txt
+          path: build-evidence/apk/
+          compression-level: 0
       - name: Upload diagnostics even on failure
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -90,7 +89,7 @@ jobs:
           name: calculator-messenger-build-logs-${{ github.run_id }}
           if-no-files-found: warn
           retention-days: 14
-          path: build-evidence/
+          path: build-evidence/*.txt
       - name: Summarize result
         if: always()
         env:
