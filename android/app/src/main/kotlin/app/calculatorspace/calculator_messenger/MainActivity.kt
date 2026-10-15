@@ -36,6 +36,13 @@ class MainActivity : FlutterFragmentActivity() {
                         }
                     }
                 }
+                "requestBluetooth" -> {
+                    if (permissionResult != null) result.error("busy", "A permission request is already open", null)
+                    else if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                        permissionResult = result
+                        requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 502)
+                    } else result.success(null)
+                }
                 "startCall" -> {
                     val id = call.argument<String>("id")
                     val callId = call.argument<String>("callId")
@@ -71,11 +78,11 @@ class MainActivity : FlutterFragmentActivity() {
     }
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode != 501) return
+        if (requestCode != 501 && requestCode != 502) return
         val result = permissionResult
         permissionResult = null
         if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) result?.success(null)
-        else result?.error("permission", "Microphone and requested camera permission are required", null)
+        else result?.error("permission", if (requestCode == 502) "Nearby devices permission is required for Bluetooth routing" else "Microphone and requested camera permission are required", null)
     }
     override fun onDestroy() {
         permissionResult?.error("cancelled", "Activity closed", null)

@@ -7,12 +7,20 @@ import '../core/security/pin_vault.dart';
 import '../models/message.dart';
 
 class MessengerRepository {
-  MessengerRepository(this.client);
+  MessengerRepository(
+    this.client, {
+    EncryptedCache Function(String owner)? cacheFactory,
+    this.connectivity,
+  }) : _cacheFactory =
+           cacheFactory ??
+           ((owner) => EncryptedCache(owner, const DeviceSecretStore()));
+  final EncryptedCache Function(String owner) _cacheFactory;
+  final Stream<List<ConnectivityResult>>? connectivity;
   final SupabaseClient client;
   String get uid => client.auth.currentUser!.id;
   EncryptedCache? _cache;
   String? _cacheOwner;
-  bool _flushing = false;
+  bool _flushing = false, _disposed = false;
   Completer<void>? _flushDone;
   Future<void>? _preparing;
   Timer? _retryTimer;
@@ -20,7 +28,10 @@ class MessengerRepository {
   bool isHidden(String id) => _hiddenIds.contains(id);
   StreamSubscription<List<ConnectivityResult>>? _connection;
   final _changes = StreamController<void>.broadcast();
+  final _channels = <RealtimeChannel>{};
+  final _timers = <Timer>{};
   Future<void> prepare() async {
+    if (_disposed) throw StateError('Messaging session closed');
     if (_preparing != null) await _preparing;
     if (_cacheOwner == uid && _cache != null) return;
     _preparing = _initialize();
@@ -33,17 +44,26 @@ class MessengerRepository {
 
   Future<void> _initialize() async {
     final owner = uid;
-    final cache = EncryptedCache(owner, const DeviceSecretStore());
+    final cache = _cacheFactory(owner);
     await cache.initialize();
     await _connection?.cancel();
+    await _flushDone?.future;
+    if (_disposed || client.auth.currentUser?.id != owner) {
+      throw StateError('Messaging session changed');
+    }
+    _hiddenIds.clear();
     _cacheOwner = owner;
     _cache = cache;
-    _connection = Connectivity().onConnectivityChanged.listen((_) {
-      unawaited(flush());
-    });
+    _connection = (connectivity ?? Connectivity().onConnectivityChanged).listen(
+      (_) {
+        unawaited(flush().catchError((Object _) {}));
+      },
+    );
     _retryTimer?.cancel();
-    _retryTimer = Timer.periodic(const Duration(seconds: 15), (_) => flush());
-    unawaited(flush());
+    _retryTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      unawaited(flush().catchError((Object _) {}));
+    });
+    unawaited(flush().catchError((Object _) {}));
   }
 
   List<Map<String, dynamic>> get _outbox =>
@@ -53,7 +73,7 @@ class MessengerRepository {
   Future<void> _saveOutbox(List<Map<String, dynamic>> values) async {
     _cache!.data['outbox'] = values;
     await _cache!.save();
-    _changes.add(null);
+    if (!_changes.isClosed) _changes.add(null);
   }
 
   Stream<List<Map<String, dynamic>>> conversations() async* {
@@ -81,10 +101,16 @@ class MessengerRepository {
   }) {
     late StreamController<T> controller;
     RealtimeChannel? channel;
-    Timer? refresh;
+    Timer? refresh, debounce;
+    final owner = client.auth.currentUser?.id;
     var fetching = false, again = false, closed = false;
     Future<void> load() async {
-      if (closed) return;
+      if (closed ||
+          _disposed ||
+          owner == null ||
+          client.auth.currentUser?.id != owner) {
+        return;
+      }
       if (fetching) {
         again = true;
         return;
@@ -92,9 +118,11 @@ class MessengerRepository {
       fetching = true;
       try {
         final value = await fetch();
-        if (!closed) controller.add(value);
+        if (!closed && !_disposed && client.auth.currentUser?.id == owner) {
+          controller.add(value);
+        }
       } catch (e, st) {
-        if (!closed) controller.addError(e, st);
+        if (!closed && !_disposed) controller.addError(e, st);
       } finally {
         fetching = false;
         if (again) {
@@ -107,34 +135,66 @@ class MessengerRepository {
     controller = StreamController<T>(
       onListen: () {
         channel = client.channel('watch-${const Uuid().v4()}');
+        _channels.add(channel!);
         for (final table in tables) {
           channel!.onPostgresChanges(
             event: PostgresChangeEvent.all,
             schema: 'public',
             table: table,
-            filter: cid == null
+            filter: cid == null || table != 'messages'
                 ? null
                 : PostgresChangeFilter(
                     type: PostgresChangeFilterType.eq,
                     column: 'conversation_id',
                     value: cid,
                   ),
-            callback: (_) => load(),
+            callback: (_) {
+              if (closed || _disposed || client.auth.currentUser?.id != owner) {
+                return;
+              }
+              if (debounce != null) _timers.remove(debounce);
+              debounce?.cancel();
+              debounce = Timer(const Duration(milliseconds: 250), () {
+                _timers.remove(debounce);
+                unawaited(load());
+              });
+              _timers.add(debounce!);
+            },
           );
         }
         channel!.subscribe((state, error) {
           if (state == RealtimeSubscribeStatus.subscribed) unawaited(load());
         });
         refresh = Timer.periodic(const Duration(seconds: 15), (_) => load());
+        _timers.add(refresh!);
         unawaited(load());
       },
       onCancel: () async {
         closed = true;
         refresh?.cancel();
-        if (channel != null) await client.removeChannel(channel!);
+        debounce?.cancel();
+        _timers.remove(refresh);
+        _timers.remove(debounce);
+        if (channel != null && _channels.remove(channel)) {
+          await client.removeChannel(channel!);
+        }
       },
     );
     return controller.stream;
+  }
+
+  Future<String> wallpaper(String cid) async {
+    await prepare();
+    return _cache!.data['wallpaper.$cid'] as String? ?? 'plain';
+  }
+
+  Future<void> setWallpaper(String cid, String value) async {
+    if (!['plain', 'linen', 'dusk'].contains(value)) {
+      throw ArgumentError.value(value);
+    }
+    await prepare();
+    _cache!.data['wallpaper.$cid'] = value;
+    await _cache!.save();
   }
 
   static const messageSelect =
@@ -159,7 +219,40 @@ class MessengerRepository {
         .limit(limit);
   }
 
-  Stream<List<ChatMessage>> messages(String cid) async* {
+  /// Refresh loaded history by indexed IDs, in bounded requests. This keeps
+  /// edits, deletions and receipts current beyond the newest keyset page.
+  Future<List<Map<String, dynamic>>> loadWindow(
+    String cid,
+    Iterable<String> historyIds,
+  ) async {
+    final latest = await page(cid);
+    final byId = {for (final row in latest) row['id'] as String: row};
+    final missing = historyIds.toSet().difference(byId.keys.toSet()).toList();
+    for (var offset = 0; offset < missing.length; offset += 50) {
+      final batch = missing.skip(offset).take(50).toList();
+      final rows = await client
+          .from('messages')
+          .select(messageSelect)
+          .eq('conversation_id', cid)
+          .inFilter('id', batch);
+      for (final row in rows) {
+        byId[row['id'] as String] = row;
+      }
+    }
+    return byId.values.toList()..sort((a, b) {
+      final time = DateTime.parse(
+        b['created_at'],
+      ).compareTo(DateTime.parse(a['created_at']));
+      return time == 0
+          ? (b['id'] as String).compareTo(a['id'] as String)
+          : time;
+    });
+  }
+
+  Stream<List<ChatMessage>> messages(
+    String cid, {
+    Iterable<String> Function()? historyIds,
+  }) async* {
     await prepare();
     List<Map<String, dynamic>> rows =
         (_cache!.data['messages.$cid'] as List? ?? [])
@@ -174,7 +267,7 @@ class MessengerRepository {
               .where((m) => !_hiddenIds.contains(m['id']))
               .map(ChatMessage.fromJson)
               .toList()
-            ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            ..sort(ChatMessage.newestFirst);
       return list;
     }
 
@@ -191,7 +284,10 @@ class MessengerRepository {
             watch(
               ['messages', 'message_receipts', 'message_reactions'],
               () async {
-                final results = await page(cid);
+                final results = await loadWindow(cid, {
+                  ...rows.take(200).map((row) => row['id'] as String),
+                  ...?historyIds?.call(),
+                });
                 final hidden = await client
                     .from('message_hides')
                     .select('message_id')
@@ -203,7 +299,7 @@ class MessengerRepository {
                 _cache!.data['outbox'] = _outbox
                     .where((m) => !receivedIds.contains(m['id']))
                     .toList();
-                _cache!.data['messages.$cid'] = rows;
+                _cache!.data['messages.$cid'] = rows.take(200).toList();
                 final keys = _cache!.data.keys
                     .where((k) => k.startsWith('messages.'))
                     .toList();
@@ -213,6 +309,7 @@ class MessengerRepository {
                 await _cache!.save();
                 return rows;
               },
+              cid: cid,
             ).listen(
               (_) {
                 if (!output.isClosed) output.add(merged());
@@ -254,12 +351,16 @@ class MessengerRepository {
       'attachment': attachment,
     };
     await _saveOutbox([..._outbox, item]);
-    unawaited(flush());
+    unawaited(flush().catchError((Object _) {}));
     return id;
   }
 
   Future<void> flush({bool includeTerminal = false}) async {
-    if (_flushing ||
+    if (_flushing) {
+      await _flushDone?.future;
+      return;
+    }
+    if (_disposed ||
         _cache == null ||
         client.auth.currentUser?.id != _cacheOwner) {
       return;
@@ -268,24 +369,34 @@ class MessengerRepository {
     final completion = Completer<void>();
     _flushDone = completion;
     try {
-      for (final item in _outbox) {
-        if (item['committed'] == true ||
-            (item['terminal'] == true && !includeTerminal)) {
-          continue;
-        }
+      final attempted = <String>{};
+      while (true) {
+        if (_disposed || client.auth.currentUser?.id != _cacheOwner) break;
+        final item = _outbox
+            .where(
+              (entry) =>
+                  !attempted.contains(entry['id']) &&
+                  entry['committed'] != true &&
+                  (entry['terminal'] != true || includeTerminal),
+            )
+            .firstOrNull;
+        if (item == null) break;
+        attempted.add(item['id'] as String);
         try {
-          await client.rpc(
-            'send_message',
-            params: {
-              'cid': item['conversation_id'],
-              'mid': item['id'],
-              'content': item['body'],
-              'message_kind': item['kind'],
-              'reply': item['reply_to'],
-              'is_forwarded': item['forwarded'],
-              'attachment': item['attachment'],
-            },
-          );
+          await client
+              .rpc(
+                'send_message',
+                params: {
+                  'cid': item['conversation_id'],
+                  'mid': item['id'],
+                  'content': item['body'],
+                  'message_kind': item['kind'],
+                  'reply': item['reply_to'],
+                  'is_forwarded': item['forwarded'],
+                  'attachment': item['attachment'],
+                },
+              )
+              .timeout(const Duration(seconds: 15));
           await _saveOutbox(
             _outbox
                 .map(
@@ -308,13 +419,13 @@ class MessengerRepository {
                       ? {
                           ...e,
                           'failed': true,
-                          'terminal': error is PostgrestException,
+                          'terminal': !isRetryableMessageError(error),
                         }
                       : e,
                 )
                 .toList(),
           );
-          if (error is! PostgrestException) break;
+          if (isRetryableMessageError(error)) break;
         }
       }
     } finally {
@@ -344,7 +455,7 @@ class MessengerRepository {
           .toList();
     }
     await _cache?.save();
-    _changes.add(null);
+    if (!_changes.isClosed) _changes.add(null);
   }
 
   Future<void> clearLocal() async {
@@ -359,8 +470,26 @@ class MessengerRepository {
   }
 
   Future<void> dispose() async {
+    _disposed = true;
     _retryTimer?.cancel();
+    for (final timer in _timers) {
+      timer.cancel();
+    }
+    _timers.clear();
+    final channels = _channels.toList();
+    _channels.clear();
+    await Future.wait(channels.map(client.removeChannel));
     await _connection?.cancel();
+    await _preparing?.catchError((Object _) {});
+    await _flushDone?.future;
     await _changes.close();
   }
+}
+
+/// Validation/permission failures require intervention; outages remain queued.
+bool isRetryableMessageError(Object error) {
+  if (error is! PostgrestException) return true;
+  final code = error.code ?? '';
+  return ['429', '502', '503', '504', '40001', '40P01'].contains(code) ||
+      ['08', '53', '57', 'PGRST00'].any(code.startsWith);
 }

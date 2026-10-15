@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/actions.dart';
 import '../../providers/app_providers.dart';
 import 'call_controller.dart';
+import 'call_transport.dart';
 
 final callProvider = Provider<CallController>((ref) {
   final controller = CallController(ref.watch(supabaseProvider));
@@ -84,6 +85,13 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                 if (active)
                   Text(
                     '${controller.duration.inMinutes.toString().padLeft(2, '0')}:${(controller.duration.inSeconds % 60).toString().padLeft(2, '0')}',
+                  ),
+                if (controller.hasPendingEnd)
+                  const Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'Call ended on this device. Retrying server update…',
+                    ),
                   ),
                 if (controller.error != null)
                   Padding(
@@ -190,6 +198,8 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                       IconButton.filledTonal(
                         tooltip: 'Audio output / Bluetooth',
                         onPressed: () => act(context, () async {
+                          await AndroidCallDevice.bluetoothPermission();
+                          if (!context.mounted) return;
                           final devices = await Hardware.instance
                               .audioOutputs();
                           if (!context.mounted) return;

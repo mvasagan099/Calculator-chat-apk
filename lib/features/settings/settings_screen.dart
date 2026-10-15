@@ -256,7 +256,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   act(context, () => preference('read_receipts', v)),
             ),
             SwitchListTile(
-              title: const Text('Share last seen'),
+              title: const Text('Share last seen and online'),
               value: settings['last_seen_visible'],
               onChanged: (v) =>
                   act(context, () => preference('last_seen_visible', v)),

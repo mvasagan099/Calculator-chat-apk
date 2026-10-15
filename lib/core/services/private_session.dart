@@ -30,28 +30,34 @@ class _PrivateSessionState extends ConsumerState<PrivateSession> {
   }
 
   Future<void> start() async {
+    if (!mounted) return;
     final client = ref.read(supabaseProvider);
     final repo = ref.read(messengerProvider);
+    final owner = client.auth.currentUser?.id;
+    if (owner == null) return;
+    bool active() => mounted && client.auth.currentUser?.id == owner;
     try {
       await repo.prepare();
-      if (!mounted) return;
+      if (!active()) return;
       final settings = await client
           .from('user_settings')
           .select()
-          .eq('user_id', repo.uid)
+          .eq('user_id', owner)
           .single();
+      if (!active()) return;
       if (settings['notifications'] == true) {
         await widget.notifications.register(client);
       }
+      if (!active()) return;
       void beat() {
-        if (!mounted) return;
+        if (!active()) return;
         unawaited(
           client
               .from('user_settings')
               .update({
                 'last_seen_at': DateTime.now().toUtc().toIso8601String(),
               })
-              .eq('user_id', repo.uid)
+              .eq('user_id', owner)
               .then((_) {})
               .catchError((Object _) {}),
         );
@@ -65,15 +71,16 @@ class _PrivateSessionState extends ConsumerState<PrivateSession> {
             .stream(primaryKey: ['id'])
             .eq('state', 'ringing')
             .listen((rows) {
+              if (!active()) return;
               for (final call in rows) {
-                if (call['caller_id'] != repo.uid &&
+                if (call['caller_id'] != owner &&
                     DateTime.now().difference(
                           DateTime.parse(call['created_at']),
                         ) <
                         const Duration(seconds: 45) &&
                     handled.add(call['id'])) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted && ref.read(lockProvider).unlocked) {
+                    if (active() && ref.read(lockProvider).unlocked) {
                       widget.router.push('/call/${call['id']}');
                     }
                   });
@@ -89,9 +96,10 @@ class _PrivateSessionState extends ConsumerState<PrivateSession> {
             .order('created_at', ascending: false)
             .limit(100)
             .listen((rows) {
+              if (!active()) return;
               for (final cid
                   in rows
-                      .where((m) => m['sender_id'] != repo.uid)
+                      .where((m) => m['sender_id'] != owner)
                       .map((m) => m['conversation_id'])
                       .toSet()) {
                 unawaited(

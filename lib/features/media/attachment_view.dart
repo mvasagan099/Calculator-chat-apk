@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:video_player/video_player.dart';
@@ -27,21 +28,26 @@ class _AttachmentViewState extends State<AttachmentView> {
     widget.client,
   ).signedUrl(widget.attachment);
   AudioPlayer? player;
-  bool playing = false;
+  bool playing = false, preparingAudio = false;
+  StreamSubscription<PlayerState>? _playerState;
   double speed = 1;
   double? downloadProgress;
   bool downloading = false;
   @override
   void dispose() {
+    _playerState?.cancel();
     player?.dispose();
     super.dispose();
   }
 
   Future<void> play() async {
-    if (player == null) {
-      player = AudioPlayer();
-      await player!.setUrl(await url);
-      player!.playerStateStream.listen((s) {
+    if (preparingAudio) return;
+    AudioPlayer? current = player;
+    if (current == null) {
+      setState(() => preparingAudio = true);
+      current = AudioPlayer();
+      player = current;
+      _playerState = current.playerStateStream.listen((s) {
         if (mounted) {
           setState(
             () => playing =
@@ -49,14 +55,34 @@ class _AttachmentViewState extends State<AttachmentView> {
           );
         }
       });
-    }
-    if (playing) {
-      await player!.pause();
-    } else {
-      if (player!.processingState == ProcessingState.completed) {
-        await player!.seek(Duration.zero);
+      try {
+        // A URL created when the bubble mounted may already have expired.
+        final source = await MediaService(
+          widget.client,
+        ).signedUrl(widget.attachment);
+        if (!mounted) return;
+        await current.setUrl(source);
+        if (!mounted) return;
+        await current.setSpeed(speed);
+      } catch (_) {
+        if (mounted) {
+          await _playerState?.cancel();
+          player = null;
+          await current.dispose();
+        }
+        rethrow;
+      } finally {
+        if (mounted) setState(() => preparingAudio = false);
       }
-      await player!.play();
+    }
+    if (!mounted) return;
+    if (playing) {
+      await current.pause();
+    } else {
+      if (current.processingState == ProcessingState.completed) {
+        await current.seek(Duration.zero);
+      }
+      if (mounted) await current.play();
     }
   }
 
@@ -82,6 +108,7 @@ class _AttachmentViewState extends State<AttachmentView> {
                             child: InteractiveViewer(
                               child: Image.network(
                                 s.data!,
+                                cacheWidth: 2160,
                                 errorBuilder: (_, _, _) =>
                                     const Icon(Icons.broken_image),
                               ),
@@ -97,6 +124,7 @@ class _AttachmentViewState extends State<AttachmentView> {
                         width: 240,
                         height: 180,
                         fit: BoxFit.cover,
+                        cacheWidth: 720,
                         errorBuilder: (_, _, _) =>
                             const Icon(Icons.broken_image),
                       ),
@@ -113,7 +141,7 @@ class _AttachmentViewState extends State<AttachmentView> {
             children: [
               IconButton(
                 tooltip: playing ? 'Pause' : 'Play',
-                onPressed: () => act(context, play),
+                onPressed: preparingAudio ? null : () => act(context, play),
                 icon: Icon(playing ? Icons.pause_circle : Icons.play_circle),
               ),
               StreamBuilder<Duration>(

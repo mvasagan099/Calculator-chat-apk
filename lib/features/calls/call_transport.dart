@@ -54,6 +54,8 @@ abstract interface class CallDevice {
 
 class AndroidCallDevice implements CallDevice {
   static const channel = MethodChannel('calculator_messenger/calls');
+  static Future<void> bluetoothPermission() =>
+      channel.invokeMethod<void>('requestBluetooth');
   @override
   Future<void> permissions(bool video) =>
       channel.invokeMethod<void>('requestPermissions', {'video': video});

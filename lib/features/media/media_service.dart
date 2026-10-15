@@ -137,26 +137,26 @@ class MediaService {
     Map<String, dynamic> attachment, {
     void Function(double)? onProgress,
   }) async {
+    final expected = attachment['size_bytes'];
+    if (expected is! int || expected < 1 || expected > maxBytes) {
+      throw const FormatException('Invalid attachment size');
+    }
     final url = await signedUrl(attachment);
     final transport = http.Client();
     try {
-      final response = await transport.send(
-        http.Request('GET', Uri.parse(url)),
-      );
+      final response = await transport
+          .send(http.Request('GET', Uri.parse(url)))
+          .timeout(const Duration(seconds: 30));
       if (response.statusCode != 200) throw StateError('Download unavailable');
-      final output = BytesBuilder(copy: false);
-      var received = 0;
-      final expected = (attachment['size_bytes'] as num).toInt();
-      await for (final chunk in response.stream) {
-        received += chunk.length;
-        if (received > maxBytes) {
-          throw StateError('Download exceeds file limit');
-        }
-        output.add(chunk);
-        onProgress?.call((received / expected).clamp(0, 1));
+      if (response.contentLength != null &&
+          response.contentLength != expected) {
+        throw StateError('Attachment size changed');
       }
-      if (received != expected) throw StateError('Incomplete download');
-      return output.takeBytes();
+      return await readAttachmentBytes(
+        response.stream.timeout(const Duration(seconds: 30)),
+        expected: expected,
+        onProgress: onProgress,
+      );
     } finally {
       transport.close();
     }
@@ -186,4 +186,27 @@ class _UploadRequest extends http.BaseRequest {
       progress?.call(end / bytes.length);
     }
   }
+}
+
+/// Enforces trusted metadata before retaining bytes, including chunked responses.
+Future<Uint8List> readAttachmentBytes(
+  Stream<List<int>> stream, {
+  required int expected,
+  void Function(double)? onProgress,
+}) async {
+  if (expected < 1 || expected > MediaService.maxBytes) {
+    throw const FormatException('Invalid attachment size');
+  }
+  final output = BytesBuilder(copy: false);
+  var received = 0;
+  await for (final chunk in stream) {
+    received += chunk.length;
+    if (received > expected) {
+      throw StateError('Attachment exceeds declared size');
+    }
+    output.add(chunk);
+    onProgress?.call(received / expected);
+  }
+  if (received != expected) throw StateError('Incomplete download');
+  return output.takeBytes();
 }

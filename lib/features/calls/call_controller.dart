@@ -36,7 +36,40 @@ class CallController extends ChangeNotifier {
   String? callId;
   Map<String, dynamic>? metadata;
   StreamSubscription<List<Map<String, dynamic>>>? _subscription;
-  Timer? _ticker;
+  Timer? _ticker, _endRetry;
+  final _pendingEnds = <String, ({String action, String owner})>{};
+  final _sendingEnds = <String>{};
+  bool get hasPendingEnd => _pendingEnds.isNotEmpty;
+
+  Future<void> syncPendingEnds() async {
+    for (final id in _pendingEnds.keys.toList()) {
+      await _syncEnd(id);
+    }
+  }
+
+  Future<void> _syncEnd(String id) async {
+    final pending = _pendingEnds[id];
+    if (pending == null || _disposed || !_sendingEnds.add(id)) return;
+    try {
+      // A queued terminal operation must never cross an account boundary.
+      if (backend.userId != pending.owner) {
+        _pendingEnds.remove(id);
+        return;
+      }
+      await backend
+          .transition(id, pending.action)
+          .timeout(const Duration(seconds: 10));
+      _pendingEnds.remove(id);
+    } finally {
+      _sendingEnds.remove(id);
+      if (_pendingEnds.isEmpty) {
+        _endRetry?.cancel();
+        _endRetry = null;
+      }
+      _notify();
+    }
+  }
+
   _Attempt? _attempt;
   bool _disposed = false, _ended = false, _timeoutPending = false;
   int _generation = 0;
@@ -281,7 +314,15 @@ class CallController extends ChangeNotifier {
     // Start local teardown before a network operation that may be offline.
     unawaited(disconnect());
     _notify();
-    await backend.transition(id, action);
+    final owner = backend.userId;
+    if (owner == null) return;
+    _pendingEnds[id] = (action: action, owner: owner);
+    _endRetry ??= Timer.periodic(const Duration(seconds: 5), (_) {
+      for (final pendingId in _pendingEnds.keys.toList()) {
+        unawaited(_syncEnd(pendingId).catchError((Object _) {}));
+      }
+    });
+    await _syncEnd(id);
   }
 
   Future<void> disconnect() async {
@@ -318,6 +359,8 @@ class CallController extends ChangeNotifier {
     _ended = true;
     _subscription?.cancel();
     _ticker?.cancel();
+    _endRetry?.cancel();
+    _pendingEnds.clear();
     unawaited(disconnect());
     AndroidCallDevice.channel.setMethodCallHandler(null);
     super.dispose();

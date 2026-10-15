@@ -16,6 +16,7 @@ import '../media/media_service.dart';
 import '../media/attachment_view.dart';
 import 'conversation_presence.dart';
 import 'structured_content.dart';
+import 'chat_backdrop.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.id});
@@ -37,10 +38,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       loadingOlder = false,
       hasOlder = true;
   String title = 'Conversation';
+  String wallpaper = 'plain';
+  bool sending = false, voiceBusy = false;
   String? lastSeen;
   bool direct = false, admin = false;
   int peerCount = 1;
   String? lastAck;
+  bool acknowledging = false;
   double? uploadProgress;
   String search = '';
   List<ChatMessage>? searchResults;
@@ -49,8 +53,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(_loadDetails);
-    messages = ref.read(messengerProvider).messages(widget.id);
+    Future.microtask(() async {
+      if (!mounted) return;
+      await _loadDetails();
+      if (!mounted) return;
+      final value = await ref.read(messengerProvider).wallpaper(widget.id);
+      if (mounted) setState(() => wallpaper = value);
+    });
+    messages = ref
+        .read(messengerProvider)
+        .messages(widget.id, historyIds: () => older.map((m) => m.id));
     presence = ConversationPresence(ref.read(supabaseProvider), widget.id);
   }
 
@@ -106,14 +118,53 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> send() async {
     final body = input.text.trim();
-    if (body.isEmpty) return;
-    await ref.read(messengerProvider).send(widget.id, body, replyTo: reply?.id);
-    if (mounted) {
-      setState(() {
-        input.clear();
-        reply = null;
-      });
+    if (body.isEmpty || sending) return;
+    final original = input.text;
+    final replyingTo = reply;
+    setState(() => sending = true);
+    try {
+      await ref
+          .read(messengerProvider)
+          .send(widget.id, body, replyTo: replyingTo?.id);
+      if (mounted) {
+        setState(() {
+          // Preserve text typed while the encrypted outbox write was pending.
+          if (input.text == original) input.clear();
+          if (reply == replyingTo) reply = null;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => sending = false);
     }
+  }
+
+  Future<void> chooseWallpaper() async {
+    final value = await showModalBottomSheet<String>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(title: Text('Chat wallpaper · this device')),
+            for (final entry in {
+              'plain': 'Plain',
+              'linen': 'Linen',
+              'dusk': 'Dusk',
+            }.entries)
+              ListTile(
+                title: Text(entry.value),
+                trailing: entry.key == wallpaper
+                    ? const Icon(Icons.check)
+                    : null,
+                onTap: () => Navigator.pop(c, entry.key),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (value == null || !mounted) return;
+    await ref.read(messengerProvider).setWallpaper(widget.id, value);
+    if (mounted) setState(() => wallpaper = value);
   }
 
   Future<void> attach(String source) async {
@@ -122,8 +173,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     try {
       final upload = await MediaService(
         ref.read(supabaseProvider),
+        onProgress: (value) {
+          if (mounted) setState(() => uploadProgress = value);
+        },
       ).pick(widget.id, source);
-      if (upload != null) {
+      if (upload != null && mounted) {
         await ref
             .read(messengerProvider)
             .send(
@@ -140,6 +194,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> voice() async {
+    if (voiceBusy) return;
+    voiceBusy = true;
+    try {
+      await _voice();
+    } finally {
+      voiceBusy = false;
+    }
+  }
+
+  Future<void> _voice() async {
     if (recording) {
       final path = await recorder.stop();
       await amplitude?.cancel();
@@ -148,9 +212,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final file = File(path);
       if (mounted) setState(() => uploading = true);
       try {
+        if (!mounted) return;
         final upload = await MediaService(
           ref.read(supabaseProvider),
+          onProgress: (value) {
+            if (mounted) setState(() => uploadProgress = value);
+          },
         ).upload(widget.id, file, forcedKind: 'voice');
+        if (!mounted) return;
         await ref
             .read(messengerProvider)
             .send(widget.id, '', kind: 'voice', attachment: upload.attachment);
@@ -162,11 +231,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (!await recorder.hasPermission()) {
         throw StateError('Microphone permission is required');
       }
+      if (!mounted) return;
       final dir = await getTemporaryDirectory();
+      if (!mounted) return;
       await recorder.start(
         const RecordConfig(encoder: AudioEncoder.aacLc),
         path: '${dir.path}/voice-${DateTime.now().millisecondsSinceEpoch}.m4a',
       );
+      if (!mounted) {
+        await recorder.cancel();
+        await recorder.dispose();
+        return;
+      }
       amplitude = recorder
           .onAmplitudeChanged(const Duration(milliseconds: 100))
           .listen((a) {
@@ -201,11 +277,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ],
       ),
     );
-    if (consent != true) return;
+    if (consent != true || !mounted) return;
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
+    if (!mounted) return;
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       throw StateError('Location permission is required');
@@ -216,6 +293,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         timeLimit: Duration(seconds: 20),
       ),
     );
+    if (!mounted) return;
     await ref
         .read(messengerProvider)
         .send(
@@ -258,7 +336,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final person = await context.push<Map<String, dynamic>>(
       '/contacts?select=true',
     );
-    if (person == null) return;
+    if (person == null || !mounted) return;
     await ref
         .read(messengerProvider)
         .send(
@@ -291,28 +369,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         ),
       ),
     );
-    if (cid == null) return;
+    if (cid == null || !mounted) return;
     // Forward media by copying through the authenticated Storage API, which
     // checks membership in both the source and destination conversations.
     for (final m in rows) {
+      if (!mounted) return;
       if (m.deleted) continue;
       if (m.attachment != null) {
         final client = ref.read(supabaseProvider);
         final a = m.attachment!;
-        final bytes = await client.storage
-            .from('chat-media')
-            .download(a['object_path']);
-        final dir = await getTemporaryDirectory();
+        final bytes = await MediaService(client).download(a);
+        final root = await getTemporaryDirectory();
+        final dir = await root.createTemp('forward-');
         final name = (a['filename'] as String).replaceAll(
           RegExp(r'[^a-zA-Z0-9._-]'),
           '_',
         );
-        final file = File('${dir.path}/forward-$name');
-        await file.writeAsBytes(bytes);
+        final file = File('${dir.path}/$name');
         try {
+          await file.writeAsBytes(bytes);
+          if (!mounted) return;
           final upload = await MediaService(
             client,
           ).upload(cid, file, forcedKind: m.kind);
+          if (!mounted) return;
           await ref
               .read(messengerProvider)
               .send(
@@ -323,7 +403,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 forwarded: true,
               );
         } finally {
-          if (await file.exists()) await file.delete();
+          if (await dir.exists()) await dir.delete(recursive: true);
         }
       } else {
         await ref
@@ -447,7 +527,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget bubble(ChatMessage m) {
+  Widget bubble(ChatMessage m, {ChatMessage? quoted}) {
     final own = m.senderId == ref.read(messengerProvider).uid;
     final colors = Theme.of(context).colorScheme;
     final read =
@@ -480,7 +560,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ? selected.remove(m.id)
                   : selected.add(m.id),
             ),
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
         color: selected.contains(m.id)
             ? colors.secondaryContainer.withValues(alpha: 0.4)
             : null,
@@ -527,7 +608,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           left: BorderSide(color: colors.primary, width: 3),
                         ),
                       ),
-                      child: const Text('↩ Reply to a message'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            quoted?.senderName ?? 'Reply',
+                            style: Theme.of(context).textTheme.labelMedium,
+                          ),
+                          Text(
+                            quoted == null
+                                ? 'Original message not loaded'
+                                : quoted.deleted
+                                ? 'Message deleted'
+                                : quoted.body.isNotEmpty
+                                ? quoted.body
+                                : quoted.attachment?['filename'] ?? quoted.kind,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
                   if (m.deleted)
                     const Text(
@@ -664,311 +764,348 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 if (context.mounted) context.push('/call/$id');
               }),
             ),
-        IconButton(
-          tooltip: 'Details and members',
-          onPressed: () => context.push('/details/${widget.id}'),
-          icon: const Icon(Icons.more_vert),
+        PopupMenuButton<String>(
+          tooltip: 'Conversation options',
+          onSelected: (value) {
+            if (value == 'wallpaper') {
+              act(context, chooseWallpaper);
+            } else {
+              context.push('/details/${widget.id}');
+            }
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'details', child: Text('Details and members')),
+            PopupMenuItem(value: 'wallpaper', child: Text('Chat wallpaper')),
+          ],
         ),
       ],
     ),
-    body: Column(
-      children: [
-        if (uploading) LinearProgressIndicator(value: uploadProgress),
-        if (searchResults != null)
-          ListTile(
-            title: Text('${searchResults!.length} search results (up to 50)'),
-            trailing: IconButton(
-              icon: const Icon(Icons.close),
-              onPressed: () => setState(() => searchResults = null),
+    body: ChatBackdrop(
+      style: wallpaper,
+      child: Column(
+        children: [
+          if (uploading) LinearProgressIndicator(value: uploadProgress),
+          if (searchResults != null)
+            ListTile(
+              title: Text('${searchResults!.length} search results (up to 50)'),
+              trailing: IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () => setState(() => searchResults = null),
+              ),
             ),
-          ),
-        Expanded(
-          child: StreamBuilder<List<ChatMessage>>(
-            stream: messages,
-            builder: (context, s) {
-              final merged = {
-                for (final m in older) m.id: m,
-                for (final m in s.data ?? <ChatMessage>[]) m.id: m,
-              };
-              final rows =
-                  searchResults ??
-                  (merged.values
-                      .where((m) => !ref.read(messengerProvider).isHidden(m.id))
-                      .toList()
-                    ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
-              if (s.hasError && rows.isEmpty) {
-                return LoadError(
-                  retry: () => setState(
-                    () => messages = ref
-                        .read(messengerProvider)
-                        .messages(widget.id),
-                  ),
-                );
-              }
-              if (!s.hasData && rows.isEmpty) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final incoming = rows
-                  .where((m) => m.senderId != ref.read(messengerProvider).uid)
-                  .firstOrNull;
-              if (incoming != null && lastAck != incoming.id) {
-                lastAck = incoming.id;
-                unawaited(
-                  ref
-                      .read(supabaseProvider)
-                      .rpc(
+          Expanded(
+            child: StreamBuilder<List<ChatMessage>>(
+              stream: messages,
+              builder: (context, s) {
+                final merged = {
+                  for (final m in older) m.id: m,
+                  for (final m in s.data ?? <ChatMessage>[]) m.id: m,
+                };
+                final rows =
+                    searchResults ??
+                    (merged.values
+                        .where(
+                          (m) => !ref.read(messengerProvider).isHidden(m.id),
+                        )
+                        .toList()
+                      ..sort(ChatMessage.newestFirst));
+                if (s.hasError && rows.isEmpty) {
+                  return LoadError(
+                    retry: () => setState(
+                      () => messages = ref
+                          .read(messengerProvider)
+                          .messages(
+                            widget.id,
+                            historyIds: () => older.map((m) => m.id),
+                          ),
+                    ),
+                  );
+                }
+                if (!s.hasData && rows.isEmpty) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final incoming = rows
+                    .where((m) => m.senderId != ref.read(messengerProvider).uid)
+                    .firstOrNull;
+                if (incoming != null &&
+                    lastAck != incoming.id &&
+                    !acknowledging) {
+                  acknowledging = true;
+                  final client = ref.read(supabaseProvider);
+                  unawaited(() async {
+                    try {
+                      await client.rpc(
                         'ack_messages',
                         params: {'cid': widget.id, 'mark_read': true},
-                      )
-                      .catchError((Object _) {}),
-                );
-              }
-              return Column(
-                children: [
-                  if (s.hasError)
-                    const Text('Offline · showing previously loaded messages'),
-                  if (selected.isNotEmpty)
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () => setState(() => selected.clear()),
-                          child: Text('${selected.length} selected · clear'),
-                        ),
-                        IconButton(
-                          tooltip: 'Forward selected',
-                          onPressed: () => act(
-                            context,
-                            () => forward(
-                              rows
-                                  .where((m) => selected.contains(m.id))
-                                  .toList(),
-                            ),
+                      );
+                      if (mounted) lastAck = incoming.id;
+                    } catch (_) {
+                      // Leave lastAck unchanged so a reconnect/poll retries it.
+                    } finally {
+                      acknowledging = false;
+                    }
+                  }());
+                }
+                return Column(
+                  children: [
+                    if (s.hasError)
+                      const Text(
+                        'Offline · showing previously loaded messages',
+                      ),
+                    if (selected.isNotEmpty)
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => setState(() => selected.clear()),
+                            child: Text('${selected.length} selected · clear'),
                           ),
-                          icon: const Icon(Icons.forward),
-                        ),
-                        IconButton(
-                          tooltip: 'Delete selected for me',
-                          onPressed: () => act(context, () async {
-                            for (final id in selected) {
-                              await ref.read(messengerProvider).hide(id);
-                            }
-                            if (mounted) setState(() => selected.clear());
-                          }),
-                          icon: const Icon(Icons.delete_outline),
-                        ),
-                      ],
-                    ),
-                  Expanded(
-                    child: rows.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'Say hello. Messages appear here as they arrive.',
+                          IconButton(
+                            tooltip: 'Forward selected',
+                            onPressed: () => act(
+                              context,
+                              () => forward(
+                                rows
+                                    .where((m) => selected.contains(m.id))
+                                    .toList(),
+                              ),
                             ),
-                          )
-                        : ListView.builder(
-                            reverse: true,
-                            itemCount: rows.length + 1,
-                            itemBuilder: (context, i) {
-                              if (i == rows.length) {
-                                return hasOlder && searchResults == null
-                                    ? TextButton(
-                                        onPressed: loadingOlder
-                                            ? null
-                                            : () => act(context, () async {
-                                                setState(
-                                                  () => loadingOlder = true,
-                                                );
-                                                try {
-                                                  final last = rows.last;
-                                                  final page = await ref
-                                                      .read(messengerProvider)
-                                                      .page(
-                                                        widget.id,
-                                                        before: {
-                                                          'id': last.id,
-                                                          'created_at': last
-                                                              .createdAt
-                                                              .toUtc()
-                                                              .toIso8601String(),
-                                                        },
-                                                      );
-                                                  if (mounted) {
-                                                    setState(() {
-                                                      older.addAll(
-                                                        page.map(
-                                                          ChatMessage.fromJson,
-                                                        ),
-                                                      );
-                                                      hasOlder =
-                                                          page.length == 50;
-                                                    });
-                                                  }
-                                                } finally {
-                                                  if (mounted) {
-                                                    setState(
-                                                      () =>
-                                                          loadingOlder = false,
-                                                    );
-                                                  }
-                                                }
-                                              }),
-                                        child: Text(
-                                          loadingOlder
-                                              ? 'Loading…'
-                                              : 'Load earlier messages',
-                                        ),
-                                      )
-                                    : const SizedBox.shrink();
+                            icon: const Icon(Icons.forward),
+                          ),
+                          IconButton(
+                            tooltip: 'Delete selected for me',
+                            onPressed: () => act(context, () async {
+                              for (final id in selected) {
+                                await ref.read(messengerProvider).hide(id);
                               }
-                              final m = rows[i];
-                              final showDate =
-                                  i == rows.length - 1 ||
-                                  DateUtils.dateOnly(m.createdAt.toLocal()) !=
-                                      DateUtils.dateOnly(
-                                        rows[i + 1].createdAt.toLocal(),
-                                      );
-                              return Column(
-                                children: [
-                                  if (showDate)
-                                    Padding(
-                                      padding: const EdgeInsets.all(12),
-                                      child: Text(
-                                        DateFormat.yMMMd().format(
-                                          m.createdAt.toLocal(),
+                              if (mounted) setState(() => selected.clear());
+                            }),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                    Expanded(
+                      child: rows.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'Say hello. Messages appear here as they arrive.',
+                              ),
+                            )
+                          : ListView.builder(
+                              reverse: true,
+                              keyboardDismissBehavior:
+                                  ScrollViewKeyboardDismissBehavior.onDrag,
+                              itemCount: rows.length + 1,
+                              findChildIndexCallback: (key) {
+                                if (key is! ValueKey<String>) return null;
+                                final index = rows.indexWhere(
+                                  (row) => row.id == key.value,
+                                );
+                                return index < 0 ? null : index;
+                              },
+                              itemBuilder: (context, i) {
+                                if (i == rows.length) {
+                                  return hasOlder && searchResults == null
+                                      ? TextButton(
+                                          onPressed: loadingOlder
+                                              ? null
+                                              : () => act(context, () async {
+                                                  setState(
+                                                    () => loadingOlder = true,
+                                                  );
+                                                  try {
+                                                    final last = rows.last;
+                                                    final page = await ref
+                                                        .read(messengerProvider)
+                                                        .page(
+                                                          widget.id,
+                                                          before: {
+                                                            'id': last.id,
+                                                            'created_at': last
+                                                                .createdAt
+                                                                .toUtc()
+                                                                .toIso8601String(),
+                                                          },
+                                                        );
+                                                    if (mounted) {
+                                                      setState(() {
+                                                        older.addAll(
+                                                          page.map(
+                                                            ChatMessage
+                                                                .fromJson,
+                                                          ),
+                                                        );
+                                                        hasOlder =
+                                                            page.length == 50;
+                                                      });
+                                                    }
+                                                  } finally {
+                                                    if (mounted) {
+                                                      setState(
+                                                        () => loadingOlder =
+                                                            false,
+                                                      );
+                                                    }
+                                                  }
+                                                }),
+                                          child: Text(
+                                            loadingOlder
+                                                ? 'Loading…'
+                                                : 'Load earlier messages',
+                                          ),
+                                        )
+                                      : const SizedBox.shrink();
+                                }
+                                final m = rows[i];
+                                final showDate =
+                                    i == rows.length - 1 ||
+                                    DateUtils.dateOnly(m.createdAt.toLocal()) !=
+                                        DateUtils.dateOnly(
+                                          rows[i + 1].createdAt.toLocal(),
+                                        );
+                                return Column(
+                                  key: ValueKey(m.id),
+                                  children: [
+                                    if (showDate)
+                                      Padding(
+                                        padding: const EdgeInsets.all(12),
+                                        child: Text(
+                                          DateFormat.yMMMd().format(
+                                            m.createdAt.toLocal(),
+                                          ),
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.labelSmall,
                                         ),
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.labelSmall,
                                       ),
-                                    ),
-                                  bubble(m),
-                                ],
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              );
-            },
-          ),
-        ),
-        if (reply != null)
-          ListTile(
-            dense: true,
-            title: const Text('Replying to message'),
-            subtitle: Text(reply!.body, maxLines: 1),
-            trailing: IconButton(
-              onPressed: () => setState(() => reply = null),
-              icon: const Icon(Icons.close),
-            ),
-          ),
-        if (recording)
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                const Icon(Icons.mic, color: Colors.red),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SizedBox(
-                    height: 30,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        for (final n in levels)
-                          Container(
-                            width: 3,
-                            height: n * 30,
-                            margin: const EdgeInsets.symmetric(horizontal: 1),
-                            color: Theme.of(context).colorScheme.primary,
-                          ),
-                      ],
+                                    bubble(m, quoted: merged[m.replyTo]),
+                                  ],
+                                );
+                              },
+                            ),
                     ),
-                  ),
-                ),
-                IconButton(
-                  tooltip: 'Discard recording',
-                  onPressed: () async {
-                    await recorder.cancel();
-                    await amplitude?.cancel();
-                    if (mounted) setState(() => recording = false);
-                  },
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
+                  ],
+                );
+              },
             ),
           ),
-        SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.all(8),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                PopupMenuButton<String>(
-                  tooltip: 'Attach',
-                  icon: const Icon(Icons.add_circle_outline),
-                  onSelected: (value) => act(
-                    context,
-                    () => value == 'location'
-                        ? location()
-                        : value == 'mention'
-                        ? mention()
-                        : value == 'contact'
-                        ? contact()
-                        : attach(value),
-                  ),
-                  itemBuilder: (_) => [
-                    for (final item in {
-                      'image': 'Image',
-                      'camera': 'Camera',
-                      'video': 'Video',
-                      'file': 'File or audio',
-                      'contact': 'Contact card',
-                      'location': 'Current location',
-                      'mention': 'Mention member',
-                    }.entries)
-                      PopupMenuItem(value: item.key, child: Text(item.value)),
-                  ],
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: input,
-                    minLines: 1,
-                    maxLines: 5,
-                    maxLength: 16000,
-                    decoration: InputDecoration(
-                      hintText: 'Message',
-                      counterText: '',
-                      filled: true,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
+          if (reply != null)
+            ListTile(
+              dense: true,
+              title: const Text('Replying to message'),
+              subtitle: Text(reply!.body, maxLines: 1),
+              trailing: IconButton(
+                onPressed: () => setState(() => reply = null),
+                icon: const Icon(Icons.close),
+              ),
+            ),
+          if (recording)
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.mic, color: Colors.red),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: SizedBox(
+                      height: 30,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          for (final n in levels)
+                            Container(
+                              width: 3,
+                              height: n * 30,
+                              margin: const EdgeInsets.symmetric(horizontal: 1),
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                        ],
                       ),
                     ),
-                    onChanged: (_) {
-                      ref.read(lockProvider).touch();
-                      presence.sendTyping();
-                    },
                   ),
-                ),
-                IconButton.filledTonal(
-                  tooltip: recording
-                      ? 'Send recording'
-                      : 'Record voice message',
-                  onPressed: uploading ? null : () => act(context, voice),
-                  icon: Icon(recording ? Icons.stop : Icons.mic_none),
-                ),
-                IconButton.filled(
-                  tooltip: 'Send message',
-                  onPressed: () => act(context, send),
-                  icon: const Icon(Icons.arrow_upward),
-                ),
-              ],
+                  IconButton(
+                    tooltip: 'Discard recording',
+                    onPressed: () async {
+                      await recorder.cancel();
+                      await amplitude?.cancel();
+                      if (mounted) setState(() => recording = false);
+                    },
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
+            ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  PopupMenuButton<String>(
+                    tooltip: 'Attach',
+                    icon: const Icon(Icons.add_circle_outline),
+                    onSelected: (value) => act(
+                      context,
+                      () => value == 'location'
+                          ? location()
+                          : value == 'mention'
+                          ? mention()
+                          : value == 'contact'
+                          ? contact()
+                          : attach(value),
+                    ),
+                    itemBuilder: (_) => [
+                      for (final item in {
+                        'image': 'Image',
+                        'camera': 'Camera',
+                        'video': 'Video',
+                        'file': 'File or audio',
+                        'contact': 'Contact card',
+                        'location': 'Current location',
+                        'mention': 'Mention member',
+                      }.entries)
+                        PopupMenuItem(value: item.key, child: Text(item.value)),
+                    ],
+                  ),
+                  Expanded(
+                    child: TextField(
+                      controller: input,
+                      minLines: 1,
+                      maxLines: 5,
+                      maxLength: 16000,
+                      decoration: InputDecoration(
+                        hintText: 'Message',
+                        counterText: '',
+                        filled: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                      onChanged: (_) {
+                        ref.read(lockProvider).touch();
+                        presence.sendTyping();
+                      },
+                    ),
+                  ),
+                  IconButton.filledTonal(
+                    tooltip: recording
+                        ? 'Send recording'
+                        : 'Record voice message',
+                    onPressed: uploading ? null : () => act(context, voice),
+                    icon: Icon(recording ? Icons.stop : Icons.mic_none),
+                  ),
+                  IconButton.filled(
+                    tooltip: 'Send message',
+                    onPressed: sending ? null : () => act(context, send),
+                    icon: const Icon(Icons.arrow_upward),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }

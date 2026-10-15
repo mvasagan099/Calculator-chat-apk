@@ -2,6 +2,18 @@
 
 Phase 1 defaults to a local preview without provider initialization. For connected mode set `LOCAL_UI_PREVIEW` to `false` in the public build configuration, as in `config/example.json`. No provider projects were supplied. These steps must be completed in accounts you control. Keep client identifiers and server credentials separate. Neither saving an environment draft nor building source provisions these services.
 
+Phase 3 has not changed or deployed the seven migrations or six Edge entry points. No confirmed remote project, Firebase console configuration, LiveKit credentials or staging accounts are available. Local SQL/Edge tests pass; deployment and actual two-user behavior remain BLOCKED. [Current evidence](PHASE3_BETA_READINESS.md).
+
+The ignored `config/local.json` generated for this phase's build is **preview only**. Prepare a separate ignored file with real public identifiers, then validate connected mode before testing providers:
+
+```sh
+python3 scripts/prepare-client-config.py --mode connected \
+  --input config/connected-public.json --output config/local.json \
+  --firebase-android /private/local/path/google-services.json
+```
+
+The Firebase input is Android console configuration, never a service account. Omit its option only when intentionally testing without FCM. Server credentials and test passwords are rejected as build input. This command configures a client build; it does not deploy services.
+
 ## Supabase
 
 1. Create a Supabase project. Enable email confirmation, configure SMTP and password strength/rate limits, set a suitable email redirect policy and register `app.calculatorspace.calculator://auth-callback`. Set the site URL to a domain you control for email fallback. Android custom schemes are not domain-verified; for production configure a verified HTTPS Android App Link and update the redirect URI in both manifest and auth calls.

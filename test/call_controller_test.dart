@@ -8,8 +8,11 @@ class TestBackend implements CallBackend {
   final streams = <String, StreamController<List<Map<String, dynamic>>>>{};
   final grants = <String, Completer<CallGrant>>{};
   Completer<void>? transitionPending;
+  bool failTransition = false;
+  String owner = 'owner';
+  final transitions = <String>[];
   @override
-  String get userId => 'owner';
+  String get userId => owner;
   @override
   Stream<List<Map<String, dynamic>>> watch(String id) =>
       (streams[id] ??= StreamController.broadcast(sync: true)).stream;
@@ -18,7 +21,9 @@ class TestBackend implements CallBackend {
       (grants[id] ??= Completer<CallGrant>()).future;
   @override
   Future<void> transition(String id, String action) async {
+    transitions.add('$id:$action');
     await transitionPending?.future;
+    if (failTransition) throw StateError('offline');
   }
 
   void emit(String id, String state) => streams[id]!.add([
@@ -99,7 +104,7 @@ class TestTransport extends CallTransport {
 
 Future<void> settle() async {
   for (var i = 0; i < 12; i++) {
-    await Future<void>.delayed(Duration.zero);
+    await Future<void>.value();
   }
 }
 
@@ -313,4 +318,32 @@ void main() {
       await settle();
     },
   );
+  test(
+    'failed call end retries after navigation without reopening media',
+    () async {
+      await controller.observe('a');
+      backend.emit('a', 'ringing');
+      backend.failTransition = true;
+      await expectLater(controller.end(), throwsStateError);
+      expect(controller.hasPendingEnd, isTrue);
+      expect(controller.metadata!['state'], 'ended');
+      await controller.reset();
+      backend.failTransition = false;
+      await controller.syncPendingEnds();
+      expect(backend.transitions, ['a:end', 'a:end']);
+      expect(controller.hasPendingEnd, isFalse);
+      expect(transports, isEmpty);
+    },
+  );
+
+  test('queued call end is discarded after an account change', () async {
+    await controller.observe('a');
+    backend.emit('a', 'ringing');
+    backend.failTransition = true;
+    await expectLater(controller.end(), throwsStateError);
+    backend.owner = 'other';
+    await controller.syncPendingEnds();
+    expect(backend.transitions, ['a:end']);
+    expect(controller.hasPendingEnd, isFalse);
+  });
 }

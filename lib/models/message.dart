@@ -23,6 +23,13 @@ class ChatMessage {
   final bool deleted, edited, forwarded, pending, failed;
   final Map<String, dynamic>? attachment;
   final List<Map<String, dynamic>> reactions, receipts;
+
+  /// Matches the PostgreSQL keyset cursor, including equal timestamps.
+  static int newestFirst(ChatMessage a, ChatMessage b) {
+    final time = b.createdAt.compareTo(a.createdAt);
+    return time == 0 ? b.id.compareTo(a.id) : time;
+  }
+
   factory ChatMessage.fromJson(Map<String, dynamic> j) => ChatMessage(
     id: j['id'],
     conversationId: j['conversation_id'],

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../core/security/lock_controller.dart';
@@ -9,6 +10,8 @@ final lockProvider = Provider<LockController>(
 final supabaseProvider = Provider<SupabaseClient>(
   (ref) => Supabase.instance.client,
 );
-final messengerProvider = Provider<MessengerRepository>(
-  (ref) => MessengerRepository(ref.watch(supabaseProvider)),
-);
+final messengerProvider = Provider<MessengerRepository>((ref) {
+  final repository = MessengerRepository(ref.watch(supabaseProvider));
+  ref.onDispose(() => unawaited(repository.dispose()));
+  return repository;
+});
