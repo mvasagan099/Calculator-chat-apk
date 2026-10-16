@@ -14,6 +14,12 @@ python3 scripts/prepare-client-config.py --mode connected \
 
 The Firebase input is Android console configuration, never a service account. Omit its option only when intentionally testing without FCM. Server credentials and test passwords are rejected as build input. This command configures a client build; it does not deploy services.
 
+## Phase 6 deployment checkpoint
+
+No provider deployment was performed. The [current release audit](PHASE6_RELEASE.md) confirms no linked project/hosted-test config, Firebase Android file, LiveKit credentials, owner signing or devices. All 11 existing migrations/nine functions are preserved; the client cache fix requires no server migration. Follow the exact staging target/schema/history/backup review below before remote writes. Public config and passing local SQL tests do not establish a deployed/authorized project. Current hosted runners report 16 general and six privacy scenarios BLOCKED.
+
+Prepare connected public config, deploy/verify services, then execute [DEVICE_ACCEPTANCE.md](DEVICE_ACCEPTANCE.md). The ignored local config used here remains preview-only. Release/signing/environment protection steps are in RELEASE.md; no CI workflow publishes to Play or bypasses provider/device gates.
+
 ## Supabase
 
 1. Create a Supabase project. Enable email confirmation, configure SMTP and password strength/rate limits, set a suitable email redirect policy and register `app.calculatorspace.calculator://auth-callback`. Set the site URL to a domain you control for email fallback. Android custom schemes are not domain-verified; for production configure a verified HTTPS Android App Link and update the redirect URI in both manifest and auth calls.

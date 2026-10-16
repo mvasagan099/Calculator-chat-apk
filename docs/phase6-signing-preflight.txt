@@ -1,0 +1,1 @@
+Signing setup rejected. Check protected signing secrets, certificate fingerprint and JDK; existing files were preserved. No values were logged.

@@ -1,0 +1,13 @@
+Deno check: nine Edge entry points and two hosted runners; cached dependency/type-check results may be reused.
+Exit code: 0
+Input: supabase/functions/call-control/index.ts
+Input: supabase/functions/delete-account/index.ts
+Input: supabase/functions/device-security/index.ts
+Input: supabase/functions/dispatch-push/index.ts
+Input: supabase/functions/livekit-token/index.ts
+Input: supabase/functions/livekit-webhook/index.ts
+Input: supabase/functions/maintenance/index.ts
+Input: supabase/functions/validate-media/index.ts
+Input: supabase/functions/view-once/index.ts
+Input: supabase/tests/hosted.ts
+Input: supabase/tests/hosted_privacy.ts

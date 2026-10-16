@@ -1,0 +1,25 @@
+{
+  "environment_variable_presence": {
+    "SUPABASE_URL": false,
+    "SUPABASE_ANON_KEY": false,
+    "SUPABASE_ACCESS_TOKEN": false,
+    "LIVEKIT_URL": false,
+    "LIVEKIT_API_KEY": false,
+    "LIVEKIT_API_SECRET": false,
+    "FIREBASE_SERVICE_ACCOUNT": false,
+    "ANDROID_RELEASE_KEYSTORE_B64": false,
+    "ANDROID_KEY_ALIAS": false,
+    "ANDROID_STORE_PASSWORD": false,
+    "ANDROID_KEY_PASSWORD": false,
+    "ANDROID_CERT_SHA256": false
+  },
+  "configuration_file_presence": {
+    "config/local.json": true,
+    "config/hosted-test.json": false,
+    "supabase/.temp/project-ref": false,
+    "android/app/google-services.json": false,
+    "android/key.properties": false
+  },
+  "local_build_mode": "preview",
+  "android_kvm_present": false
+}

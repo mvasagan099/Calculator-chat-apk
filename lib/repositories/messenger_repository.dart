@@ -7,6 +7,8 @@ import '../core/security/pin_vault.dart';
 import '../models/message.dart';
 import '../core/security/local_retention.dart';
 
+typedef _CacheScope = ({EncryptedCache cache, String owner, int epoch});
+
 class MessengerRepository {
   MessengerRepository(
     this.client, {
@@ -32,6 +34,25 @@ class MessengerRepository {
   final _changes = StreamController<void>.broadcast();
   final _channels = <RealtimeChannel>{};
   final _timers = <Timer>{};
+  _CacheScope _captureCache() {
+    final cache = _cache;
+    final owner = client.auth.currentUser?.id;
+    if (cache == null || owner == null || owner != _cacheOwner || _disposed) {
+      throw StateError('Messaging session changed');
+    }
+    return (cache: cache, owner: owner, epoch: _sessionEpoch);
+  }
+
+  bool _currentCache(_CacheScope scope) =>
+      !_disposed &&
+      scope.epoch == _sessionEpoch &&
+      identical(scope.cache, _cache) &&
+      scope.owner == _cacheOwner &&
+      client.auth.currentUser?.id == scope.owner;
+  void _requireCache(_CacheScope scope) {
+    if (!_currentCache(scope)) throw StateError('Messaging session changed');
+  }
+
   Future<void> prepare() async {
     if (_disposed) throw StateError('Messaging session closed');
     await _suspending;
@@ -55,6 +76,7 @@ class MessengerRepository {
     if (_disposed ||
         epoch != _sessionEpoch ||
         client.auth.currentUser?.id != owner) {
+      await cache.forget();
       throw StateError('Messaging session changed');
     }
     _hiddenIds.clear();
@@ -84,17 +106,21 @@ class MessengerRepository {
 
   Stream<List<Map<String, dynamic>>> conversations() async* {
     await prepare();
-    if (_cache!.data['conversations'] != null) {
-      yield (_cache!.data['conversations'] as List)
+    final scope = _captureCache();
+    if (scope.cache.data['conversations'] != null) {
+      yield (scope.cache.data['conversations'] as List)
           .cast<Map<String, dynamic>>();
     }
+    if (!_currentCache(scope)) return;
     yield* watch(
       ['conversations', 'messages', 'conversation_members'],
       () async {
+        _requireCache(scope);
         final rows = (await client.rpc('conversation_list') as List)
             .cast<Map<String, dynamic>>();
-        _cache!.data['conversations'] = rows;
-        await _cache!.save();
+        _requireCache(scope);
+        scope.cache.data['conversations'] = rows;
+        await scope.cache.save();
         return rows;
       },
     );
@@ -281,8 +307,9 @@ class MessengerRepository {
     Iterable<String> Function()? historyIds,
   }) async* {
     await prepare();
+    final scope = _captureCache();
     List<Map<String, dynamic>> rows =
-        (_cache!.data['messages.$cid'] as List? ?? [])
+        (scope.cache.data['messages.$cid'] as List? ?? [])
             .cast<Map<String, dynamic>>();
     List<ChatMessage> merged() {
       final byId = {for (final r in rows) r['id']: r};
@@ -303,50 +330,58 @@ class MessengerRepository {
     }
 
     yield merged();
+    if (!_currentCache(scope)) return;
     late StreamController<List<ChatMessage>> output;
     StreamSubscription<void>? pending;
     StreamSubscription<List<Map<String, dynamic>>>? server;
     output = StreamController(
       onListen: () {
         pending = _changes.stream.listen((_) {
-          if (!output.isClosed) output.add(merged());
+          if (!output.isClosed && _currentCache(scope)) output.add(merged());
         });
         server =
             watch(
               ['messages', 'message_receipts', 'message_reactions'],
               () async {
+                _requireCache(scope);
                 final results = await loadWindow(cid, {
                   ...rows.take(200).map((row) => row['id'] as String),
                   ...?historyIds?.call(),
                 });
+                _requireCache(scope);
                 final hidden = await client
                     .from('message_hides')
                     .select('message_id')
-                    .eq('user_id', uid);
+                    .eq('user_id', scope.owner);
+                _requireCache(scope);
                 final ids = hidden.map((e) => e['message_id']).toSet();
                 _hiddenIds.addAll(ids.cast<String>());
                 rows = results.where((e) => !ids.contains(e['id'])).toList();
                 final receivedIds = results.map((e) => e['id']).toSet();
-                _cache!.data['outbox'] = _outbox
+                scope.cache.data['outbox'] = _outbox
                     .where((m) => !receivedIds.contains(m['id']))
                     .toList();
-                _cache!.data['messages.$cid'] = rows.take(200).toList();
-                final keys = _cache!.data.keys
+                scope.cache.data['messages.$cid'] = rows.take(200).toList();
+                final keys = scope.cache.data.keys
                     .where((k) => k.startsWith('messages.'))
                     .toList();
                 while (keys.length > 20) {
-                  _cache!.data.remove(keys.removeAt(0));
+                  scope.cache.data.remove(keys.removeAt(0));
                 }
-                await _cache!.save();
+                await scope.cache.save();
                 return rows;
               },
               cid: cid,
             ).listen(
               (_) {
-                if (!output.isClosed) output.add(merged());
+                if (!output.isClosed && _currentCache(scope)) {
+                  output.add(merged());
+                }
               },
               onError: (Object e, StackTrace st) {
-                if (!output.isClosed) output.addError(e, st);
+                if (!output.isClosed && _currentCache(scope)) {
+                  output.addError(e, st);
+                }
               },
             );
       },
@@ -497,22 +532,26 @@ class MessengerRepository {
   }
 
   Future<void> hide(String id) async {
+    await prepare();
+    final scope = _captureCache();
     await client
         .from('message_hides')
         .upsert(
-          {'message_id': id, 'user_id': uid},
+          {'message_id': id, 'user_id': scope.owner},
           onConflict: 'message_id,user_id',
           ignoreDuplicates: true,
         );
+    _requireCache(scope);
     _hiddenIds.add(id);
     for (final key
-        in _cache?.data.keys.where((k) => k.startsWith('messages.')).toList() ??
-            <String>[]) {
-      _cache!.data[key] = (_cache!.data[key] as List)
+        in scope.cache.data.keys
+            .where((k) => k.startsWith('messages.'))
+            .toList()) {
+      scope.cache.data[key] = (scope.cache.data[key] as List)
           .where((m) => m['id'] != id)
           .toList();
     }
-    await _cache?.save();
+    await scope.cache.save();
     if (!_changes.isClosed) _changes.add(null);
   }
 
@@ -539,7 +578,7 @@ class MessengerRepository {
   }
 
   Future<void> clearLocal() async {
-    await _suspending;
+    await suspend();
     _retryTimer?.cancel();
     await _connection?.cancel();
     await _preparing;

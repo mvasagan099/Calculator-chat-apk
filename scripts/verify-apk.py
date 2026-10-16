@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Verify a real APK using Android tools and inspect known secret formats.
+"""Inspect a signed APK with real Android tools; installation is a separate gate.
 
-A successful pattern scan is limited evidence, not a forensic guarantee.
+Known-secret scanning is limited evidence, never a forensic guarantee. Unit ZIP
+fixtures test the scanner only and are never presented as installable APKs.
 """
 import argparse
 import base64
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
 import sys
@@ -16,53 +17,87 @@ import zipfile
 PACKAGE = 'app.calculatorspace.calculator_messenger'
 
 
+def scan_archive(archive):
+    total = 0
+    for entry in archive.infolist():
+        name = PurePosixPath(entry.filename.replace('\\', '/'))
+        if name.is_absolute() or '..' in name.parts or name.name.lower().endswith(('.jks', '.keystore')) or name.name.lower() == 'key.properties' or name.name.lower().startswith('.env'):
+            raise ValueError('Private configuration or invalid archive path')
+        total += entry.file_size
+        if total > 2 * 1024**3 or entry.file_size > 512 * 1024**2:
+            raise ValueError('Archive exceeds inspection bounds')
+        tail = b''
+        with archive.open(entry) as data:
+            while chunk := data.read(1024 * 1024):
+                block = tail + chunk
+                if re.search(rb'sb_secret_[A-Za-z0-9_-]{20,}|-----BEGIN (?:RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----(?:\s|\\[rn])+(?:[A-Za-z0-9+/=\r\n\t ]|\\[rn]){80,}', block):
+                    raise ValueError('Known private credential format')
+                for token in re.findall(rb'eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}', block):
+                    payload = token.split(b'.')[1]
+                    try:
+                        claims = json.loads(base64.urlsafe_b64decode(payload + b'=' * (-len(payload) % 4)))
+                    except (ValueError, UnicodeError):
+                        continue
+                    if isinstance(claims, dict) and claims.get('role') == 'service_role':
+                        raise ValueError('Privileged Supabase JWT')
+                tail = block[-16384:]
+
+
+def metadata(badging, target):
+    package = re.search(r"^package: name='([^']+)'", badging, re.MULTILINE)
+    minimum = re.search(r"^sdkVersion:'(\d+)'", badging, re.MULTILINE)
+    target_api = re.search(r"^targetSdkVersion:'(\d+)'", badging, re.MULTILINE)
+    if not package or package[1] != PACKAGE or not minimum or int(minimum[1]) != 29 or not target_api or int(target_api[1]) != target:
+        raise ValueError('Package/API mismatch')
+    if not re.search(r'^launchable-activity:', badging, re.MULTILINE):
+        raise ValueError('No launchable activity')
+    return {'package': package[1], 'min_sdk': int(minimum[1]), 'target_sdk': int(target_api[1])}
+
+
+def certificate(signature, variant, expected=None):
+    signers = re.findall(r'^Signer #\d+ certificate SHA-256 digest:\s*([0-9a-fA-F]{64})\s*$', signature, re.MULTILINE)
+    if len(signers) != 1:
+        raise ValueError('One APK signer required')
+    actual = signers[0].lower()
+    if variant == 'release':
+        wanted = (expected or '').replace(':', '').lower()
+        if not re.fullmatch('[0-9a-f]{64}', wanted) or actual != wanted or re.search(r'Android Debug', signature, re.IGNORECASE):
+            raise ValueError('Release signer does not match owner certificate')
+    return actual
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('apk', type=Path)
     parser.add_argument('--android-sdk', required=True, type=Path)
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--variant', choices=['debug', 'release'], default='debug')
+    parser.add_argument('--expected-cert-sha256')
+    parser.add_argument('--target-sdk', type=int, default=36)
     args = parser.parse_args()
     try:
         if not args.apk.is_file() or args.apk.stat().st_size == 0:
             raise ValueError('APK missing or empty')
         tools = args.android_sdk / 'build-tools/36.0.0'
-        signature = subprocess.run([str(tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(args.apk)], check=True, capture_output=True, text=True).stdout
-        badging = subprocess.run([str(tools / 'aapt2'), 'dump', 'badging', str(args.apk)], check=True, capture_output=True, text=True).stdout
-        if f"package: name='{PACKAGE}'" not in badging or "sdkVersion:'29'" not in badging:
-            raise ValueError('Package identity or minimum Android API does not match the project')
-        if "launchable-activity:" not in badging:
-            raise ValueError('APK has no launchable activity')
+        signature = subprocess.run([str(tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(args.apk)], check=True, capture_output=True, text=True, timeout=60).stdout
+        badging = subprocess.run([str(tools / 'aapt2'), 'dump', 'badging', str(args.apk)], check=True, capture_output=True, text=True, timeout=60).stdout
+        result = metadata(badging, args.target_sdk)
+        result['certificate_sha256'] = certificate(signature, args.variant, args.expected_cert_sha256)
         with zipfile.ZipFile(args.apk) as archive:
-            for entry in archive.infolist():
-                if entry.filename.lower().endswith(('.jks', '.keystore', '/key.properties', '/.env')):
-                    raise ValueError('Private configuration file found in APK')
-                # Scan streamed chunks with overlap so a token crossing a chunk
-                # boundary is also checked without loading every native library.
-                tail = b''
-                with archive.open(entry) as data:
-                    while chunk := data.read(1024 * 1024):
-                        block = tail + chunk
-                        if re.search(rb'sb_secret_[A-Za-z0-9_-]{20,}|-----BEGIN (?:RSA |EC )?PRIVATE KEY-----\s+[A-Za-z0-9+/=\r\n]{80,}', block):
-                            raise ValueError('Known private credential format found in APK')
-                        for token in re.findall(rb'eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}', block):
-                            payload = token.split(b'.')[1]
-                            try:
-                                claims = json.loads(base64.urlsafe_b64decode(payload + b'=' * (-len(payload) % 4)))
-                            except (ValueError, UnicodeError):
-                                continue
-                            if isinstance(claims, dict) and claims.get('role') == 'service_role':
-                                raise ValueError('Privileged Supabase JWT found in APK')
-                        tail = block[-16384:]
-        digest = hashlib.file_digest(args.apk.open('rb'), 'sha256').hexdigest()
+            scan_archive(archive)
+        with args.apk.open('rb') as source:
+            digest = hashlib.file_digest(source, 'sha256').hexdigest()
+        result.update({'file': args.apk.name, 'bytes': args.apk.stat().st_size, 'sha256': digest, 'variant': args.variant, 'classification': 'development', 'installation': 'NOT TESTED', 'hosted_services': 'NOT TESTED'})
         args.output_dir.mkdir(parents=True, exist_ok=True)
         (args.output_dir / 'apk-metadata.txt').write_text(badging)
         (args.output_dir / 'apk-signature.txt').write_text(signature)
-        (args.output_dir / 'app-debug.apk.sha256').write_text(f'{digest}  {args.apk.name}\n')
-        print(f'PASS: signed, nonempty APK; package {PACKAGE}; minimum API 29; known secret scan clear')
+        (args.output_dir / 'artifact-inspection.json').write_text(json.dumps(result, indent=2) + '\n')
+        (args.output_dir / (args.apk.name + '.sha256')).write_text(f'{digest}  {args.apk.name}\n')
+        print(f'PASS: signed, nonempty APK; package {PACKAGE}; API 29/{args.target_sdk}; known secret scan clear')
         print(f'Size: {args.apk.stat().st_size} bytes; SHA-256: {digest}')
-        print('Launch and device installation still require a real device/emulator.')
-    except (ValueError, OSError, zipfile.BadZipFile, subprocess.CalledProcessError):
-        print('APK verification FAILED. Missing artifact, invalid signature/metadata or private credential detected. No credential value was logged.', file=sys.stderr)
+        print('Installation, launch and provider behavior remain unverified.')
+    except (ValueError, OSError, zipfile.BadZipFile, subprocess.SubprocessError):
+        print('APK inspection FAILED. Check artifact, signature/certificate, package/API and private configuration. No credential values were logged.', file=sys.stderr)
         return 1
     return 0
 

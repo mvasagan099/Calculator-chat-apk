@@ -1,0 +1,37 @@
+{
+  "generated_at": "2026-10-16T05:10:15.245Z",
+  "scope": "real provider only; native/device E2EE not covered",
+  "device_approval_may_remain_enabled": false,
+  "results": [
+    {
+      "scenario": "Expiration policy snapshot",
+      "status": "BLOCKED",
+      "detail": "Needs ignored staging configuration and two verified disposable accounts"
+    },
+    {
+      "scenario": "View-once atomic opening",
+      "status": "BLOCKED",
+      "detail": "Needs ignored staging configuration and two verified disposable accounts"
+    },
+    {
+      "scenario": "View-once Storage denial",
+      "status": "BLOCKED",
+      "detail": "Needs ignored staging configuration and two verified disposable accounts"
+    },
+    {
+      "scenario": "Unapproved second-device denial",
+      "status": "BLOCKED",
+      "detail": "Needs ignored staging configuration and two verified disposable accounts"
+    },
+    {
+      "scenario": "Recent-password device approval",
+      "status": "BLOCKED",
+      "detail": "Needs ignored staging configuration and two verified disposable accounts"
+    },
+    {
+      "scenario": "Revoked-device denial",
+      "status": "BLOCKED",
+      "detail": "Needs ignored staging configuration and two verified disposable accounts"
+    }
+  ]
+}

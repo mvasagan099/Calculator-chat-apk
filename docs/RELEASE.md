@@ -24,7 +24,7 @@ keyAlias=YOUR_ALIAS
 keyPassword=YOUR_LOCAL_SECRET
 ```
 
-Never commit this file, the keystore or passwords. Release CI would need secure secret/file injection; the prepared workflow builds debug-signed APKs for internal testing only. It does not build a signed release. The Gradle release configuration intentionally has **no debug-signing fallback**. An unsigned APK is not installable until signed.
+Never commit this file, the keystore or passwords. The existing debug workflow remains for internal tests. Phase 6 also prepares an explicitly manual, protected workflow for owner-signed development APK/AAB artifacts; no successful run or owner key exists here. The Gradle release configuration intentionally has **no debug-signing fallback**. Release tasks now reject missing/incomplete signing configuration rather than producing an unsigned artifact.
 
 ```sh
 ./scripts/flutterw pub get --enforce-lockfile
@@ -95,3 +95,53 @@ The native Signal test JARs live only in the toolchain/prototype cache; they are
 The current debug command with ignored preview-only `config/local.json` exited 1 resolving the official Flutter embedding Maven dependency (HTTP 403). [Log](phase5-debug-build.txt). No APK exists; no file size/checksum/signature/install/launch success is claimed. Release signing is absent. GitHub Actions API access is unavailable, so no completed workflow or artifact has been inspected. The existing trusted workflow/artifact names above are preserved for owner/CI execution.
 
 This phase adds native MediaProjection/FGS readiness and notification actions that require actual Android compilation and Android 10/13/14+ lifecycle tests. Client dependency versions are unchanged: the existing locked WebRTC package is now a direct dependency for its documented permission helper. Complete the coordinated 11-migration/nine-function staging rollout and [calling acceptance matrix](PHASE5_CALLS.md) before beta distribution. A compiled preview APK alone would not verify Supabase messaging, calling, notifications or screen sharing.
+
+## Phase 6 signing and AAB preparation
+
+Current result: debug dependency resolution is blocked by official Flutter proxy CONNECT 403; no debug APK, owner-signed APK, AAB or checksum exists. Signing preflight exits 2 without creating private files because no owner inputs are supplied. [Audit/gates](PHASE6_RELEASE.md), [current build log](phase6-debug-build.txt).
+
+The source retains package `app.calculatorspace.calculator_messenger`, min API 29, target API 36 and `1.0.0+1`. Confirm actual merged metadata and monotonically increasing version code relative to the real Play listing before distribution. Do not change package/signing identity to bypass update errors or automatically uninstall existing data.
+
+For local owner signing use the existing private `android/key.properties` format above and your own backed-up keystore. The helper/CI never generates an app key. With all prerequisites configured:
+
+```sh
+./scripts/flutterw build apk --release --dart-define-from-file=config/local.json
+./scripts/flutterw build appbundle --release --dart-define-from-file=config/local.json
+python3 scripts/verify-apk.py build/app/outputs/flutter-apk/app-release.apk \
+  --android-sdk "$ANDROID_HOME" --variant release \
+  --expected-cert-sha256 OWNER_CERTIFICATE_SHA256 --output-dir build-evidence/signed
+python3 scripts/verify-aab.py build/app/outputs/bundle/release/app-release.aab \
+  --expected-cert-sha256 OWNER_CERTIFICATE_SHA256 --output-dir build-evidence/signed
+```
+
+The APK inspector calls real `apksigner`/`aapt2`, pins the release certificate and writes `app-release.apk.sha256`. Debug output remains `app-debug.apk.sha256`. The AAB inspector uses standard JDK JAR signature verification for every content entry, pins the same certificate and writes `app-release.aab.sha256`. Its structured report explicitly does **not** verify AAB manifest package/API, Play acceptance or installation. Installable splits/universal APKs must be generated and inspected with a trusted official [bundletool](https://developer.android.com/tools/bundletool); preserve artifact provenance/checksums and do not use an untrusted downloaded JAR:
+
+```sh
+java -jar /private/verified-tools/bundletool-all.jar validate --bundle=build/app/outputs/bundle/release/app-release.aab
+java -jar /private/verified-tools/bundletool-all.jar dump manifest --bundle=build/app/outputs/bundle/release/app-release.aab
+```
+
+Inspect package/SDK/version in that output, then follow the official device-targeted `build-apks` / `install-apks` procedure with protected signing inputs. Avoid passwords in CLI/history/logs; use bundletool's supported password-file inputs with private permissions. No bundletool binary or generated APK set was fabricated in this environment.
+
+### Protected signed-development CI
+
+Workflow: `.github/workflows/android-signed-development.yml`, **Signed Android development artifacts**. It is manual only, rejects unprotected source, and requires its explicit development-only acknowledgement. The owner must first configure an `android-release` environment with required reviewers and deployment branches limited to reviewed protected source, plus required backend/security checks. YAML cannot establish those account settings. Do not make signing secrets available to fork PRs/unreviewed source.
+
+Environment **secrets**: `ANDROID_RELEASE_KEYSTORE_B64` (the existing owner keystore encoded privately), `ANDROID_KEY_ALIAS`, `ANDROID_STORE_PASSWORD`, `ANDROID_KEY_PASSWORD`. Environment **variable**: `ANDROID_CERT_SHA256` (public signing-certificate SHA-256, not the APK hash). Set connected public repository/environment variables `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and matching `FIREBASE_ANDROID_CONFIG` when notifications are included. Server service-role/LiveKit/Firebase service-account secrets never belong in this workflow or Flutter config. Use secret settings, never chat/Git or command-line password arguments.
+
+The helper refuses existing owner files, writes generated signing files privately in the ephemeral runner, checks the actual certificate with keytool before build, and removes only its recorded files in the always-run cleanup step. Do not export private signing files, whole workspaces, heaps or process environments as artifacts. Android/JAR fixture unit tests generate temporary **test** keys only; these are deleted and never represent the app's release identity.
+
+After the workflow is available on the repository's actual default branch, open Actions → Signed Android development artifacts → Run workflow, select the reviewed protected ref and acknowledge development-only status. A successful run uploads `calculator-messenger-signed-development` for seven days; logs use `calculator-messenger-signed-build-logs-RUN_ID`. No Play/GitHub Release publishing step exists. Artifact visibility follows repository access; use an appropriately private CI repository/environment for confidential distribution. Owner-signing setup, actual workflow execution and all resulting artifacts remain unverified here.
+
+```sh
+gh run list --repo mvasagan099/Calculator-chat-apk --workflow android-signed-development.yml
+gh run download RUN_ID --repo mvasagan099/Calculator-chat-apk \
+  --name calculator-messenger-signed-development --dir downloaded-signed
+cd downloaded-signed
+sha256sum -c app-release.apk.sha256
+sha256sum -c app-release.aab.sha256
+apksigner verify --verbose --print-certs app-release.apk
+adb -s PHONE_A_SERIAL install -r app-release.apk
+```
+
+These are future download/install instructions, not existing paths/artifacts. Check the owner certificate before installation. Git works in this environment but the Actions API is CONNECT-blocked, so no run ID, checksum, artifact URL or installation result is invented. Follow [the phone test plan](DEVICE_ACCEPTANCE.md) and [transparent store disclosure review](STORE_REVIEW.md) before any beta/production claim. An inspected signed artifact alone does not satisfy hosted/media/privacy/stability gates.

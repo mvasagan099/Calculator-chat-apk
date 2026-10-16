@@ -1,0 +1,102 @@
+name: Signed Android development artifacts
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge_development_only:
+        description: 'I understand these internal artifacts do not certify production/provider/device release gates'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: signed-development-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  signed-development:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    # Owner must configure required reviewers and protected deployment branches
+    # for this environment. This workflow never publishes to Play or Releases.
+    environment: android-release
+    env:
+      CI: 'true'
+      FLUTTER_SUPPRESS_ANALYTICS: 'true'
+      DART_SUPPRESS_ANALYTICS: 'true'
+    steps:
+      - name: Require reviewed protected source and explicit intent
+        env:
+          ACKNOWLEDGED: ${{ inputs.acknowledge_development_only }}
+          PROTECTED_SOURCE: ${{ github.ref_protected }}
+        run: |
+          test "$ACKNOWLEDGED" = true
+          test "$PROTECTED_SOURCE" = true
+          mkdir -p build-evidence
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        id: source
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - run: sdkmanager 'platform-tools' 'platforms;android-36' 'build-tools;36.0.0' 'ndk;28.2.13676358' 'cmake;3.22.1'
+      - run: ./scripts/install-flutter-ci.sh
+      - name: Prepare public connected configuration
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+          FIREBASE_ANDROID_CONFIG: ${{ vars.FIREBASE_ANDROID_CONFIG }}
+        run: python3 scripts/prepare-client-config.py --mode connected --from-environment --output config/ci-public.json
+      - name: Verify locked source before accessing signing inputs
+        run: |
+          mkdir -p build-evidence
+          set -o pipefail
+          flutter doctor -v 2>&1 | tee build-evidence/doctor.txt
+          flutter pub get --enforce-lockfile 2>&1 | tee build-evidence/pub-get.txt
+          python3 -m unittest discover -s scripts/tests -p '*_test.py' 2>&1 | tee build-evidence/tooling-tests.txt
+          flutter analyze --no-pub 2>&1 | tee build-evidence/analyze.txt
+          flutter test --no-pub --reporter expanded 2>&1 | tee build-evidence/flutter-tests.txt
+      - name: Verify and materialize owner signing configuration
+        env:
+          ANDROID_RELEASE_KEYSTORE_B64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_B64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
+        run: python3 scripts/configure-release-signing.py --directory "$RUNNER_TEMP"
+      - name: Build signed internal APK and AAB
+        run: |
+          set -o pipefail
+          flutter build apk --release --no-pub --dart-define-from-file=config/ci-public.json 2>&1 | tee build-evidence/release-apk.txt
+          flutter build appbundle --release --no-pub --dart-define-from-file=config/ci-public.json 2>&1 | tee build-evidence/release-aab.txt
+      - name: Inspect artifacts and owner certificate
+        env:
+          ANDROID_CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
+        run: |
+          python3 scripts/verify-apk.py build/app/outputs/flutter-apk/app-release.apk --android-sdk "$ANDROID_HOME" --variant release --expected-cert-sha256 "$ANDROID_CERT_SHA256" --output-dir build-evidence/signed
+          cp build/app/outputs/flutter-apk/app-release.apk build-evidence/signed/
+          python3 scripts/verify-aab.py build/app/outputs/bundle/release/app-release.aab --expected-cert-sha256 "$ANDROID_CERT_SHA256" --output-dir build-evidence/signed
+          cp build/app/outputs/bundle/release/app-release.aab build-evidence/signed/
+      - name: Upload internal signed development artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: calculator-messenger-signed-development
+          path: build-evidence/signed/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+      - name: Remove generated private signing files
+        if: always() && steps.source.outcome == 'success'
+        run: python3 scripts/configure-release-signing.py --directory "$RUNNER_TEMP" --cleanup
+      - name: Preserve build diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: calculator-messenger-signed-build-logs-${{ github.run_id }}
+          path: build-evidence/*.txt
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Record release limitations
+        if: always()
+        run: echo 'Internal development artifacts only. Hosted/device/privacy/stability gates require separate evidence; this workflow does not publish an app.' >> "$GITHUB_STEP_SUMMARY"

@@ -9,6 +9,18 @@ val signingProperties = Properties()
 val signingFile = rootProject.file("key.properties")
 if (signingFile.exists()) signingFile.inputStream().use { signingProperties.load(it) }
 
+val releaseSigningReady = listOf("storeFile", "storePassword", "keyAlias", "keyPassword")
+    .all { !signingProperties.getProperty(it).isNullOrEmpty() } &&
+    file(signingProperties.getProperty("storeFile", "missing-release-keystore")).isFile
+
+// Never emit an unsigned release or substitute Android's public debug identity.
+// Debug builds remain available when owner signing inputs have not been supplied.
+gradle.taskGraph.whenReady {
+    if (allTasks.any { it.project == project && it.name.contains("Release") }) {
+        check(releaseSigningReady) { "Release signing is unavailable. Configure private android/key.properties and an existing keystore; see docs/RELEASE.md." }
+    }
+}
+
 android {
     namespace = "app.calculatorspace.calculator_messenger"
     compileSdk = flutter.compileSdkVersion
@@ -29,7 +41,7 @@ android {
     }
 
     signingConfigs {
-        if (signingFile.exists()) create("release") {
+        if (releaseSigningReady) create("release") {
             keyAlias = signingProperties.getProperty("keyAlias")
             keyPassword = signingProperties.getProperty("keyPassword")
             storeFile = file(signingProperties.getProperty("storeFile"))
@@ -38,7 +50,7 @@ android {
     }
     buildTypes {
         release {
-            signingConfig = if (signingFile.exists()) signingConfigs.getByName("release") else null
+            signingConfig = if (releaseSigningReady) signingConfigs.getByName("release") else null
             isMinifyEnabled = true
             isShrinkResources = true
         }

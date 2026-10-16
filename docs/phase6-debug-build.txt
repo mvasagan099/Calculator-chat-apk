@@ -1,0 +1,198 @@
+Resolving dependencies...
+Downloading packages...
+  clock 1.1.2 (1.1.3 available)
+  code_assets 1.2.1 (2.1.0 available)
+  connectivity_plus 7.3.1 (7.3.2 available)
+  cross_file 0.3.5+5 (0.4.0 available)
+  cupertino_ui 1.0.2 (1.1.3 available)
+  dbus 0.7.15 (0.8.0 available)
+  file_picker_linux 2.0.0 (2.0.2 available)
+  gsettings 0.2.8 (0.2.9 available)
+  hooks 2.0.2 (2.2.0 available)
+  image_picker_ios 0.8.13+10 (0.8.13+12 available)
+  intl 0.20.2 (0.20.3 available)
+  matcher 0.12.19 (0.12.20 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  material_ui 1.2.0 (1.7.0 available)
+  meta 1.18.0 (1.19.0 available)
+  nm 0.5.0 (0.6.0 available)
+  objective_c 9.5.0 (9.6.2 available)
+  petitparser 7.0.2 (7.1.0 available)
+  record_use 0.6.0 (1.1.1 available)
+  sdp_transform 0.3.2 (0.4.0 available)
+  stack_trace 1.12.1 (1.12.2 available)
+  test_api 0.7.11 (0.7.15 available)
+  vector_math 2.2.0 (2.4.3 available)
+  xml 7.0.1 (7.1.0 available)
+Got dependencies!
+24 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Running Gradle task 'assembleDebug'...
+WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): firebase_core, flutter_image_compress_common, flutter_webrtc, livekit_client
+Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
+
+Please check the changelogs of these plugins and upgrade to a version that supports Built-in Kotlin.
+If no such version exists, report the issue to the plugin. If necessary, here is a guide on filing
+an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
+
+If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
+Skipping assets entry "packages/record_web/assets/js/record.worklet.js" since its configured platform(s) did not match the target platform.
+Configured platforms: web
+Target platform: android
+
+
+FAILURE: Build completed with 2 failures.
+
+1: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':android_file_picker:checkDebugAarMetadata'.
+> Could not resolve all files for configuration ':android_file_picker:debugRuntimeClasspath'.
+   > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+     Required by:
+         project ':android_file_picker'
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+2: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':app_links:compileDebugJavaWithJavac'.
+> Could not resolve all files for configuration ':app_links:debugCompileClasspath'.
+   > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+     Required by:
+         project ':app_links'
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+BUILD FAILED in 20s
+Running Gradle task 'assembleDebug'...                             21.0s
+[!] Gradle threw an error while downloading artifacts from the network.
+Retrying Gradle Build: #1, wait time: 100ms
+Running Gradle task 'assembleDebug'...
+WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP): firebase_core, flutter_image_compress_common, flutter_webrtc, livekit_client
+Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
+
+Please check the changelogs of these plugins and upgrade to a version that supports Built-in Kotlin.
+If no such version exists, report the issue to the plugin. If necessary, here is a guide on filing
+an issue against a plugin: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-app-developers#report-incompatible-kotlin-gradle-plugin-usage-to-plugin-authors
+
+If you are a plugin author, please migrate your plugin to Built-in Kotlin using this guide: https://docs.flutter.dev/release/breaking-changes/migrate-to-built-in-kotlin/for-plugin-authors
+
+FAILURE: Build completed with 4 failures.
+
+1: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':audio_session:compileDebugKotlin'.
+> Error while evaluating property 'friendPathsSet$kotlin_gradle_plugin_common' of task ':audio_session:compileDebugKotlin'.
+   > Could not resolve all files for configuration ':audio_session:debugCompileClasspath'.
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+        Required by:
+            project ':audio_session'
+         > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+            > Could not get resource 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+               > Could not GET 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+         > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+            > Could not get resource 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+               > Could not GET 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+2: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':android_file_picker:checkDebugAarMetadata'.
+> Could not resolve all files for configuration ':android_file_picker:debugRuntimeClasspath'.
+   > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+     Required by:
+         project ':android_file_picker'
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+3: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':connectivity_plus:compileDebugJavaWithJavac'.
+> Could not resolve all files for configuration ':connectivity_plus:debugCompileClasspath'.
+   > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+     Required by:
+         project ':connectivity_plus'
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+4: Task failed with an exception.
+-----------
+* What went wrong:
+Execution failed for task ':app_links:compileDebugJavaWithJavac'.
+> Could not resolve all files for configuration ':app_links:debugCompileClasspath'.
+   > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+     Required by:
+         project ':app_links'
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://storage.googleapis.com/download.flutter.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+      > Could not resolve io.flutter:flutter_embedding_debug:1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.
+         > Could not get resource 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'.
+            > Could not GET 'https://jitpack.io/io/flutter/flutter_embedding_debug/1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362/flutter_embedding_debug-1.0.0-4c525dac5ebe5971c5708ef73558ed8edcf4a362.pom'. Received status code 403 from server: Forbidden
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to generate a Build Scan (Powered by Develocity).
+> Get more help at https://help.gradle.org.
+==============================================================================
+
+BUILD FAILED in 15s
+Running Gradle task 'assembleDebug'...                             15.8s
+[!] Gradle threw an error while downloading artifacts from the network.
+Gradle task assembleDebug failed with exit code 1

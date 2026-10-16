@@ -1,0 +1,12 @@
+running 2 tests from ./supabase/functions/_shared/call_token_test.ts
+call token uses bounded scoped voice grants ... ok (3ms)
+call token uses bounded scoped video grants ... ok (437µs)
+running 2 tests from ./supabase/functions/_shared/push_payload_test.ts
+message, group and missed-call payloads never include private previews ... ok (628µs)
+incoming calls use the dedicated channel and short TTL ... ok (70µs)
+running 3 tests from ./supabase/functions/_shared/security_test.ts
+reject unauthenticated function calls before accessing service credentials ... ok (23ms)
+reject malformed IDs, body methods, oversized and non-object JSON ... ok (1ms)
+attachment byte validation rejects spoofed MIME and executable payloads ... ok (840µs)
+
+ok | 7 passed | 0 failed (410ms)

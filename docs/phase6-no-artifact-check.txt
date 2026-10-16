@@ -1,0 +1,1 @@
+APK inspection FAILED. Check artifact, signature/certificate, package/API and private configuration. No credential values were logged.

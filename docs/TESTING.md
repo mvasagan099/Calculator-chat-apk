@@ -1,6 +1,12 @@
 # Validation evidence and release checklist
 
-## Current Phase 5 evidence
+## Current Phase 6 evidence
+
+**87 Flutter tests pass; one hosted test is skipped.** Analysis and locked resolution pass. Eleven migrations, eight PostgreSQL suites plus two concurrent transaction checks, nine Edge entry points/two hosted runner type checks, seven Edge tests, 29 release/config/signature tooling tests and 17 native Signal checks pass. [Full audit/gates](PHASE6_RELEASE.md), [device procedure/report](DEVICE_ACCEPTANCE.md).
+
+Four new cache-isolation tests failed before the fix and now pass. They use HTTP adapters and actual encrypted files, not deployed Supabase accounts. JDK-signed JAR/ZIP fixtures and disposable test signing keys test verifier/configuration behavior, not Flutter APK/AAB signatures or installability. Neither missing signing inputs nor blocked provider requests are PASS outcomes. Existing commands below apply; tooling tests now require the same JDK 21 used by Android/CI. No source dependency versions were upgraded.
+
+## Historical Phase 5 evidence
 
 **83 Flutter tests pass; one hosted test is skipped.** Analysis and locked resolution pass. Eleven migrations, eight PostgreSQL suites and two real concurrent transaction checks pass. Nine Edge Functions and two hosted runners type-check; seven Edge tests (including actual test-JWT signature/claims), 11 config tests and 17 native Signal regressions pass. See [PHASE5_CALLS.md](PHASE5_CALLS.md) for scope, logs and the device/provider matrix. No APK/provider/media/device success is claimed.
 

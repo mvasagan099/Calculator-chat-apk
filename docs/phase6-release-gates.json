@@ -1,0 +1,56 @@
+{
+  "recorded_date": "2026-10-16",
+  "timezone": "Asia/Kolkata",
+  "classification": "DEVELOPMENT_NOT_PRODUCTION_READY",
+  "actual_artifacts": [],
+  "gates": {
+    "A": {
+      "status": "BLOCKED",
+      "scope": "APK exists and installs",
+      "reason": "Official artifact proxy HTTP 403; no Android device"
+    },
+    "B": {
+      "status": "BLOCKED",
+      "scope": "Two real Supabase Auth accounts",
+      "reason": "No confirmed project/deployment/test credentials"
+    },
+    "C": {
+      "status": "BLOCKED",
+      "scope": "Independent-device messaging",
+      "reason": "No connected services/APK/accounts/devices"
+    },
+    "D": {
+      "status": "BLOCKED",
+      "scope": "Real audio/video connections",
+      "reason": "No LiveKit deployment/media participants"
+    },
+    "E": {
+      "status": "BLOCKED",
+      "scope": "Release device/OS privacy",
+      "local_automated_checks": "PASS",
+      "reason": "Native APK/Keystore/notification/recents behavior unverified"
+    },
+    "F": {
+      "status": "PASS",
+      "scope": "Local automated authorization/security regression only",
+      "limitations": "No hosted RLS certification, actual APK scan or independent penetration test"
+    },
+    "G": {
+      "status": "BLOCKED",
+      "scope": "Installed critical-flow stability",
+      "reason": "No device acceptance/performance trace"
+    }
+  },
+  "automated_counts": {
+    "flutter_passed": 87,
+    "flutter_hosted_skipped": 1,
+    "postgres_suites": 8,
+    "concurrent_transaction_checks": 2,
+    "edge_tests": 7,
+    "tooling_tests": 29,
+    "native_signal_probe_checks": 17
+  },
+  "application_e2ee": "NOT IMPLEMENTED in production transport",
+  "hosted_verified": false,
+  "device_verified": false
+}

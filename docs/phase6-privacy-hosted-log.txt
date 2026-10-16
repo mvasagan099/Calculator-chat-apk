@@ -1,0 +1,6 @@
+BLOCKED: Expiration policy snapshot
+BLOCKED: View-once atomic opening
+BLOCKED: View-once Storage denial
+BLOCKED: Unapproved second-device denial
+BLOCKED: Recent-password device approval
+BLOCKED: Revoked-device denial

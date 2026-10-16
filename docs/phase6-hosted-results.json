@@ -1,0 +1,86 @@
+{
+  "generated_at": "2026-10-16T05:10:15.193Z",
+  "provider_evidence_only": true,
+  "results": [
+    {
+      "scenario": "User A signs up",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "User B signs up",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "User A finds User B",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "User A sends a message",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "User B receives the message",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "User B replies",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Delivery and read-state updates",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Image upload and download",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Audio message delivery",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Group creation and messaging",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Unauthorized database reads and writes rejected",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Blocked interactions rejected",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Voice media connects",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Video media connects",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Notifications reach background devices",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    },
+    {
+      "scenario": "Android unlock protection remains enforced",
+      "status": "BLOCKED",
+      "detail": "Needs a confirmed staging URL, public key, two distinct test accounts and explicit ALLOW_HOSTED_TEST_WRITES consent"
+    }
+  ]
+}
