@@ -45,14 +45,15 @@ def scan_archive(archive):
 
 def metadata(badging, target):
     package = re.search(r"^package: name='([^']+)'", badging, re.MULTILINE)
-    minimum = re.search(r"^sdkVersion:'(\d+)'", badging, re.MULTILINE)
+    # AAPT2 emits minSdkVersion while older aapt emits sdkVersion.
+    minimum = re.search(r"^(?:minSdkVersion|sdkVersion):'(\d+)'", badging, re.MULTILINE)
     target_api = re.search(r"^targetSdkVersion:'(\d+)'", badging, re.MULTILINE)
     if not package:
         raise ValueError('Package identifier is missing from aapt2 badging output')
     if package[1] != PACKAGE:
         raise ValueError(f'Package identifier mismatch: expected {PACKAGE}, found {package[1]}')
     if not minimum:
-        raise ValueError('Minimum SDK is missing from aapt2 badging output')
+        raise ValueError('Minimum SDK is missing from aapt2 badging output (expected minSdkVersion or sdkVersion)')
     if int(minimum[1]) != 29:
         raise ValueError(f'Minimum SDK mismatch: expected 29, found {minimum[1]}')
     if not target_api:
