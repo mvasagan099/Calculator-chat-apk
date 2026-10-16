@@ -47,17 +47,27 @@ def metadata(badging, target):
     package = re.search(r"^package: name='([^']+)'", badging, re.MULTILINE)
     minimum = re.search(r"^sdkVersion:'(\d+)'", badging, re.MULTILINE)
     target_api = re.search(r"^targetSdkVersion:'(\d+)'", badging, re.MULTILINE)
-    if not package or package[1] != PACKAGE or not minimum or int(minimum[1]) != 29 or not target_api or int(target_api[1]) != target:
-        raise ValueError('Package/API mismatch')
+    if not package:
+        raise ValueError('Package identifier is missing from aapt2 badging output')
+    if package[1] != PACKAGE:
+        raise ValueError(f'Package identifier mismatch: expected {PACKAGE}, found {package[1]}')
+    if not minimum:
+        raise ValueError('Minimum SDK is missing from aapt2 badging output')
+    if int(minimum[1]) != 29:
+        raise ValueError(f'Minimum SDK mismatch: expected 29, found {minimum[1]}')
+    if not target_api:
+        raise ValueError('Target SDK is missing from aapt2 badging output')
+    if int(target_api[1]) != target:
+        raise ValueError(f'Target SDK mismatch: expected {target}, found {target_api[1]}')
     if not re.search(r'^launchable-activity:', badging, re.MULTILINE):
-        raise ValueError('No launchable activity')
+        raise ValueError('No launchable activity in aapt2 badging output')
     return {'package': package[1], 'min_sdk': int(minimum[1]), 'target_sdk': int(target_api[1])}
 
 
 def certificate(signature, variant, expected=None):
     signers = re.findall(r'^Signer #\d+ certificate SHA-256 digest:\s*([0-9a-fA-F]{64})\s*$', signature, re.MULTILINE)
     if len(signers) != 1:
-        raise ValueError('One APK signer required')
+        raise ValueError(f'Expected one APK certificate SHA-256 digest, parsed {len(signers)}')
     actual = signers[0].lower()
     if variant == 'release':
         wanted = (expected or '').replace(':', '').lower()
@@ -75,19 +85,27 @@ def main():
     parser.add_argument('--expected-cert-sha256')
     parser.add_argument('--target-sdk', type=int, default=36)
     args = parser.parse_args()
+    stage = 'APK existence'
     try:
         if not args.apk.is_file() or args.apk.stat().st_size == 0:
             raise ValueError('APK missing or empty')
         tools = args.android_sdk / 'build-tools/36.0.0'
+        stage = 'apksigner signature verification'
         signature = subprocess.run([str(tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(args.apk)], check=True, capture_output=True, text=True, timeout=60).stdout
+        stage = 'aapt2 badging extraction'
         badging = subprocess.run([str(tools / 'aapt2'), 'dump', 'badging', str(args.apk)], check=True, capture_output=True, text=True, timeout=60).stdout
+        stage = 'package and SDK metadata'
         result = metadata(badging, args.target_sdk)
+        stage = 'signing certificate digest'
         result['certificate_sha256'] = certificate(signature, args.variant, args.expected_cert_sha256)
+        stage = 'private credential and archive safety scan'
         with zipfile.ZipFile(args.apk) as archive:
             scan_archive(archive)
+        stage = 'SHA-256 digest'
         with args.apk.open('rb') as source:
             digest = hashlib.file_digest(source, 'sha256').hexdigest()
         result.update({'file': args.apk.name, 'bytes': args.apk.stat().st_size, 'sha256': digest, 'variant': args.variant, 'classification': 'development', 'installation': 'NOT TESTED', 'hosted_services': 'NOT TESTED'})
+        stage = 'inspection evidence output'
         args.output_dir.mkdir(parents=True, exist_ok=True)
         (args.output_dir / 'apk-metadata.txt').write_text(badging)
         (args.output_dir / 'apk-signature.txt').write_text(signature)
@@ -96,8 +114,16 @@ def main():
         print(f'PASS: signed, nonempty APK; package {PACKAGE}; API 29/{args.target_sdk}; known secret scan clear')
         print(f'Size: {args.apk.stat().st_size} bytes; SHA-256: {digest}')
         print('Installation, launch and provider behavior remain unverified.')
-    except (ValueError, OSError, zipfile.BadZipFile, subprocess.SubprocessError):
-        print('APK inspection FAILED. Check artifact, signature/certificate, package/API and private configuration. No credential values were logged.', file=sys.stderr)
+    except ValueError as exc:
+        # Only print our own fixed-format validation errors: no APK data or secrets.
+        print(f'APK inspection FAILED at {stage}: {exc}', file=sys.stderr)
+        return 1
+    except subprocess.CalledProcessError as exc:
+        # Never echo tool stdout/stderr or environment variables in CI logs.
+        print(f'APK inspection FAILED at {stage}: Android tool exit code {exc.returncode}', file=sys.stderr)
+        return 1
+    except (OSError, zipfile.BadZipFile, subprocess.TimeoutExpired) as exc:
+        print(f'APK inspection FAILED at {stage}: {type(exc).__name__}', file=sys.stderr)
         return 1
     return 0
 
