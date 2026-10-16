@@ -61,6 +61,17 @@ class ReleaseArtifactToolTest(unittest.TestCase):
             with self.assertRaises(ValueError):
                 apk.metadata(invalid, 36)
 
+    def test_aapt2_minimum_sdk_metadata_format(self):
+        badging = (
+            f"package: name='{apk.PACKAGE}' versionCode='1'\\n"
+            "minSdkVersion:'29'\\n"
+            "targetSdkVersion:'36'\\n"
+            "launchable-activity: name='MainActivity'\\n"
+        )
+        self.assertEqual(apk.metadata(badging, 36)['min_sdk'], 29)
+        with self.assertRaises(ValueError):
+            apk.metadata(badging.replace("minSdkVersion:'29'", "minSdkVersion:'28'"), 36)
+
     def test_release_certificate_must_match_owner_and_not_debug(self):
         fingerprint = 'a'*64
         signature = 'Signer #1 certificate DN: CN=Unit Test\nSigner #1 certificate SHA-256 digest: ' + fingerprint
