@@ -176,6 +176,17 @@ jobs:
           python3 -m unittest discover -s scripts/tests -p '*_test.py' 2>&1 | tee build-evidence/tooling-tests.txt
           flutter analyze --no-pub 2>&1 | tee build-evidence/analyze.txt
           flutter test --no-pub --reporter expanded 2>&1 | tee build-evidence/flutter-tests.txt
+      - name: Regenerate release plugin registration after tests
+        env:
+          TARGET_PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -o pipefail
+          # Flutter #169336: --no-pub skips release-mode plugin regeneration.
+          # Keep pub enabled for config-only; the final build reuses these files.
+          flutter build apk --release --config-only --split-per-abi \
+            --target-platform "$TARGET_PLATFORM" \
+            --dart-define-from-file=config/ci-public.json 2>&1 | tee build-evidence/release-config.txt
+          git diff --exit-code -- pubspec.lock
       - name: Recheck authorization and source immediately before signing
         env:
           REVIEWED_SHA: ${{ needs.authorize-release.outputs.sha }}
