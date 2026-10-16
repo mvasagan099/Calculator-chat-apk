@@ -157,3 +157,13 @@ The owner confirms a successful preview APK build/static inspection and installa
 ## Connected SQLite build
 
 The production Android cache now uses the maintained sqflite platform plugin; a constrained OS-backed desktop test driver avoids the unused native-asset engine observed during evaluation. Existing SDK fixes, disk cleanup, Firebase preparation and artifact verification workflows are preserved. Use `config/connected-build.json` locally or the repository public Supabase variables plus raw Firebase secret for Actions mode `connected`; expected artifact remains `calculator-messenger-debug-connected`. The local connected build remains blocked by official Flutter artifact HTTP 403; no new connected artifact/hash/install is claimed. Preserve installed app data and stop on certificate mismatch. [Details](DATA_STORAGE.md).
+
+
+## GitHub Free/private optimized APK alternative
+
+The separate [optimized manual release path](OPTIMIZED_RELEASE_ACTIONS.md) uses
+repository-level encrypted signing secrets with owner/ref/immutable-SHA checks,
+without an environment or protected-ref requirement. It requires trusting every
+repository writer: writers can change workflows to access repository secrets.
+This does not weaken the existing signed-development workflow or alter debug CI.
+Read its security limits and independently review the exact SHA before dispatch.

@@ -65,3 +65,13 @@ The Android PIN worker uses platform JCA PBKDF2WithHmacSHA256 with the same stor
 ## Transactional encrypted SQLite cache
 
 Connected mode now uses AES-256-GCM encrypted SQLite collections with account/row-bound AAD and opaque HMAC indexes under a separate HKDF-derived indexing key. The existing random Keystore-backed master key is retained. A root manifest authenticates collection membership; local migrations commit/read back before retiring the original encrypted file. Unknown or modified legacy copies are preserved for recovery. No PIN reset, plaintext message/FTS table, app credential table or new E2EE protocol was added. SQLite headers/counts/file sizes and owner filename remain visible to privileged filesystem access: this is payload encryption, not SQLCipher. Full valid-database rollback by a privileged actor and forensic memory/flash erasure are not prevented. Existing Auth/device/PIN gates, server RLS and private-media controls remain required. Outbox mutations/acknowledgments are account/cache/epoch scoped, and replaced account connections are closed. [Recovery, threat limits and tested scope](DATA_STORAGE.md).
+
+
+## GitHub Free/private optimized APK alternative
+
+The separate [optimized manual release path](OPTIMIZED_RELEASE_ACTIONS.md) uses
+repository-level encrypted signing secrets with owner/ref/immutable-SHA checks,
+without an environment or protected-ref requirement. It requires trusting every
+repository writer: writers can change workflows to access repository secrets.
+This does not weaken the existing signed-development workflow or alter debug CI.
+Read its security limits and independently review the exact SHA before dispatch.
