@@ -150,6 +150,10 @@ Call FCM is high-priority data-only with an invitation deadline and a generic lo
 
 MediaProjection needs its new non-exported service/permission and explicit system consent. Default background relocking stops sharing on app switch; FLAG_SECURE can blank private app capture. PiP/Telecom/full-screen-intent privileges have not been added. See the exact Android/privacy limits and owner test procedure in the calling report.
 
-## Phase 7 current checkpoint
+## Phase 7 historical checkpoint
 
 The owner reports a successful installed preview APK. Live backend activation and the connected APK are not verified. No selected staging reference, public URL/key, CLI/database access or disposable hosted-test accounts are available here. Review [PHASE7_ACTIVATION.md](PHASE7_ACTIVATION.md) before deploying; explicit owner confirmation is required after the exact remote target/history/schema and pending migrations are reviewed. No migrations/functions/workers were deployed in Phase 7. The Firebase console secret is owner-reported configured in GitHub and is not available to this process.
+
+## Current connected configuration and local SQLite
+
+The owner has supplied the public client pair for project `vjjvfshpzihbrdakbzct`. Ignored `config/connected-public.json`/`config/connected-build.json` select `LOCAL_UI_PREVIEW=false`; the existing preview config is unchanged. No public key is committed. Public-key presence is not a deployed-schema verification: the read-only settings check is blocked by proxy CONNECT 403, and privileged schema/migration access plus two disposable verified accounts are still missing. No remote changes were performed. The runtime local SQLite schema needs no Supabase migration; preserve/review the original 11 migrations/nine functions before an owner-approved remote rollout. [Storage, recovery and exact connected build steps](DATA_STORAGE.md).

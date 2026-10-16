@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-10-16T09:29:18.686921+00:00",
+  "measurements": [
+    {
+      "scope": "desktop Flutter JIT, real files/SQLite, memory key-store adapter",
+      "implementation": "legacy-encrypted-json-file",
+      "chats": 20,
+      "messages_per_chat": 200,
+      "update_us": [
+        249708,
+        222288,
+        224549
+      ],
+      "unchanged_save_us": [
+        226740,
+        225849,
+        234083
+      ],
+      "restore_us": 509413,
+      "median_update_ms": 224.549,
+      "median_unchanged_ms": 226.74
+    },
+    {
+      "scope": "desktop Flutter JIT, real files/SQLite, memory key-store adapter",
+      "implementation": "encrypted-sqlite-collections",
+      "chats": 20,
+      "messages_per_chat": 200,
+      "update_us": [
+        31692,
+        23132,
+        21670
+      ],
+      "unchanged_save_us": [
+        9080,
+        8776,
+        7925
+      ],
+      "restore_us": 208263,
+      "median_update_ms": 23.132,
+      "median_unchanged_ms": 8.776
+    }
+  ],
+  "android_measurements": null,
+  "live_supabase_measurements": null
+}

@@ -6,15 +6,21 @@ A Flutter Android app that opens as a functional calculator and unlocks a privat
 
 Android 10/API 29 and above. Flutter 3.44.0, Dart 3.12.0, Riverpod, GoRouter and Supabase Flutter. Light/dark themes and responsive portrait/landscape layouts are included.
 
+## Real data and encrypted SQLite
+
+Connected messaging now uses **Supabase PostgreSQL/Realtime for shared data and encrypted SQLite for offline history/outbox**. Existing encrypted cache files migrate without resetting PINs or changing pending message IDs. Saves update only changed collections, skip unchanged writes, and run encryption/decryption in a worker. **111 Flutter tests and 37 tooling tests pass**, with clean analysis. In the desktop 4,000-message benchmark, median single-chat save time was about **225 ms → 23 ms**; these are not phone measurements.
+
+Your public Supabase configuration is prepared in ignored connected-mode files for project `vjjvfshpzihbrdakbzct`; the preview configuration is preserved. Live validation/deployment is still blocked by cloud proxy/API access and missing authorized schema/test-account access. See [data architecture, measurements and activation steps](docs/DATA_STORAGE.md). No live two-device messaging or new connected APK is claimed.
+
 ## PIN responsiveness update
 
 PIN verification retains the existing 600,000-iteration salted PBKDF2 verifier and Keystore protection. Android uses a standard JCA worker; other hosts retain isolated Dart derivation without unnecessary timer waits. Clean successful checks skip redundant secure-storage writes; wrong attempts/backoff/reset persistence remain enforced. The calculator displays normal results immediately, keeps keys responsive and cancels stale unlock results. **95 Flutter tests and 37 tooling tests pass**; analysis is clean. Optional ARM64 profile comparisons and duration-only developer instrumentation are documented in [PIN performance](docs/PIN_PERFORMANCE.md). Desktop measurements are not Android benchmarks; no new profile APK/device performance is claimed.
 
-## Phase 7 live activation status
+## Phase 7 live activation status (historical checkpoint)
 
 The owner reports a successful GitHub Actions **preview APK**, passing static package/signature/SDK/known-secret checks and installation/basic operation on Android. This supersedes older blanket “no APK exists” statements. Its run URL/hash were not independently accessible here. A preview is not a verified live messenger.
 
-**Connected APK and live backend: BLOCKED pending staging configuration.** No confirmed Supabase project/public URL/key, remote schema/history access or disposable accounts exist in this cloud checkout. GitHub Actions API access returns Forbidden; existing repository variables/secrets cannot be inspected here. Current local checks pass: analysis, 87 Flutter tests (one hosted skip), eight PostgreSQL suites/two concurrency checks, seven Edge tests, 36 tooling tests and workflow lint. The hosted runner reports 16 BLOCKED scenarios. No remote migrations/functions/workers were applied. Application E2EE remains disabled.
+**Connected APK and live backend: BLOCKED pending staging configuration.** At that checkpoint no project/public configuration, remote schema/history access or disposable accounts were available. The owner has since supplied the project and public configuration; remote inspection/test-account access remains outstanding. See the current SQLite/data section above. GitHub Actions API access returns Forbidden; existing repository variables/secrets cannot be inspected here. Historical checks passed: analysis, 87 Flutter tests (one hosted skip), eight PostgreSQL suites/two concurrency checks, seven Edge tests, 36 tooling tests and workflow lint. The hosted runner reported 16 BLOCKED scenarios. No remote migrations/functions/workers were applied. Application E2EE remains disabled.
 
 See [Phase 7 evidence, deployment consent and exact owner actions](docs/PHASE7_ACTIVATION.md). The existing Android SDK fix, runner disk cleanup and corrected APK verification are preserved. Expected connected artifact after a successful workflow: **calculator-messenger-debug-connected**; no connected checksum or two-device/provider success is claimed.
 

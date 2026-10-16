@@ -153,3 +153,7 @@ The owner confirms a successful preview APK build/static inspection and installa
 ## Optional ARM64 PIN performance artifacts
 
 `android-pin-profile.yml` adds a manual-only profile build without changing the successful debug workflow. Use preview mode and implementation `all` for three same-job/same-debug-signer comparison APKs. Expected artifact: `calculator-messenger-profile-arm64-preview-all`, with per-implementation APK/hash/inspection subdirectories. Profiling is developer-only, all new PINs retain 600,000 iterations, and no server secrets are packaged. Preserve existing installations on certificate mismatch; do not uninstall/clear data. [Exact timing and installation limitations](PIN_PERFORMANCE.md). No successful profile artifact is currently claimed.
+
+## Connected SQLite build
+
+The production Android cache now uses the maintained sqflite platform plugin; a constrained OS-backed desktop test driver avoids the unused native-asset engine observed during evaluation. Existing SDK fixes, disk cleanup, Firebase preparation and artifact verification workflows are preserved. Use `config/connected-build.json` locally or the repository public Supabase variables plus raw Firebase secret for Actions mode `connected`; expected artifact remains `calculator-messenger-debug-connected`. The local connected build remains blocked by official Flutter artifact HTTP 403; no new connected artifact/hash/install is claimed. Preserve installed app data and stop on certificate mismatch. [Details](DATA_STORAGE.md).

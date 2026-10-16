@@ -2,26 +2,27 @@ import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
-import '../core/security/encrypted_cache.dart';
+import '../core/security/local_cache.dart';
+import '../core/security/sqlite_cache.dart';
 import '../core/security/pin_vault.dart';
 import '../models/message.dart';
 import '../core/security/local_retention.dart';
 
-typedef _CacheScope = ({EncryptedCache cache, String owner, int epoch});
+typedef _CacheScope = ({LocalCache cache, String owner, int epoch});
 
 class MessengerRepository {
   MessengerRepository(
     this.client, {
-    EncryptedCache Function(String owner)? cacheFactory,
+    LocalCache Function(String owner)? cacheFactory,
     this.connectivity,
   }) : _cacheFactory =
            cacheFactory ??
-           ((owner) => EncryptedCache(owner, const DeviceSecretStore()));
-  final EncryptedCache Function(String owner) _cacheFactory;
+           ((owner) => SqliteEncryptedCache(owner, const DeviceSecretStore()));
+  final LocalCache Function(String owner) _cacheFactory;
   final Stream<List<ConnectivityResult>>? connectivity;
   final SupabaseClient client;
   String get uid => client.auth.currentUser!.id;
-  EncryptedCache? _cache;
+  LocalCache? _cache;
   String? _cacheOwner;
   bool _flushing = false, _disposed = false;
   Completer<void>? _flushDone;
@@ -54,15 +55,28 @@ class MessengerRepository {
   }
 
   Future<void> prepare() async {
-    if (_disposed) throw StateError('Messaging session closed');
-    await _suspending;
-    if (_preparing != null) await _preparing;
-    if (_cacheOwner == uid && _cache != null) return;
-    _preparing = _initialize();
-    try {
-      await _preparing;
-    } finally {
-      _preparing = null;
+    while (true) {
+      if (_disposed) throw StateError('Messaging session closed');
+      final suspending = _suspending;
+      if (suspending != null) {
+        await suspending;
+        continue;
+      }
+      final preparing = _preparing;
+      if (preparing != null) {
+        await preparing;
+        continue;
+      }
+      final owner = client.auth.currentUser?.id;
+      if (owner == null) throw StateError('Sign in before loading messages');
+      if (_cacheOwner == owner && _cache != null) return;
+      final opening = _initialize();
+      _preparing = opening;
+      try {
+        await opening;
+      } finally {
+        if (identical(_preparing, opening)) _preparing = null;
+      }
     }
   }
 
@@ -73,6 +87,15 @@ class MessengerRepository {
     await cache.initialize();
     await _connection?.cancel();
     await _flushDone?.future;
+    if (_disposed ||
+        epoch != _sessionEpoch ||
+        client.auth.currentUser?.id != owner) {
+      await cache.forget();
+      throw StateError('Messaging session changed');
+    }
+    final previous = _cache;
+    _cache = null;
+    await previous?.forget();
     if (_disposed ||
         epoch != _sessionEpoch ||
         client.auth.currentUser?.id != owner) {
@@ -98,9 +121,15 @@ class MessengerRepository {
       (_cache?.data['outbox'] as List? ?? [])
           .map((e) => Map<String, dynamic>.from(e))
           .toList();
-  Future<void> _saveOutbox(List<Map<String, dynamic>> values) async {
-    _cache!.data['outbox'] = values;
-    await _cache!.save();
+  Future<void> _saveOutbox(
+    List<Map<String, dynamic>> values, {
+    _CacheScope? scope,
+  }) async {
+    final target = scope ?? _captureCache();
+    _requireCache(target);
+    target.cache.data['outbox'] = values;
+    await target.cache.save();
+    _requireCache(target);
     if (!_changes.isClosed) _changes.add(null);
   }
 
@@ -241,8 +270,10 @@ class MessengerRepository {
 
   Future<void> purgeExpiredLocal() async {
     if (_cache == null) return;
-    pruneLocalData(_cache!.data, DateTime.now());
-    await _cache!.save();
+    final scope = _captureCache();
+    if (!pruneLocalData(scope.cache.data, DateTime.now())) return;
+    await scope.cache.save();
+    _requireCache(scope);
     if (!_changes.isClosed) _changes.add(null);
   }
 
@@ -402,7 +433,13 @@ class MessengerRepository {
     bool viewOnce = false,
     Map<String, dynamic>? attachment,
   }) async {
+    final owner = client.auth.currentUser?.id;
+    final epoch = _sessionEpoch;
     await prepare();
+    final scope = _captureCache();
+    if (scope.owner != owner || scope.epoch != epoch) {
+      throw StateError('Messaging session changed');
+    }
     if (viewOnce &&
         (forwarded ||
             !['image', 'video'].contains(kind) ||
@@ -433,7 +470,7 @@ class MessengerRepository {
       'failed': false,
       'attachment': attachment,
     };
-    await _saveOutbox([..._outbox, item]);
+    await _saveOutbox([..._outbox, item], scope: scope);
     unawaited(flush().catchError((Object _) {}));
     return id;
   }
@@ -449,13 +486,14 @@ class MessengerRepository {
       return;
     }
     _flushing = true;
+    final scope = _captureCache();
     final completion = Completer<void>();
     _flushDone = completion;
     try {
       await purgeExpiredLocal();
       final attempted = <String>{};
       while (true) {
-        if (_disposed || client.auth.currentUser?.id != _cacheOwner) break;
+        if (!_currentCache(scope)) break;
         final item = _outbox
             .where(
               (entry) =>
@@ -490,6 +528,7 @@ class MessengerRepository {
                       },
               )
               .timeout(const Duration(seconds: 15));
+          _requireCache(scope);
           await _saveOutbox(
             _outbox
                 .map(
@@ -503,8 +542,10 @@ class MessengerRepository {
                       : e,
                 )
                 .toList(),
+            scope: scope,
           );
         } catch (error) {
+          if (!_currentCache(scope)) break;
           await _saveOutbox(
             _outbox
                 .map(
@@ -517,6 +558,7 @@ class MessengerRepository {
                       : e,
                 )
                 .toList(),
+            scope: scope,
           );
           if (isRetryableMessageError(error)) break;
         }

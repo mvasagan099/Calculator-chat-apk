@@ -3,6 +3,18 @@ import 'package:calculator_messenger/core/security/local_retention.dart';
 
 void main() {
   test(
+    'unchanged retention preserves list/row identity and reports no mutation',
+    () {
+      final rows = [
+        {'id': 'retained', 'body': 'text'},
+      ];
+      final data = <String, dynamic>{'messages.chat': rows, 'outbox': []};
+      expect(pruneLocalData(data, DateTime.utc(2026)), isFalse);
+      expect(identical(data['messages.chat'], rows), isTrue);
+      expect(identical(data['messages.chat'][0], rows[0]), isTrue);
+    },
+  );
+  test(
     'offline cached/outbox content expires and view-once bodies are never cached',
     () {
       final now = DateTime.utc(2026, 10, 15);

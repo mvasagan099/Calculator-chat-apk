@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-10-16T09:31:31.016110+00:00",
+  "project_ref": "vjjvfshpzihbrdakbzct",
+  "client_configuration": "PREPARED IN IGNORED FILES; LOCAL_UI_PREVIEW=false",
+  "public_key_in_git": false,
+  "provider_key_validation": "BLOCKED: proxy CONNECT 403 before Supabase",
+  "remote_migrations_applied_here": [],
+  "remote_existing_schema_or_versions": "UNKNOWN",
+  "local_sqlite": "IMPLEMENTED; real desktop SQLite tests pass; Android plugin/device unverified",
+  "flutter": {
+    "passed": 111,
+    "hosted_skipped": 1,
+    "analyze": "PASS"
+  },
+  "tooling_tests": 37,
+  "postgresql_local": {
+    "suites": 8,
+    "concurrent_checks": 2
+  },
+  "edge_tests": 7,
+  "workflows": "existing Android debug/profile/signed workflows preserved; lint PASS",
+  "connected_apk": {
+    "status": "BLOCKED",
+    "artifact_name": "calculator-messenger-debug-connected",
+    "sha256": null
+  },
+  "device_tests": "NOT TESTED",
+  "hosted_messaging": "BLOCKED",
+  "environment_draft": "public pair saved as suggestions; not applied or published",
+  "github_variables": "update denied by GitHub API Forbidden; owner must verify/set variables"
+}

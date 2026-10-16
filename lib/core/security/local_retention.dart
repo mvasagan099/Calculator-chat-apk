@@ -7,37 +7,61 @@ bool recordExpired(Map<String, dynamic> row, DateTime now) {
   return expiry == null || !expiry.isAfter(now);
 }
 
-void pruneLocalData(Map<String, dynamic> data, DateTime now) {
+bool pruneLocalData(Map<String, dynamic> data, DateTime now) {
+  var changed = false;
   for (final key in data.keys.toList()) {
     if ((key.startsWith('messages.') || key == 'outbox') && data[key] is List) {
-      data[key] = (data[key] as List)
-          .where(
-            (value) =>
-                value is! Map<String, dynamic> || !recordExpired(value, now),
-          )
-          .map((value) {
-            if (value is! Map<String, dynamic>) return value;
-            final row = Map<String, dynamic>.from(value);
-            if (key.startsWith('messages.') &&
-                (row['view_once'] == true || row['deleted_at'] != null)) {
-              row['body'] = '';
-              row.remove('attachment');
-              row['message_attachments'] = <Map<String, dynamic>>[];
-            }
-            return row;
-          })
-          .toList();
+      var collectionChanged = false;
+      final retained = <dynamic>[];
+      for (final value in data[key] as List) {
+        if (value is! Map<String, dynamic>) {
+          retained.add(value);
+          continue;
+        }
+        if (recordExpired(value, now)) {
+          collectionChanged = true;
+          continue;
+        }
+        if (key.startsWith('messages.') &&
+            (value['view_once'] == true || value['deleted_at'] != null) &&
+            (value['body'] != '' ||
+                value.containsKey('attachment') ||
+                value['message_attachments'] is! List ||
+                (value['message_attachments'] as List).isNotEmpty)) {
+          final row = Map<String, dynamic>.from(value);
+          row['body'] = '';
+          row.remove('attachment');
+          row['message_attachments'] = <Map<String, dynamic>>[];
+          retained.add(row);
+          collectionChanged = true;
+        } else {
+          retained.add(value);
+        }
+      }
+      if (collectionChanged) {
+        data[key] = retained;
+        changed = true;
+      }
     }
     if (key == 'conversations' && data[key] is List) {
-      data[key] = (data[key] as List).map((value) {
+      var collectionChanged = false;
+      final retained = (data[key] as List).map((value) {
         if (value is! Map<String, dynamic>) return value;
-        final row = Map<String, dynamic>.from(value);
-        if (recordExpired({'expires_at': row['preview_expires_at']}, now)) {
+        if (recordExpired({'expires_at': value['preview_expires_at']}, now) &&
+            (value['preview'] != null || value['unread'] != 0)) {
+          final row = Map<String, dynamic>.from(value);
           row['preview'] = null;
           row['unread'] = 0;
+          collectionChanged = true;
+          return row;
         }
-        return row;
+        return value;
       }).toList();
+      if (collectionChanged) {
+        data[key] = retained;
+        changed = true;
+      }
     }
   }
+  return changed;
 }

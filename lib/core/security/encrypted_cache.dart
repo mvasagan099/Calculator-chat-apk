@@ -4,8 +4,9 @@ import 'package:cryptography/cryptography.dart';
 import 'package:path_provider/path_provider.dart';
 import 'pin_vault.dart';
 import 'local_retention.dart';
+import 'local_cache.dart';
 
-class EncryptedCache {
+class EncryptedCache implements LocalCache {
   EncryptedCache(
     this.userId,
     this.store, {
@@ -19,8 +20,10 @@ class EncryptedCache {
   final _cipher = AesGcm.with256bits();
   SecretKey? _key;
   File? _file;
+  @override
   Map<String, dynamic> data = {};
   Future<void> _writes = Future.value();
+  @override
   Future<void> initialize() async {
     final keyName = 'cache.key.$userId';
     var raw = await store.read(keyName);
@@ -59,6 +62,7 @@ class EncryptedCache {
     if (data.isNotEmpty) await save();
   }
 
+  @override
   Future<void> save() {
     pruneLocalData(data, clock());
     final snapshot = jsonEncode(data);
@@ -84,6 +88,7 @@ class EncryptedCache {
 
   /// Release references after outstanding writes; encrypted history and the
   /// Keystore-wrapped key remain for the next authenticated unlock.
+  @override
   Future<void> forget() async {
     await _writes.catchError((Object _) {});
     data = {};
@@ -91,6 +96,7 @@ class EncryptedCache {
     _file = null;
   }
 
+  @override
   Future<void> clear() async {
     await _writes.catchError((Object _) {});
     data = {};
