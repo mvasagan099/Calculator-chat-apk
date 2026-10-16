@@ -32,6 +32,31 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Free unused runner disk space for Flutter native builds
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Disk space before cleanup:"
+          df -h /
+          # GitHub-hosted images include large SDKs unused by this Android APK.
+          # Do not remove Java, Flutter, Android platforms/build-tools or the requested NDK.
+          for path in /usr/share/dotnet /usr/local/share/powershell /opt/ghc; do
+            if [[ -d "$path" ]]; then sudo rm -rf -- "$path"; fi
+          done
+          sdk_root="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          for path in "$sdk_root/system-images" "$sdk_root/emulator"; do
+            if [[ -d "$path" ]]; then sudo rm -rf -- "$path"; fi
+          done
+          if [[ -d "$sdk_root/ndk" ]]; then
+            for path in "$sdk_root"/ndk/*; do
+              [[ -e "$path" ]] || continue
+              [[ "${path##*/}" == "28.2.13676358" ]] && continue
+              sudo rm -rf -- "$path"
+            done
+          fi
+          sudo apt-get clean
+          echo "Disk space after cleanup:"
+          df -h /
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: 'platform-tools'
@@ -71,6 +96,9 @@ jobs:
       - name: Build signed debug APK
         run: |
           set -o pipefail
+          echo "Disk space before Gradle:"
+          df -h /
+          trap 'echo "Disk space after Gradle:"; df -h /' EXIT
           flutter build apk --debug --no-pub --dart-define-from-file=config/ci-public.json 2>&1 | tee build-evidence/debug-build.txt
       - name: Verify artifact and signature
         run: |
