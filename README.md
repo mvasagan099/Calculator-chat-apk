@@ -109,3 +109,5 @@ deno test --allow-env=BUF_BIGINT_DISABLE --config supabase/functions/deno.json s
 ```
 
 Use the existing checkout in future cloud tasks; no additional worktree is needed. The source and debug workflow were pushed to `codex/phase2-apk-verification`; workflow execution and artifacts must be verified separately.
+
+Firebase SDK wiring uses Google Services plugin **4.5.0** with ignored `android/app/google-services.json`. CI accepts the console file as raw JSON in the `FIREBASE_ANDROID_CONFIG` secret (existing variable fallback retained). See [Firebase setup](docs/DEPLOYMENT.md#firebase-cloud-messaging) for required owner configuration and [current verification](docs/TESTING.md#firebase-sdk-configuration-check). Notification delivery is unverified without the owner configuration and an Android device.

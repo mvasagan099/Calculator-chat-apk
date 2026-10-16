@@ -47,7 +47,7 @@ jobs:
           FIREBASE_APP_ID: ${{ vars.FIREBASE_APP_ID }}
           FIREBASE_SENDER_ID: ${{ vars.FIREBASE_SENDER_ID }}
           FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
-          FIREBASE_ANDROID_CONFIG: ${{ vars.FIREBASE_ANDROID_CONFIG }}
+          FIREBASE_ANDROID_CONFIG: ${{ secrets.FIREBASE_ANDROID_CONFIG || vars.FIREBASE_ANDROID_CONFIG }}
         run: |
           python3 scripts/prepare-client-config.py --mode "$BUILD_MODE" --from-environment --output config/ci-public.json
           echo "mode=$BUILD_MODE" >> "$GITHUB_OUTPUT"

@@ -8,11 +8,19 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/config/app_config.dart';
 import 'notification_activity.dart';
 
+Future<void> initializeFirebase() async {
+  if (Firebase.apps.isEmpty) {
+    // Android can read the Google Services plugin's native resources. Explicit
+    // options, when supplied by the config preparer, match the same console file.
+    await Firebase.initializeApp(
+      options: AppConfig.firebaseConfigured ? AppConfig.firebaseOptions : null,
+    );
+  }
+}
+
 @pragma('vm:entry-point')
 Future<void> backgroundActivity(RemoteMessage message) async {
-  if (Firebase.apps.isEmpty && AppConfig.firebaseConfigured) {
-    await Firebase.initializeApp(options: AppConfig.firebaseOptions);
-  }
+  await initializeFirebase();
   final activity = NotificationActivity.parse(message.data);
   if (activity?['kind'] == 'call') {
     final local = FlutterLocalNotificationsPlugin();
@@ -136,9 +144,12 @@ class NotificationService extends ChangeNotifier {
         });
       } catch (_) {}
     }
-    if (!AppConfig.firebaseConfigured) return;
+    if (!AppConfig.firebaseConfigured &&
+        (kIsWeb || defaultTargetPlatform != TargetPlatform.android)) {
+      return;
+    }
     try {
-      await Firebase.initializeApp(options: AppConfig.firebaseOptions);
+      await initializeFirebase();
       available = true;
       FirebaseMessaging.onBackgroundMessage(backgroundActivity);
       final initial = await FirebaseMessaging.instance.getInitialMessage();

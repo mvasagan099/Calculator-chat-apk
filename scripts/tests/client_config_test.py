@@ -1,7 +1,11 @@
 import base64
 import importlib.util
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 spec = importlib.util.spec_from_file_location('client_config', Path(__file__).parents[1] / 'prepare-client-config.py')
@@ -67,12 +71,12 @@ class PublicBuildConfigTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             config.prepare(self.connected(), 'connected', self.firebase('wrong.package'))
 
-    def test_firebase_native_resources_match_public_dart_config(self):
+    def test_firebase_console_matches_public_dart_config(self):
         data, resource = config.prepare(self.connected(), 'connected', self.firebase())
         self.assertEqual(data['FIREBASE_APP_ID'], '1:123456:android:abcdef')
-        self.assertIn('name="google_app_id"', resource)
-        self.assertIn('name="gcm_defaultSenderId"', resource)
-        self.assertNotIn('private_key', resource)
+        self.assertEqual(resource, self.firebase())
+        self.assertEqual(data['FIREBASE_SENDER_ID'], resource['project_info']['project_number'])
+        self.assertNotIn('private_key', json.dumps(resource))
 
     def test_conflicting_firebase_defines_are_denied(self):
         data = self.connected()
@@ -85,6 +89,76 @@ class PublicBuildConfigTest(unittest.TestCase):
         data['FIREBASE_APP_ID'] = '1:123456:android:abcdef'
         with self.assertRaises(ValueError):
             config.prepare(data, 'connected')
+
+    def run_cli(self, root, firebase, existing=None):
+        input_file = root / 'input.json'
+        input_file.write_text(json.dumps(self.connected()))
+        android_file = root / 'google-services.json'
+        if existing is not None:
+            android_file.write_text(json.dumps(existing))
+        env = {**os.environ, 'FIREBASE_ANDROID_CONFIG': json.dumps(firebase)}
+        return subprocess.run([
+            sys.executable, str(Path(config.__file__).resolve()),
+            '--mode', 'connected', '--input', str(input_file),
+            '--output', str(root / 'public.json'),
+            '--android-output', str(android_file),
+            '--resources', str(root / 'firebase_public.xml'),
+        ], env=env, capture_output=True, text=True)
+
+    def test_raw_json_ci_input_installs_console_file_and_retires_old_xml(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            xml = root / 'firebase_public.xml'
+            xml.write_text(config.MARKER + '\n<resources/>')
+            result = self.run_cli(root, self.firebase())
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads((root / 'google-services.json').read_text()), self.firebase())
+            self.assertFalse(xml.exists())
+            self.assertEqual(json.loads((root / 'public.json').read_text())['FIREBASE_PROJECT_ID'], 'unit-test-project')
+            self.assertNotIn('public-unit-test-key', result.stdout + result.stderr)
+
+    def test_ci_input_does_not_replace_different_owner_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            owner = self.firebase()
+            owner['project_info']['project_id'] = 'owner-project'
+            result = self.run_cli(root, self.firebase(), existing=owner)
+            self.assertEqual(result.returncode, 2)
+            self.assertEqual(json.loads((root / 'google-services.json').read_text()), owner)
+            self.assertFalse((root / 'public.json').exists())
+
+    def test_service_account_cannot_be_smuggled_into_console_file(self):
+        firebase = self.firebase()
+        firebase['private_key'] = 'not-a-real-key'
+        with self.assertRaises(ValueError):
+            config.prepare(self.connected(), 'connected', firebase)
+
+    def test_ci_environment_materializes_exact_android_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            env = {k: v for k, v in os.environ.items() if k not in config.PUBLIC_FIELDS}
+            env.update({
+                'SUPABASE_URL': self.connected()['SUPABASE_URL'],
+                'SUPABASE_ANON_KEY': self.connected()['SUPABASE_ANON_KEY'],
+                'FIREBASE_ANDROID_CONFIG': json.dumps(self.firebase()),
+            })
+            result = subprocess.run([
+                sys.executable, str(Path(config.__file__).resolve()),
+                '--mode', 'connected', '--from-environment',
+                '--output', 'config/ci-public.json',
+            ], cwd=root, env=env, capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads((root / 'android/app/google-services.json').read_text()), self.firebase())
+            self.assertFalse((root / 'android/app/src/main/res/values/firebase_public.xml').exists())
+
+    def test_malformed_ci_console_input_fails_without_outputs(self):
+        for value in [None, [], {}, {'client': []}, 'base64-is-not-the-required-format']:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                result = self.run_cli(root, value)
+                self.assertEqual(result.returncode, 2)
+                self.assertFalse((root / 'google-services.json').exists())
+                self.assertFalse((root / 'public.json').exists())
 
 
 if __name__ == '__main__':

@@ -46,7 +46,7 @@ jobs:
         env:
           SUPABASE_URL: ${{ vars.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
-          FIREBASE_ANDROID_CONFIG: ${{ vars.FIREBASE_ANDROID_CONFIG }}
+          FIREBASE_ANDROID_CONFIG: ${{ secrets.FIREBASE_ANDROID_CONFIG || vars.FIREBASE_ANDROID_CONFIG }}
         run: python3 scripts/prepare-client-config.py --mode connected --from-environment --output config/ci-public.json
       - name: Verify locked source before accessing signing inputs
         run: |

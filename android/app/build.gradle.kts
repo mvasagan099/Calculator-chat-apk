@@ -5,6 +5,12 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Provider-free preview/Supabase-only builds remain supported. Connected Firebase
+// builds use the console file (materialized by prepare-client-config.py in CI).
+if (file("google-services.json").isFile) {
+    apply(plugin = "com.google.gms.google-services")
+}
+
 val signingProperties = Properties()
 val signingFile = rootProject.file("key.properties")
 if (signingFile.exists()) signingFile.inputStream().use { signingProperties.load(it) }
