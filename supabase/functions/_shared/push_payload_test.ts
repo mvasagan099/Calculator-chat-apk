@@ -16,10 +16,14 @@ Deno.test("message, group and missed-call payloads never include private preview
       throw new Error("Private preview escaped into provider payload");
     }
     if (
-      payload.message.notification.title !== "Calculator" ||
-      payload.message.notification.body !== "New activity" ||
-      payload.message.android.notification.visibility !== "PRIVATE" ||
-      Object.keys(payload.message.data).sort().join() !== "kind,resource_id"
+      (kind !== "call" &&
+        (payload.message.notification?.title !== "Calculator" ||
+          payload.message.notification?.body !== "New activity")) ||
+      (kind === "call" && payload.message.notification !== undefined) ||
+      (kind !== "call" &&
+        payload.message.android.notification?.visibility !== "PRIVATE") ||
+      Object.keys(payload.message.data).sort().join() !==
+        (kind === "call" ? "expires_at,kind,resource_id" : "kind,resource_id")
     ) {
       throw new Error("Notification privacy policy violated");
     }
@@ -30,7 +34,7 @@ Deno.test("incoming calls use the dedicated channel and short TTL", () => {
   if (
     payload.message.android.ttl !== "45s" ||
     payload.message.android.priority !== "HIGH" ||
-    payload.message.android.notification.channel_id !== "incoming_calls"
+    payload.message.android.notification !== undefined
   ) {
     throw new Error("Incoming call delivery policy violated");
   }

@@ -32,6 +32,14 @@ class CallController extends ChangeNotifier {
   final CallDevice device;
   final CallTransport Function() createTransport;
   Room? get room => _attempt?.transport?.room;
+  bool get finished => _ended;
+  bool get joined =>
+      metadata?['self_state'] == 'joined' ||
+      (metadata?['self_state'] == null && metadata?['state'] == 'accepted');
+  bool get sharing => _attempt?.transport?.sharing ?? false;
+  bool _sharingBusy = false;
+  bool audioOnly = false;
+  int _sharingEpoch = 0;
   bool get reconnecting => _attempt?.transport?.reconnecting ?? false;
   String? callId;
   Map<String, dynamic>? metadata;
@@ -73,7 +81,8 @@ class CallController extends ChangeNotifier {
   _Attempt? _attempt;
   bool _disposed = false, _ended = false, _timeoutPending = false;
   int _generation = 0;
-  DateTime? _lastTimeout;
+  DateTime? _lastTimeout, _lastAuthorization;
+  bool _checkingAuthorization = false;
   bool connecting = false,
       mic = true,
       camera = false,
@@ -86,7 +95,7 @@ class CallController extends ChangeNotifier {
   }
 
   Future<void> observe(String id) async {
-    if (_disposed || callId == id) return;
+    if (_disposed || (callId == id && !_ended)) return;
     if (callId != null) {
       if (!_ended && ['ringing', 'accepted'].contains(metadata?['state'])) {
         throw StateError('End the current call first');
@@ -104,18 +113,29 @@ class CallController extends ChangeNotifier {
         .watch(id)
         .listen(
           (rows) {
-            if (_disposed ||
-                generation != _generation ||
-                rows.isEmpty ||
-                _ended) {
+            if (_disposed || generation != _generation || _ended) {
+              return;
+            }
+            if (rows.isEmpty) {
+              _ended = true;
+              metadata = {...?metadata, 'state': 'unavailable'};
+              unawaited(disconnect());
+              _notify();
               return;
             }
             metadata = rows.first;
             final state = metadata!['state'];
-            if (!['ringing', 'accepted'].contains(state)) {
+            if (!['ringing', 'accepted'].contains(state) ||
+                [
+                  'removed',
+                  'declined',
+                  'busy',
+                  'missed',
+                ].contains(metadata?['self_state'])) {
               _ended = true;
               unawaited(disconnect());
             } else if (state == 'accepted' &&
+                joined &&
                 _attempt == null &&
                 error == null) {
               unawaited(_connectSafely());
@@ -124,7 +144,10 @@ class CallController extends ChangeNotifier {
           },
           onError: (Object _) {
             if (_disposed || generation != _generation || _ended) return;
-            error = 'Call updates interrupted. Check your connection.';
+            error =
+                'Call authorization or updates unavailable. Reopen the call to retry.';
+            _ended = true;
+            unawaited(disconnect());
             _notify();
           },
         );
@@ -137,6 +160,13 @@ class CallController extends ChangeNotifier {
         );
       }
       final now = DateTime.now();
+      if (_attempt != null &&
+          (_lastAuthorization == null ||
+              now.difference(_lastAuthorization!) >=
+                  const Duration(seconds: 15))) {
+        _lastAuthorization = now;
+        unawaited(verifyAuthorization());
+      }
       if (call['state'] == 'ringing' &&
           call['caller_id'] == backend.userId &&
           now.difference(DateTime.parse(call['created_at'])) >
@@ -160,6 +190,28 @@ class CallController extends ChangeNotifier {
     _notify();
   }
 
+  Future<void> verifyAuthorization() async {
+    final id = callId;
+    final generation = _generation;
+    if (id == null || _ended || _disposed || _checkingAuthorization) return;
+    _checkingAuthorization = true;
+    try {
+      final allowed = await backend
+          .authorized(id)
+          .timeout(const Duration(seconds: 10));
+      if (!allowed && generation == _generation && !_disposed && !_ended) {
+        _ended = true;
+        metadata = {...?metadata, 'state': 'unavailable'};
+        error = 'Call access has been withdrawn.';
+        await disconnect();
+      }
+    } catch (_) {
+      /* Temporary network loss is handled by the SDK reconnect path. */
+    } finally {
+      _checkingAuthorization = false;
+    }
+  }
+
   Future<void> _connectSafely() async {
     try {
       await connect();
@@ -172,7 +224,10 @@ class CallController extends ChangeNotifier {
     final id = callId;
     final generation = _generation;
     if (id == null || _ended || _disposed) return;
-    await backend.transition(id, 'accept');
+    await backend.transition(
+      id,
+      metadata?['self_state'] == 'left' ? 'join' : 'accept',
+    );
     if (generation == _generation && !_ended && !_disposed) await connect();
   }
 
@@ -192,6 +247,9 @@ class CallController extends ChangeNotifier {
     final attempt = _Attempt();
     _attempt = attempt;
     connecting = true;
+    audioOnly = false;
+    camera = false;
+    frontCamera = true;
     error = null;
     final video = metadata?['video'] == true;
     _notify();
@@ -200,21 +258,37 @@ class CallController extends ChangeNotifier {
       if (!_current(attempt)) return;
       // Ask before entering an SDK capture operation. A permission dialog can
       // remain open after the user has ended the call.
-      await device.permissions(video);
+      await device.permissions(false);
+      if (!_current(attempt)) return;
+      var useCamera = video;
+      if (video) {
+        try {
+          await device.permissions(true);
+        } catch (_) {
+          useCamera = false;
+        }
+      }
       if (!_current(attempt)) return;
       final transport = createTransport();
       attempt.transport = transport;
       transport.addListener(_mediaChanged);
       await transport.connect(grant);
       if (!_current(attempt)) return;
-      await device.start(attempt.serviceId, id, video);
+      await device.start(attempt.serviceId, id, useCamera);
       if (!_current(attempt)) return;
       await transport.microphone(true);
       if (!_current(attempt)) return;
       mic = true;
-      if (video) await transport.camera(true);
+      if (useCamera) {
+        try {
+          await transport.camera(true);
+        } catch (_) {
+          useCamera = false;
+        }
+      }
       if (!_current(attempt)) return;
-      camera = video;
+      camera = useCamera;
+      if (video && !camera) error = 'Camera unavailable. Audio remains active.';
       await transport.speaker(speaker);
     } catch (_) {
       if (_current(attempt)) {
@@ -243,6 +317,7 @@ class CallController extends ChangeNotifier {
     await Future.wait([
       if (transport != null) transport.close().catchError((Object _) {}),
       device.stop(attempt.serviceId).catchError((Object _) {}),
+      device.projection(attempt.serviceId, false).catchError((Object _) {}),
     ]);
   }
 
@@ -250,6 +325,14 @@ class CallController extends ChangeNotifier {
     if (_attempt?.transport?.failed == true && !_ended) {
       error = 'The call connection ended.';
       unawaited(_finish('disconnect').catchError((Object _) {}));
+    }
+    if (!sharing) {
+      final attempt = _attempt;
+      if (attempt != null) {
+        unawaited(
+          device.projection(attempt.serviceId, false).catchError((Object _) {}),
+        );
+      }
     }
     _notify();
   }
@@ -269,6 +352,13 @@ class CallController extends ChangeNotifier {
     final attempt = _attempt;
     if (attempt?.transport == null || connecting || !_current(attempt!)) return;
     final enabled = !camera;
+    if (enabled) {
+      await device.permissions(true);
+      if (!_current(attempt)) return;
+      try { await device.start(attempt.serviceId, callId!, true); }
+      catch (_) { if(_current(attempt)) await _finish('disconnect'); rethrow; }
+      if (!_current(attempt)) return;
+    }
     await attempt.transport!.camera(enabled);
     if (_current(attempt)) {
       camera = enabled;
@@ -298,7 +388,73 @@ class CallController extends ChangeNotifier {
     }
   }
 
-  Future<void> end() => _finish('end');
+  Future<void> toggleAudioOnly() async {
+    final attempt = _attempt;
+    if (attempt?.transport == null || !_current(attempt!)) return;
+    final enabled = !audioOnly;
+    if (enabled) {
+      await stopSharing();
+      await attempt.transport!.camera(false);
+      if (!_current(attempt)) return;
+      camera = false;
+    }
+    await attempt.transport!.receiveVideo(!enabled);
+    if (_current(attempt)) {
+      audioOnly = enabled;
+      _notify();
+    }
+  }
+
+  Future<void> stopSharing() async {
+    ++_sharingEpoch;
+    final attempt = _attempt;
+    if (attempt == null) return;
+    try {
+      await attempt.transport?.screenShare(false);
+    } finally {
+      await device.projection(attempt.serviceId, false);
+      _notify();
+    }
+  }
+
+  Future<void> toggleSharing(
+    Future<bool> Function(Future<bool> Function()) consent,
+  ) async {
+    final attempt = _attempt;
+    if (attempt?.transport == null ||
+        !_current(attempt!) ||
+        connecting ||
+        _sharingBusy) {
+      return;
+    }
+    if (sharing) {
+      await stopSharing();
+      return;
+    }
+    _sharingBusy = true;
+    final epoch = ++_sharingEpoch;
+    try {
+      if (!await consent(device.projectionConsent) ||
+          !_current(attempt) ||
+          epoch != _sharingEpoch) {
+        return;
+      }
+      await device.projection(attempt.serviceId, true);
+      if (!_current(attempt) || epoch != _sharingEpoch) return;
+      await attempt.transport!.screenShare(true);
+      if (!_current(attempt) || epoch != _sharingEpoch) {
+        await attempt.transport!.screenShare(false);
+      }
+    } finally {
+      if (!sharing) await device.projection(attempt.serviceId, false);
+      _sharingBusy = false;
+      _notify();
+    }
+  }
+
+  Future<void> endForAll() => _finish('end_for_all');
+  Future<void> end() =>
+      _finish(metadata?['group_call'] == true ? 'leave' : 'end');
   Future<void> _finish(String action) async {
     final id = callId;
     if (id == null || _ended || _disposed) return;
@@ -326,6 +482,7 @@ class CallController extends ChangeNotifier {
   }
 
   Future<void> disconnect() async {
+    ++_sharingEpoch;
     final previous = _attempt;
     final id = callId;
     _attempt = null;
@@ -346,6 +503,7 @@ class CallController extends ChangeNotifier {
     metadata = null;
     duration = Duration.zero;
     _lastTimeout = null;
+    _lastAuthorization = null;
     _timeoutPending = false;
     await subscription?.cancel();
     await closing;

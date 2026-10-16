@@ -541,7 +541,11 @@ async function run(config: Config) {
       await step("LiveKit token authorization and call signaling", async () => {
         const target = conversation();
         const call: string = await value(
-          a.rpc("start_call", { cid: target, use_video: false }),
+          a.rpc("begin_call", {
+            cid: target,
+            use_video: false,
+            request: crypto.randomUUID(),
+          }),
         );
         calls.push(call);
         check(accessDenied(
@@ -550,7 +554,9 @@ async function run(config: Config) {
           })).error,
         ));
         await op(
-          b.rpc("transition_call", { callid: call, action: "accept" }),
+          b.functions.invoke("call-control", {
+            body: { call_id: call, action: "accept" },
+          }),
         );
         for (const client of [a, b]) {
           const grant = await value(
@@ -567,13 +573,20 @@ async function run(config: Config) {
             atob(payload.padEnd(Math.ceil(payload.length / 4) * 4, "=")),
           );
           check(
-            claims.sub === (client === a ? uidA : uidB) &&
-              claims.exp > claims.iat && claims.exp - claims.iat <= 300 &&
+            typeof claims.sub === "string" &&
+              claims.sub.startsWith(`${client === a ? uidA : uidB}:`) &&
+              claims.exp > claims.nbf && claims.exp - claims.nbf <= 90 &&
+              claims.video?.canPublishSources?.join(",") === "microphone" &&
+              claims.video?.canPublishData === false &&
               claims.video?.roomJoin &&
               claims.video?.room,
           );
         }
-        await op(a.rpc("transition_call", { callid: call, action: "end" }));
+        await op(
+          a.functions.invoke("call-control", {
+            body: { call_id: call, action: "end" },
+          }),
+        );
         check(
           (await value(
             b.from("call_history").select("outcome").eq("call_id", call)

@@ -13,6 +13,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="false" />
     <application
@@ -50,6 +51,8 @@
             </intent-filter>
         </activity>
         <service android:name=".CallForegroundService" android:exported="false" android:foregroundServiceType="microphone|camera" android:stopWithTask="false" />
+        <service android:name=".ProjectionForegroundService" android:exported="false" android:foregroundServiceType="mediaProjection" android:stopWithTask="true" />
+        <receiver android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" android:exported="false" />
         <receiver android:name=".EndCallReceiver" android:exported="false" />
         <meta-data android:name="firebase_messaging_auto_init_enabled" android:value="false" />
         <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="activity" />

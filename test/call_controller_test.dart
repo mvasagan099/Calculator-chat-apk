@@ -8,7 +8,9 @@ class TestBackend implements CallBackend {
   final streams = <String, StreamController<List<Map<String, dynamic>>>>{};
   final grants = <String, Completer<CallGrant>>{};
   Completer<void>? transitionPending;
-  bool failTransition = false;
+  bool failTransition = false, allowed = true;
+  @override
+  Future<bool> authorized(String id) async => allowed;
   String owner = 'owner';
   final transitions = <String>[];
   @override
@@ -26,13 +28,22 @@ class TestBackend implements CallBackend {
     if (failTransition) throw StateError('offline');
   }
 
-  void emit(String id, String state) => streams[id]!.add([
+  void emit(
+    String id,
+    String state, {
+    String? selfState,
+    bool group = false,
+    bool video = true,
+    DateTime? createdAt,
+  }) => streams[id]!.add([
     {
       'id': id,
       'state': state,
+      'self_state': ?selfState,
+      'group_call': group,
       'caller_id': 'owner',
-      'video': true,
-      'created_at': DateTime.now().toIso8601String(),
+      'video': video,
+      'created_at': (createdAt ?? DateTime.now()).toIso8601String(),
     },
   ]);
   void allow(String id) => grants[id]!.complete(
@@ -47,12 +58,16 @@ class TestBackend implements CallBackend {
 
 class TestDevice implements CallDevice {
   Completer<void>? permissionPending, startPending;
+  Completer<bool>? consentPending;
+  bool denyCamera = false;
+  final projectionChanges = <bool>[];
   final stopped = <String>[];
   String? active;
   int permissionRequests = 0;
   @override
   Future<void> permissions(bool video) async {
     permissionRequests++;
+    if (video && denyCamera) throw StateError('Camera denied');
     await permissionPending?.future;
   }
 
@@ -60,6 +75,14 @@ class TestDevice implements CallDevice {
   Future<void> start(String session, String callId, bool video) async {
     await startPending?.future;
     active = session;
+  }
+
+  @override
+  Future<bool> projectionConsent() async =>
+      consentPending == null ? true : await consentPending!.future;
+  @override
+  Future<void> projection(String session, bool enabled) async {
+    projectionChanges.add(enabled);
   }
 
   @override
@@ -72,6 +95,22 @@ class TestDevice implements CallDevice {
 class TestTransport extends CallTransport {
   Completer<void>? connectPending;
   bool closed = false, failMic = false, failedConnection = false;
+  bool sharingNow = false, reconnectingNow = false;
+  @override
+  bool get sharing => sharingNow;
+  @override
+  bool get reconnecting => reconnectingNow;
+  @override
+  Future<void> screenShare(bool enabled) async {
+    operations.add('share:$enabled');
+    sharingNow = enabled;
+  }
+
+  @override
+  Future<void> receiveVideo(bool enabled) async {
+    operations.add('receive-video:$enabled');
+  }
+
   @override
   bool get failed => failedConnection;
   final operations = <String>[];
@@ -99,6 +138,7 @@ class TestTransport extends CallTransport {
   @override
   Future<void> close() async {
     closed = true;
+    sharingNow = false;
   }
 }
 
@@ -346,4 +386,167 @@ void main() {
     expect(backend.transitions, ['a:end']);
     expect(controller.hasPendingEnd, isFalse);
   });
+  test(
+    'group invitation does not auto-connect when another participant accepts',
+    () async {
+      await controller.observe('g');
+      backend.emit('g', 'accepted', selfState: 'invited', group: true);
+      await settle();
+      expect(backend.grants, isEmpty);
+      final accept = controller.accept();
+      await settle();
+      expect(backend.transitions, ['g:accept']);
+      backend.allow('g');
+      await accept;
+      expect(transports.single.operations.first, 'connect');
+    },
+  );
+  test('participant removal cancels a pending group token', () async {
+    await controller.observe('g');
+    backend.emit('g', 'accepted', selfState: 'joined', group: true);
+    await settle();
+    backend.emit('g', 'accepted', selfState: 'removed', group: true);
+    backend.allow('g');
+    await settle();
+    expect(controller.finished, isTrue);
+    expect(transports, isEmpty);
+  });
+  test(
+    'leaving a group sends leave rather than ending the whole room',
+    () async {
+      await controller.observe('g');
+      backend.emit('g', 'accepted', selfState: 'joined', group: true);
+      await settle();
+      backend.allow('g');
+      await settle();
+      await controller.end();
+      expect(backend.transitions, ['g:leave']);
+      expect(transports.single.closed, isTrue);
+    },
+  );
+  test('reconnection updates do not create duplicate tracks', () async {
+    await start('a');
+    backend.allow('a');
+    await settle();
+    transports.single.reconnectingNow = true;
+    transports.single.notifyListeners();
+    backend.emit('a', 'accepted');
+    await settle();
+    expect(controller.reconnecting, isTrue);
+    expect(transports.length, 1);
+    expect(
+      transports.single.operations.where((v) => v == 'mic:true').length,
+      1,
+    );
+    transports.single.reconnectingNow = false;
+    transports.single.notifyListeners();
+    expect(controller.reconnecting, isFalse);
+  });
+  test('unavailable camera preserves connected microphone audio', () async {
+    device.denyCamera = true;
+    await start('a');
+    backend.allow('a');
+    await settle();
+    expect(controller.camera, isFalse);
+    expect(controller.mic, isTrue);
+    expect(transports.single.operations, contains('mic:true'));
+    expect(transports.single.operations, isNot(contains('camera:true')));
+  });
+  test('cancelled screen consent cannot publish after ending', () async {
+    await start('a');
+    backend.allow('a');
+    await settle();
+    device.consentPending = Completer<bool>();
+    final sharing = controller.toggleSharing((request) => request());
+    await settle();
+    await controller.end();
+    device.consentPending!.complete(true);
+    await sharing;
+    expect(device.projectionChanges, isNot(contains(true)));
+    expect(transports.single.sharing, isFalse);
+  });
+  test(
+    'screen sharing closes with the call and stops projection service',
+    () async {
+      await start('a');
+      backend.allow('a');
+      await settle();
+      await controller.toggleSharing((request) => request());
+      expect(controller.sharing, isTrue);
+      expect(device.projectionChanges, contains(true));
+      await controller.end();
+      await settle();
+      expect(controller.sharing, isFalse);
+      expect(device.projectionChanges.last, isFalse);
+    },
+  );
+  test(
+    'audio-only fallback stops screen/camera and unsubscribes video',
+    () async {
+      await start('a');
+      backend.allow('a');
+      await settle();
+      await controller.toggleAudioOnly();
+      expect(controller.camera, isFalse);
+      expect(controller.audioOnly, isTrue);
+      expect(transports.single.operations, contains('receive-video:false'));
+      await controller.toggleAudioOnly();
+      expect(transports.single.operations.last, 'receive-video:true');
+      expect(controller.camera, isFalse);
+    },
+  );
+  test('loss of the authorized snapshot closes media', () async {
+    await start('a');
+    backend.allow('a');
+    await settle();
+    backend.streams['a']!.add([]);
+    await settle();
+    expect(controller.finished, isTrue);
+    expect(transports.single.closed, isTrue);
+  });
+  test('voice media avoids camera capture and camera permission', () async {
+    await controller.observe('v');
+    backend.emit('v', 'accepted', video: false);
+    await settle();
+    backend.allow('v');
+    await settle();
+    expect(device.permissionRequests, 1);
+    expect(transports.single.operations, isNot(contains('camera:true')));
+  });
+  test('rejecting invitation never creates a room or media track', () async {
+    await controller.observe('r');
+    backend.emit('r', 'ringing', selfState: 'invited');
+    await controller.reject();
+    expect(backend.transitions, ['r:reject']);
+    expect(transports, isEmpty);
+  });
+  test('expired outgoing ring sends one authoritative timeout', () async {
+    await controller.observe('timeout');
+    backend.emit(
+      'timeout',
+      'ringing',
+      createdAt: DateTime.now().subtract(const Duration(seconds: 46)),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    await settle();
+    expect(backend.transitions, ['timeout:timeout']);
+    backend.emit('timeout', 'missed');
+    await settle();
+    expect(controller.finished, isTrue);
+    expect(transports, isEmpty);
+    await controller.reset();
+  });
+  test(
+    'withdrawn membership/device authorization closes already-running media',
+    () async {
+      await start('a');
+      backend.allow('a');
+      await settle();
+      backend.allowed = false;
+      await controller.verifyAuthorization();
+      expect(controller.finished, isTrue);
+      expect(transports.single.closed, isTrue);
+      expect(device.active, isNull);
+    },
+  );
 }

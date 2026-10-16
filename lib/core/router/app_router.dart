@@ -158,7 +158,21 @@ class AppRouter {
             .select('id')
             .eq('id', id)
             .maybeSingle();
-        if (call != null) path = '/call/$id';
+        if (call != null &&
+            auth.lock.unlocked &&
+            auth.signedIn &&
+            auth.deviceAuthorized &&
+            auth.ownerMatches) {
+          if (activity['action'] == 'reject') {
+            await auth.client!.functions.invoke(
+              'call-control',
+              body: {'call_id': id, 'action': 'reject'},
+            );
+            path = '/calls';
+          } else {
+            path = '/call/$id';
+          }
+        }
       } else if (activity['kind'] == 'message') {
         final m = await auth.client!
             .from('messages')

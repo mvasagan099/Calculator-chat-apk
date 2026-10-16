@@ -9,10 +9,13 @@ import android.os.IBinder
 class CallForegroundService : Service() {
     companion object {
         var onEnd: ((String) -> Unit)? = null
+        var ready: Pair<String, (Boolean) -> Unit>? = null
         var session: String? = null
         var callId: String? = null
         fun stop(context: Context, id: String) {
             if (session != id) return
+            if (ready?.first == id) { ready?.second?.invoke(false); ready = null }
+            ProjectionForegroundService.stop(context,id)
             session = null
             callId = null
             context.stopService(Intent(context, CallForegroundService::class.java))
@@ -38,12 +41,18 @@ class CallForegroundService : Service() {
             .setContentText("Call in progress").setCategory(Notification.CATEGORY_CALL)
             .setVisibility(Notification.VISIBILITY_PRIVATE).setOngoing(true).setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "End call", end).build()).build()
+        try {
         // Microphone/camera foreground types were introduced in Android 11.
         if (Build.VERSION.SDK_INT >= 30) {
             var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
             if (intent?.getBooleanExtra("video", false) == true) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
             startForeground(31, notification, type)
         } else startForeground(31, notification)
+        if (ready?.first == id) { ready?.second?.invoke(true); ready = null }
+        } catch (e: RuntimeException) {
+            if (ready?.first == id) { ready?.second?.invoke(false); ready = null }
+            stop(this,id)
+        }
         return START_NOT_STICKY
     }
 }

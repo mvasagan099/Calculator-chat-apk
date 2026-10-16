@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../providers/app_providers.dart';
 import 'auth_service.dart';
+import '../../features/calls/call_screen.dart';
 import '../../repositories/messenger_repository.dart';
 import '../../features/notifications/notification_service.dart';
 
@@ -89,17 +90,31 @@ class _PrivateSessionState extends ConsumerState<PrivateSession> {
         client
             .from('calls')
             .stream(primaryKey: ['id'])
-            .eq('state', 'ringing')
+            .inFilter('state', ['ringing', 'accepted'])
             .listen((rows) {
               if (!active()) return;
               for (final call in rows) {
-                if (call['caller_id'] != owner &&
-                    DateTime.now().difference(
-                          DateTime.parse(call['created_at']),
-                        ) <
-                        const Duration(seconds: 45) &&
-                    handled.add(call['id'])) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (['ringing', 'accepted'].contains(call['state']) &&
+                    call['caller_id'] != owner &&
+                    handled.add('${call['id']}:${call['updated_at']}')) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) async {
+                    try {
+                      final snapshot = await client.rpc(
+                        'call_snapshot',
+                        params: {'callid': call['id']},
+                      );
+                      if (!active() ||
+                          snapshot['self_state'] != 'invited' ||
+                          !DateTime.parse(
+                            snapshot['invitation_expires_at'],
+                          ).isAfter(DateTime.now())) {
+                        return;
+                      }
+                    } catch (_) {
+                      return;
+                    }
+                    final ongoing = ref.read(callProvider);
+                    if (ongoing.callId != null && !ongoing.finished) return;
                     if (active() && ref.read(lockProvider).unlocked) {
                       widget.router.push('/call/${call['id']}');
                     }

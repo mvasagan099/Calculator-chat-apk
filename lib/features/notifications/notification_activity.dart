@@ -9,6 +9,12 @@ class NotificationActivity {
         ).hasMatch(id)) {
       return null;
     }
-    return {'kind': kind, 'resource_id': id};
+    final action = data['action'];
+    return {
+      'kind': kind,
+      'resource_id': id,
+      if (kind == 'call' && ['answer', 'reject'].contains(action))
+        'action': action,
+    };
   }
 }

@@ -47,18 +47,39 @@ class MainActivity : FlutterFragmentActivity() {
                     val id = call.argument<String>("id")
                     val callId = call.argument<String>("callId")
                     if (id == null || callId == null) result.error("invalid", "Call identity required", null)
+                    else if (CallForegroundService.ready != null) result.error("busy", "Call service transition pending", null)
                     else {
+                        CallForegroundService.ready = Pair(id) { success -> runOnUiThread {
+                            if (success) result.success(null)
+                            else result.error("service", "Call service unavailable; keep the app in the foreground", null)
+                        } }
                         CallForegroundService.session = id
                         CallForegroundService.callId = callId
                         val intent = Intent(this, CallForegroundService::class.java)
                             .putExtra("id", id).putExtra("video", call.argument<Boolean>("video") ?: false)
                         try {
                             if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
-                            result.success(null)
                         } catch (e: RuntimeException) {
                             CallForegroundService.stop(this, id)
-                            result.error("service", "Call service unavailable; keep the app in the foreground", null)
                         }
+                    }
+                }
+                "projection" -> {
+                    val id = call.argument<String>("id")
+                    if (id == null) result.error("invalid", "Call identity required", null)
+                    else if (call.argument<Boolean>("enabled") != true) {
+                        ProjectionForegroundService.stop(this,id)
+                        result.success(null)
+                    } else if (CallForegroundService.session != id || ProjectionForegroundService.ready != null) {
+                        result.error("unavailable", "Active call required", null)
+                    } else {
+                        ProjectionForegroundService.session = id
+                        ProjectionForegroundService.ready = { success -> runOnUiThread {
+                            if (success) result.success(null)
+                            else result.error("projection", "Screen sharing service unavailable", null)
+                        } }
+                        try { startForegroundService(Intent(this,ProjectionForegroundService::class.java).putExtra("id",id)) }
+                        catch(e: RuntimeException) { ProjectionForegroundService.stop(this,id) }
                     }
                 }
                 "stopCall" -> {

@@ -1,6 +1,22 @@
 # Validation evidence and release checklist
 
-## Current Phase 4 evidence
+## Current Phase 5 evidence
+
+**83 Flutter tests pass; one hosted test is skipped.** Analysis and locked resolution pass. Eleven migrations, eight PostgreSQL suites and two real concurrent transaction checks pass. Nine Edge Functions and two hosted runners type-check; seven Edge tests (including actual test-JWT signature/claims), 11 config tests and 17 native Signal regressions pass. See [PHASE5_CALLS.md](PHASE5_CALLS.md) for scope, logs and the device/provider matrix. No APK/provider/media/device success is claimed.
+
+```sh
+./scripts/flutterw pub get --enforce-lockfile
+./scripts/flutterw analyze
+./scripts/flutterw test
+./scripts/test-database.sh
+deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/tests/hosted*.ts
+deno test --allow-env=BUF_BIGINT_DISABLE --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
+python3 -m unittest discover -s scripts/tests -p '*_test.py'
+```
+
+`BUF_BIGINT_DISABLE` is the installed protobuf runtime's non-secret feature switch, read at import; no other environment/network test permission is required. The SQL harness creates a disposable pinned PostgreSQL container with no published ports and runs concurrent transactions only inside it. No hosted database is used by these tests.
+
+## Historical Phase 4 evidence
 
 Full Flutter suite: **66 passed, one hosted integration skipped**. Analysis passes. Ten migrations and seven real PostgreSQL suites pass; eight Edge entry points and both hosted runners type-check; five Edge tests and 11 public-config tests pass. The separate official native Signal/JNI probe passes 17 checks. These are distinct test scopes; the Flutter app is not E2EE-enabled. See [PHASE4_SECURITY.md](PHASE4_SECURITY.md) for the scenario/status table and current logs.
 
@@ -34,7 +50,7 @@ Phase 3 adds 11 tests for equal-timestamp ordering, transient/terminal retry cla
 ./scripts/flutterw test
 ./scripts/test-database.sh
 deno check --config supabase/functions/deno.json supabase/functions/*/index.ts
-deno test --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
+deno test --allow-env=BUF_BIGINT_DISABLE --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
 ```
 
 The SQL harness starts a pinned PostgreSQL container with no published ports and removes only its own test container. Its bootstrap is test-only scaffolding for Supabase schema contracts. It does not mock database operations; it also does not replace testing actual Supabase Auth, Storage, Cron or Realtime infrastructure.

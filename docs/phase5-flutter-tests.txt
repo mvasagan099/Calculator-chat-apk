@@ -1,0 +1,117 @@
+Resolving dependencies...
+Downloading packages...
+  clock 1.1.2 (1.1.3 available)
+  code_assets 1.2.1 (2.1.0 available)
+  connectivity_plus 7.3.1 (7.3.2 available)
+  cross_file 0.3.5+5 (0.4.0 available)
+  cupertino_ui 1.0.2 (1.1.3 available)
+  dbus 0.7.15 (0.8.0 available)
+  file_picker_linux 2.0.0 (2.0.2 available)
+  gsettings 0.2.8 (0.2.9 available)
+  hooks 2.0.2 (2.2.0 available)
+  image_picker_ios 0.8.13+10 (0.8.13+12 available)
+  intl 0.20.2 (0.20.3 available)
+  matcher 0.12.19 (0.12.20 available)
+  material_color_utilities 0.13.0 (0.13.1 available)
+  material_ui 1.2.0 (1.7.0 available)
+  meta 1.18.0 (1.19.0 available)
+  nm 0.5.0 (0.6.0 available)
+  objective_c 9.5.0 (9.6.2 available)
+  petitparser 7.0.2 (7.1.0 available)
+  record_use 0.6.0 (1.1.1 available)
+  sdp_transform 0.3.2 (0.4.0 available)
+  stack_trace 1.12.1 (1.12.2 available)
+  test_api 0.7.11 (0.7.15 available)
+  vector_math 2.2.0 (2.4.3 available)
+  xml 7.0.1 (7.1.0 available)
+Got dependencies!
+24 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+00:00 +0: loading /workspace/Calculator-chat-apk/test/calculator_engine_test.dart
+00:00 +0: /workspace/Calculator-chat-apk/test/calculator_engine_test.dart: operator precedence and parentheses
+00:00 +1: /workspace/Calculator-chat-apk/test/calculator_engine_test.dart: decimals, signs and percentages
+00:00 +2: /workspace/Calculator-chat-apk/test/calculator_engine_test.dart: invalid input and division by zero never succeed
+00:00 +3: /workspace/Calculator-chat-apk/test/auth_device_test.dart: HTTP adapter: approval is an independent gate, with no auto-unlock
+00:00 +4: /workspace/Calculator-chat-apk/test/auth_device_test.dart: HTTP adapter: revocation locks an already unlocked calculator session
+00:00 +5: /workspace/Calculator-chat-apk/test/auth_device_test.dart: HTTP adapter: unavailable initial authorization fails closed; an existing approved session tolerates temporary loss
+00:00 +6: /workspace/Calculator-chat-apk/test/call_controller_test.dart: ending during token request never asks permission or creates media
+00:00 +7: /workspace/Calculator-chat-apk/test/call_controller_test.dart: ending during permission prompt prevents media after permission is granted
+00:00 +8: /workspace/Calculator-chat-apk/test/call_controller_test.dart: end interrupts a pending connection before server response
+00:00 +9: /workspace/Calculator-chat-apk/test/call_controller_test.dart: late native start is stopped without publishing microphone or camera
+00:00 +10: /workspace/Calculator-chat-apk/test/call_controller_test.dart: delayed accepted snapshots cannot revive a locally ended call
+00:00 +11: /workspace/Calculator-chat-apk/test/call_controller_test.dart: old request cleanup cannot stop a new call session
+00:00 +12: /workspace/Calculator-chat-apk/test/call_controller_test.dart: late cleanup also preserves a retry of the same call ID
+00:00 +13: /workspace/Calculator-chat-apk/test/call_controller_test.dart: unexpected transport loss ends the call and closes local media
+00:00 +14: /workspace/Calculator-chat-apk/test/call_controller_test.dart: late accept response cannot reconnect after local end
+00:00 +15: /workspace/Calculator-chat-apk/test/call_controller_test.dart: failed control operation retains the last successful microphone state
+00:00 +16: /workspace/Calculator-chat-apk/test/call_controller_test.dart: server terminal state cancels connection before it can publish
+00:00 +17: /workspace/Calculator-chat-apk/test/call_controller_test.dart: dispose while awaiting a token has no late capture or notification
+00:00 +18: /workspace/Calculator-chat-apk/test/call_controller_test.dart: failed call end retries after navigation without reopening media
+00:00 +19: /workspace/Calculator-chat-apk/test/call_controller_test.dart: queued call end is discarded after an account change
+00:00 +20: /workspace/Calculator-chat-apk/test/call_controller_test.dart: group invitation does not auto-connect when another participant accepts
+00:00 +21: /workspace/Calculator-chat-apk/test/call_controller_test.dart: participant removal cancels a pending group token
+00:00 +22: /workspace/Calculator-chat-apk/test/call_controller_test.dart: leaving a group sends leave rather than ending the whole room
+00:00 +23: /workspace/Calculator-chat-apk/test/call_controller_test.dart: reconnection updates do not create duplicate tracks
+00:00 +24: /workspace/Calculator-chat-apk/test/call_controller_test.dart: unavailable camera preserves connected microphone audio
+00:00 +25: /workspace/Calculator-chat-apk/test/call_controller_test.dart: cancelled screen consent cannot publish after ending
+00:00 +26: /workspace/Calculator-chat-apk/test/call_controller_test.dart: screen sharing closes with the call and stops projection service
+00:00 +27: /workspace/Calculator-chat-apk/test/call_controller_test.dart: audio-only fallback stops screen/camera and unsubscribes video
+00:00 +28: /workspace/Calculator-chat-apk/test/call_controller_test.dart: loss of the authorized snapshot closes media
+00:00 +29: /workspace/Calculator-chat-apk/test/call_controller_test.dart: voice media avoids camera capture and camera permission
+00:00 +30: /workspace/Calculator-chat-apk/test/call_controller_test.dart: rejecting invitation never creates a room or media track
+00:00 +31: /workspace/Calculator-chat-apk/test/call_controller_test.dart: expired outgoing ring sends one authoritative timeout
+00:00 +31: /workspace/Calculator-chat-apk/test/backend_integration_test.dart: hosted two-account auth, realtime, idempotency and receipts
+  Skip: Needs deployed Supabase and two verified test accounts via ignored --dart-define-from-file configuration
+00:00 +31 ~1: /workspace/Calculator-chat-apk/test/call_controller_test.dart: expired outgoing ring sends one authoritative timeout
+00:01 +32 ~1: /workspace/Calculator-chat-apk/test/call_controller_test.dart: expired outgoing ring sends one authoritative timeout
+00:01 +33 ~1: /workspace/Calculator-chat-apk/test/call_controller_test.dart: expired outgoing ring sends one authoritative timeout
+00:02 +34 ~1: /workspace/Calculator-chat-apk/test/call_controller_test.dart: withdrawn membership/device authorization closes already-running media
+00:02 +35 ~1: /workspace/Calculator-chat-apk/test/private_media_files_test.dart: private viewer files use unique names and startup cleanup is scoped
+00:02 +36 ~1: /workspace/Calculator-chat-apk/test/private_media_files_test.dart: expired content is removed from encrypted disk after an offline restart
+00:02 +37 ~1: /workspace/Calculator-chat-apk/test/projection_privacy_test.dart: locked calculator never requests projection consent
+00:02 +38 ~1: /workspace/Calculator-chat-apk/test/projection_privacy_test.dart: explicit projection system prompt tolerates inactive but not background
+00:02 +39 ~1: /workspace/Calculator-chat-apk/test/projection_privacy_test.dart: manual relock invalidates pending screen-capture permission
+00:03 +40 ~1: /workspace/Calculator-chat-apk/test/view_once_viewer_test.dart: Transport adapter: view-once closes displayed content permanently
+00:03 +41 ~1: /workspace/Calculator-chat-apk/test/view_once_viewer_test.dart: Transport adapter: view-once closes displayed content permanently
+00:03 +42 ~1: /workspace/Calculator-chat-apk/test/view_once_viewer_test.dart: Transport adapter: view-once closes displayed content permanently
+00:03 +43 ~1: /workspace/Calculator-chat-apk/test/view_once_viewer_test.dart: Transport adapter: view-once closes displayed content permanently
+00:03 +44 ~1: /workspace/Calculator-chat-apk/test/view_once_viewer_test.dart: Transport adapter: view-once closes a pending opening permanently
+00:03 +45 ~1: /workspace/Calculator-chat-apk/test/view_once_viewer_test.dart: Transport adapter: view-once closes expired content permanently
+00:03 +46 ~1: /workspace/Calculator-chat-apk/test/local_retention_test.dart: offline cached/outbox content expires and view-once bodies are never cached
+00:03 +47 ~1: /workspace/Calculator-chat-apk/test/local_retention_test.dart: invalid expiration fails closed while legacy records survive
+00:04 +48 ~1: /workspace/Calculator-chat-apk/test/media_download_test.dart: bounded attachment reader reports progress and exact bytes
+00:04 +49 ~1: /workspace/Calculator-chat-apk/test/media_download_test.dart: truncated and oversized attachments are rejected
+00:04 +50 ~1: /workspace/Calculator-chat-apk/test/media_download_test.dart: oversized stream is cancelled before further chunks are read
+00:04 +51 ~1: /workspace/Calculator-chat-apk/test/conversation_presence_test.dart: presence expires, ignores self, resets on disconnect and throttles typing
+00:04 +52 ~1: /workspace/Calculator-chat-apk/test/conversation_presence_test.dart: late events and failed ephemeral operations cannot escape disposal
+00:05 +53 ~1: /workspace/Calculator-chat-apk/test/calculator_widget_test.dart: calculator computes without opening private routes
+00:05 +54 ~1: /workspace/Calculator-chat-apk/test/calculator_widget_test.dart: calculator computes without opening private routes
+00:05 +55 ~1: /workspace/Calculator-chat-apk/test/calculator_widget_test.dart: calculator computes without opening private routes
+00:05 +56 ~1: /workspace/Calculator-chat-apk/test/calculator_widget_test.dart: calculator computes without opening private routes
+00:05 +57 ~1: /workspace/Calculator-chat-apk/test/calculator_widget_test.dart: cold controller starts locked and return to calculator hides private content
+00:06 +58 ~1: /workspace/Calculator-chat-apk/test/app_navigation_test.dart: locked app can navigate onboarding without mounting a private screen
+00:06 +59 ~1: /workspace/Calculator-chat-apk/test/app_navigation_test.dart: locked app can navigate onboarding without mounting a private screen
+00:06 +60 ~1: /workspace/Calculator-chat-apk/test/app_navigation_test.dart: locked app can navigate onboarding without mounting a private screen
+00:07 +61 ~1: /workspace/Calculator-chat-apk/test/calculator_widget_test.dart: keypad handles backspace, decimal, percent, clear and invalid division
+00:07 +62 ~1: /workspace/Calculator-chat-apk/test/privacy_gate_test.dart: private subtree is never mounted without both independent gates
+00:08 +63 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:08 +64 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:08 +65 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:09 +66 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:09 +67 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:09 +68 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:09 +69 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:09 +70 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:10 +71 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:10 +72 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:10 +73 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:10 +74 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: first launch confirms and persists PIN then returns to calculator
+00:11 +75 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: incorrect four digit PIN stays calculator; correct PIN unlocks local fixtures
+00:14 +76 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: all messenger tabs, profile, search, conversation and theme work without backend
+00:16 +77 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: deep link stays locked and resumes only after PIN; background and back cannot expose it
+00:19 +78 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: recreated app retains PIN but cold launches locked
+00:21 +79 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: failed secure write keeps onboarding protected
+00:21 +80 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: small and landscape messenger layouts do not overflow
+00:23 +81 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: background invalidates an in-flight PIN verification
+00:23 +82 ~1: /workspace/Calculator-chat-apk/test/preview_app_test.dart: manual relock and disposal invalidate late PIN results
+00:23 +83 ~1: All tests passed!

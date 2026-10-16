@@ -85,6 +85,7 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         lockProvider.overrideWithValue(lock),
+        authServiceProvider.overrideWithValue(auth),
         if (client != null) supabaseProvider.overrideWithValue(client),
       ],
       child: MessengerApp(

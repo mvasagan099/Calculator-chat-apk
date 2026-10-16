@@ -1,4 +1,4 @@
-import { closeRoom } from "../_shared/livekit.ts";
+import { closeRoom, removeParticipant } from "../_shared/livekit.ts";
 import {
   adminClient,
   HttpError,
@@ -28,6 +28,25 @@ serve(async (req) => {
       { paths: retentionPaths },
     );
     if (acknowledgeError) throw acknowledgeError;
+  }
+  const { error: reconcileError } = await admin.rpc("reconcile_calls");
+  if (reconcileError) throw reconcileError;
+  const { data: evictions, error: evictionError } = await admin.rpc(
+    "call_evictions",
+  );
+  if (evictionError) throw evictionError;
+  let participantCleanupErrors = 0;
+  for (const item of evictions ?? []) {
+    try {
+      await removeParticipant(item.room_name, item.identity);
+      const { error } = await admin.rpc("complete_call_eviction", {
+        callid: item.call_id,
+        participant_identity: item.identity,
+      });
+      if (error) throw error;
+    } catch {
+      participantCleanupErrors++;
+    }
   }
   const { error: maintenanceError } = await admin.rpc("maintenance");
   if (maintenanceError) throw maintenanceError;
@@ -67,5 +86,10 @@ serve(async (req) => {
     "expires_at",
     new Date().toISOString(),
   );
-  return json({ cleanup: true, roomCleanupErrors, ...await dispatchPush() });
+  return json({
+    cleanup: true,
+    roomCleanupErrors,
+    participantCleanupErrors,
+    ...await dispatchPush(),
+  });
 });

@@ -29,4 +29,34 @@ void main() {
       expect(NotificationActivity.parse(input), isNull);
     }
   });
+  test(
+    'call action intents are allowlisted and message actions are dropped',
+    () {
+      expect(
+        NotificationActivity.parse({
+          'kind': 'call',
+          'resource_id': id,
+          'action': 'answer',
+          'body': 'secret',
+        }),
+        {'kind': 'call', 'resource_id': id, 'action': 'answer'},
+      );
+      expect(
+        NotificationActivity.parse({
+          'kind': 'call',
+          'resource_id': id,
+          'action': 'untrusted',
+        }),
+        {'kind': 'call', 'resource_id': id},
+      );
+      expect(
+        NotificationActivity.parse({
+          'kind': 'message',
+          'resource_id': id,
+          'action': 'reject',
+        }),
+        {'kind': 'message', 'resource_id': id},
+      );
+    },
+  );
 }

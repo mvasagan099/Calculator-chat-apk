@@ -19,6 +19,25 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
   Timer? _timer;
   int _epoch = 0;
   bool _disposed = false, _foreground = true, _biometricPrompt = false;
+  bool _projectionPrompt = false;
+  Future<bool> projectionConsent(Future<bool> Function() request) async {
+    if (_disposed || !unlocked || !_foreground || _projectionPrompt) {
+      return false;
+    }
+    final epoch = _epoch;
+    _projectionPrompt = true;
+    try {
+      final granted = await request();
+      return granted &&
+          !_disposed &&
+          unlocked &&
+          _foreground &&
+          epoch == _epoch;
+    } finally {
+      _projectionPrompt = false;
+    }
+  }
+
   static const _channel = MethodChannel('calculator_messenger/privacy');
   Future<void> initialize() async {
     hasPin = await vault.configured;
@@ -102,7 +121,7 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
     } else if (state == AppLifecycleState.inactive) {
       _backgroundAt ??= DateTime.now();
       // Android biometric prompts can transiently make the activity inactive.
-      if (relockOnBackground && !_biometricPrompt) lock();
+      if (relockOnBackground && !_biometricPrompt && !_projectionPrompt) lock();
     } else if (state == AppLifecycleState.resumed) {
       _foreground = true;
       if (_backgroundAt != null &&

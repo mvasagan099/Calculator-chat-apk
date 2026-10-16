@@ -7,7 +7,9 @@ select public.create_direct('00000000-0000-0000-0000-000000000002') as cid \gset
 select public.start_call(:'cid',true) as callid \gset
 select set_config('test.callid',:'callid',true);
 select set_config('test.cid',:'cid',true);
-select public.authorize_call(:'callid');
+do $$begin
+ begin perform public.authorize_call(current_setting('test.callid')::uuid);raise exception 'unaccepted caller media allowed';exception when raise_exception then if sqlerrm='unaccepted caller media allowed' then raise;end if;end;
+end$$;
 select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',true);
 do $$begin
  begin perform public.authorize_call(current_setting('test.callid')::uuid);raise exception 'outsider token allowed';exception when raise_exception then if sqlerrm='outsider token allowed' then raise;end if;end;

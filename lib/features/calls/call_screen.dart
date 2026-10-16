@@ -6,10 +6,32 @@ import '../../core/widgets/actions.dart';
 import '../../providers/app_providers.dart';
 import 'call_controller.dart';
 import 'call_transport.dart';
+import 'participant_grid.dart';
+import 'network_panel.dart';
+import 'call_waiting_panel.dart';
 
 final callProvider = Provider<CallController>((ref) {
   final controller = CallController(ref.watch(supabaseProvider));
-  ref.onDispose(controller.dispose);
+  final lock = ref.watch(lockProvider);
+  void locked() {
+    if (!lock.unlocked) controller.stopSharing().catchError((Object _) {});
+  }
+
+  final auth = ref.watch(authServiceProvider);
+  void authorizationChanged() {
+    if (auth != null &&
+        (!auth.signedIn || !auth.deviceAuthorized || !auth.ownerMatches)) {
+      controller.reset().catchError((Object _) {});
+    }
+  }
+
+  auth?.addListener(authorizationChanged);
+  lock.addListener(locked);
+  ref.onDispose(() {
+    lock.removeListener(locked);
+    auth?.removeListener(authorizationChanged);
+    controller.dispose();
+  });
   return controller;
 });
 
@@ -32,29 +54,160 @@ class _CallScreenState extends ConsumerState<CallScreen> {
   }
 
   @override
+  void didUpdateWidget(covariant CallScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.id != widget.id) {
+      Future.microtask(() {
+        if (mounted) {
+          act(context, () => ref.read(callProvider).observe(widget.id));
+        }
+      });
+    }
+  }
+
+  Future<void> showParticipants(
+    CallController controller,
+    List<Map<String, dynamic>> participants,
+  ) async {
+    final client = ref.read(supabaseProvider);
+    final id = controller.callId;
+    if (id == null) return;
+    final members = await client
+        .from('conversation_members')
+        .select('user_id,profiles(display_name)')
+        .eq('conversation_id', controller.metadata!['conversation_id']);
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (sheet) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(
+              title: Text('Group call participants'),
+              subtitle: Text('Only current, eligible group members can join.'),
+            ),
+            for (final member in members)
+              ListTile(
+                title: Text(
+                  member['profiles']?['display_name'] ?? 'Participant',
+                ),
+                subtitle: Text(
+                  participants
+                          .where((p) => p['user_id'] == member['user_id'])
+                          .firstOrNull?['state'] ??
+                      'Not invited',
+                ),
+                trailing: PopupMenuButton<String>(
+                  onSelected: (action) {
+                    Navigator.pop(sheet);
+                    act(context, () async {
+                      final response = await client.functions.invoke(
+                        'call-control',
+                        body: {
+                          'call_id': id,
+                          'action': action,
+                          'person': member['user_id'],
+                        },
+                      );
+                      if (response.status != 200) {
+                        throw StateError('Participant operation unavailable');
+                      }
+                    });
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'invite',
+                      child: Text('Invite / ring again'),
+                    ),
+                    if (controller.metadata?['caller_id'] ==
+                        client.auth.currentUser?.id)
+                      const PopupMenuItem(
+                        value: 'remove',
+                        child: Text('Remove from call'),
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final controller = ref.watch(callProvider);
     return ListenableBuilder(
       listenable: controller,
       builder: (context, _) {
+        if (controller.callId != null &&
+            controller.callId != widget.id &&
+            !controller.finished) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('Call waiting')),
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Another call is active on this device.'),
+                  FilledButton(
+                    onPressed: () => act(context, () async {
+                      await controller.end();
+                      await controller.reset();
+                      await controller.observe(widget.id);
+                    }),
+                    child: const Text('End current and review incoming call'),
+                  ),
+                  TextButton(
+                    onPressed: () => act(context, () async {
+                      final result = await ref
+                          .read(supabaseProvider)
+                          .functions
+                          .invoke(
+                            'call-control',
+                            body: {'call_id': widget.id, 'action': 'busy'},
+                          );
+                      if (result.status != 200) {
+                        throw StateError('Call update unavailable');
+                      }
+                      if (context.mounted) {
+                        context.go('/call/${controller.callId}');
+                      }
+                    }),
+                    child: const Text('Decline waiting call'),
+                  ),
+                  TextButton(
+                    onPressed: () => context.go('/call/${controller.callId}'),
+                    child: const Text('Keep current call'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         final call = controller.metadata;
         final incoming =
             call?['caller_id'] !=
             ref.read(supabaseProvider).auth.currentUser?.id;
         final state = call?['state'] ?? 'Loading';
-        final active = state == 'accepted';
-        final remote = controller.room?.remoteParticipants.values.firstOrNull;
-        final remoteVideo = remote?.videoTrackPublications
-            .where((p) => p.subscribed && !p.muted)
-            .firstOrNull
-            ?.track;
-        final localVideo = controller
-            .room
-            ?.localParticipant
-            ?.videoTrackPublications
-            .where((p) => !p.muted)
-            .firstOrNull
-            ?.track;
+        final active =
+            state == 'accepted' && controller.joined && !controller.finished;
+        final participants = (call?['participants'] as List? ?? [])
+            .cast<Map<String, dynamic>>();
+        final names = {
+          for (final p in participants)
+            p['user_id'] as String:
+                p['display_name'] as String? ?? 'Participant',
+        };
+        final needsAnswer =
+            !controller.finished &&
+            (call?['self_state'] == 'invited' ||
+                (state == 'ringing' && incoming));
+        final canRejoin =
+            call?['group_call'] == true &&
+            call?['self_state'] == 'left' &&
+            state == 'accepted';
         return Scaffold(
           appBar: AppBar(
             title: const Text('Private call'),
@@ -69,8 +222,9 @@ class _CallScreenState extends ConsumerState<CallScreen> {
           body: SafeArea(
             child: Column(
               children: [
+                CallWaitingPanel(current: widget.id, controller: controller),
                 Text(
-                  call?['video'] == true ? 'Video call' : 'Voice call',
+                  '${call?['group_call'] == true ? 'Group ' : ''}${call?['video'] == true ? 'Video call' : 'Voice call'}',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 Text(
@@ -82,6 +236,12 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                       ? (incoming ? 'Incoming call' : 'Ringing…')
                       : state,
                 ),
+                if (active) CallNetworkPanel(room: controller.room),
+                if (controller.sharing)
+                  const Chip(
+                    avatar: Icon(Icons.screen_share),
+                    label: Text('Screen sharing is active'),
+                  ),
                 if (active)
                   Text(
                     '${controller.duration.inMinutes.toString().padLeft(2, '0')}:${(controller.duration.inSeconds % 60).toString().padLeft(2, '0')}',
@@ -100,51 +260,34 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   ),
                 if (active &&
                     controller.error != null &&
-                    !controller.connecting)
+                    !controller.connecting &&
+                    controller.room == null)
                   TextButton.icon(
                     onPressed: () => act(context, controller.connect),
                     icon: const Icon(Icons.refresh),
                     label: const Text('Retry connection'),
                   ),
                 Expanded(
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: remoteVideo != null
-                            ? VideoTrackRenderer(remoteVideo)
-                            : Center(
-                                child: Icon(
-                                  Icons.person,
-                                  size: 120,
-                                  color: Theme.of(context).colorScheme.primary,
-                                ),
+                  child: active
+                      ? ParticipantGrid(room: controller.room, names: names)
+                      : ListView(
+                          children: [
+                            for (final p in participants)
+                              ListTile(
+                                leading: const Icon(Icons.person_outline),
+                                title: Text(p['display_name'] ?? 'Participant'),
+                                subtitle: Text(p['state'] ?? ''),
                               ),
-                      ),
-                      if (localVideo != null)
-                        Positioned(
-                          right: 16,
-                          bottom: 16,
-                          width: 110,
-                          height: 160,
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(18),
-                            child: VideoTrackRenderer(localVideo),
-                          ),
+                          ],
                         ),
-                      if (remote != null)
-                        Positioned(
-                          left: 16,
-                          top: 16,
-                          child: Chip(
-                            label: Text(
-                              'Connection: ${remote.connectionQuality.name}',
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
                 ),
-                if (state == 'ringing' && incoming)
+                if (canRejoin)
+                  FilledButton.icon(
+                    onPressed: () => act(context, controller.accept),
+                    icon: const Icon(Icons.login),
+                    label: const Text('Rejoin call'),
+                  ),
+                if (needsAnswer)
                   Wrap(
                     spacing: 24,
                     children: [
@@ -195,6 +338,45 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                           icon: const Icon(Icons.cameraswitch),
                         ),
                       ],
+                      if (call?['video'] == true) ...[
+                        IconButton.filledTonal(
+                          tooltip: controller.sharing
+                              ? 'Stop sharing'
+                              : 'Share screen',
+                          onPressed: () => act(
+                            context,
+                            () => controller.toggleSharing(
+                              ref.read(lockProvider).projectionConsent,
+                            ),
+                          ),
+                          icon: Icon(
+                            controller.sharing
+                                ? Icons.stop_screen_share
+                                : Icons.screen_share,
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: controller.audioOnly
+                              ? 'Receive video'
+                              : 'Audio-only fallback',
+                          onPressed: () =>
+                              act(context, controller.toggleAudioOnly),
+                          icon: Icon(
+                            controller.audioOnly
+                                ? Icons.video_call
+                                : Icons.headphones,
+                          ),
+                        ),
+                      ],
+                      if (call?['group_call'] == true)
+                        IconButton.filledTonal(
+                          tooltip: 'Participants and invitations',
+                          onPressed: () => act(
+                            context,
+                            () => showParticipants(controller, participants),
+                          ),
+                          icon: const Icon(Icons.group_add_outlined),
+                        ),
                       IconButton.filledTonal(
                         tooltip: 'Audio output / Bluetooth',
                         onPressed: () => act(context, () async {
@@ -228,14 +410,23 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                     ],
                   ),
                 const SizedBox(height: 16),
-                if (['ringing', 'accepted'].contains(state))
+                if (!controller.finished &&
+                    ['ringing', 'accepted'].contains(state) &&
+                    !needsAnswer &&
+                    !canRejoin)
                   FilledButton.icon(
                     style: FilledButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.error,
                     ),
                     onPressed: () => act(context, controller.end),
                     icon: const Icon(Icons.call_end),
-                    label: const Text('End call'),
+                    label: Text(
+                      call?['group_call'] == true
+                          ? 'Leave call'
+                          : state == 'ringing'
+                          ? 'Cancel call'
+                          : 'End call',
+                    ),
                   )
                 else
                   TextButton(
@@ -244,6 +435,14 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                       if (context.mounted) context.go('/calls');
                     },
                     child: const Text('Back to calls'),
+                  ),
+                if (active &&
+                    call?['group_call'] == true &&
+                    call?['caller_id'] ==
+                        ref.read(supabaseProvider).auth.currentUser?.id)
+                  TextButton(
+                    onPressed: () => act(context, controller.endForAll),
+                    child: const Text('End for everyone'),
                   ),
                 const SizedBox(height: 24),
               ],

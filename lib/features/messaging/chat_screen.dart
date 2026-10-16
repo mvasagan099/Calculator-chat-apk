@@ -1,3 +1,4 @@
+import '../calls/call_initiator.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -804,21 +805,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             }
           }),
         ),
-        if (direct)
-          for (final video in [false, true])
-            IconButton(
-              tooltip: video ? 'Video call' : 'Voice call',
-              icon: Icon(video ? Icons.videocam_outlined : Icons.call_outlined),
-              onPressed: () => act(context, () async {
-                final id = await ref
-                    .read(supabaseProvider)
-                    .rpc(
-                      'start_call',
-                      params: {'cid': widget.id, 'use_video': video},
-                    );
-                if (context.mounted) context.push('/call/$id');
-              }),
-            ),
+        for (final video in [false, true])
+          IconButton(
+            tooltip: video ? 'Video call' : 'Voice call',
+            icon: Icon(video ? Icons.videocam_outlined : Icons.call_outlined),
+            onPressed: () => act(context, () async {
+              final id = await ref
+                  .read(callInitiatorProvider)
+                  .start(widget.id, video);
+              if (context.mounted) context.push('/call/$id');
+            }),
+          ),
         PopupMenuButton<String>(
           tooltip: 'Conversation options',
           onSelected: (value) {

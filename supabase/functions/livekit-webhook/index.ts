@@ -20,6 +20,18 @@ serve(async (req) => {
   } catch {
     throw new HttpError(401, "Invalid webhook");
   }
+  if (
+    ["participant_joined", "participant_left"].includes(event.event) &&
+    event.room?.name && event.participant?.identity
+  ) {
+    const { error } = await adminClient().rpc("record_call_media", {
+      roomname: event.room.name,
+      participant_identity: event.participant.identity,
+      connected: event.event === "participant_joined",
+      event_seconds: Number(event.createdAt),
+    });
+    if (error) throw error;
+  }
   if (event.event === "room_finished" && event.room?.name) {
     const admin = adminClient();
     const { data: call } = await admin.from("calls").select("id,state").eq(

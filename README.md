@@ -6,7 +6,13 @@ A Flutter Android app that opens as a functional calculator and unlocks a privat
 
 Android 10/API 29 and above. Flutter 3.44.0, Dart 3.12.0, Riverpod, GoRouter and Supabase Flutter. Light/dark themes and responsive portrait/landscape layouts are included.
 
-## Phase 4 status
+## Phase 5 status
+
+Advanced calling source adds group voice/video rooms, participant invitations/rejoin/leave/removal, call waiting, retry-safe initiation, scoped room tokens, network indicators/audio fallback, MediaProjection controls and privacy-preserving incoming-call actions. **83 Flutter tests, eight PostgreSQL suites plus two concurrent transaction checks, seven Edge tests and 11 public-config tests pass locally.** See the [Phase 5 calling report and acceptance matrix](docs/PHASE5_CALLS.md).
+
+**Actual calls, notifications and screen capture are not device-verified. No APK exists:** the official Flutter artifact host still returns HTTP 403. Supabase/LiveKit/Firebase credentials, staging accounts, physical devices and release signing remain unavailable. Multi-device calling, PiP and Telecom are disabled/unimplemented; application E2EE remains disabled. Connected mode now requires 11 migrations and nine coordinated Edge Functions.
+
+## Phase 4 status (historical)
 
 **Application E2EE remains disabled.** The isolated official Signal Java/JNI prototype passes 17 genuine protocol/integrity checks; no Flutter crypto bridge, encrypted message transport or cryptographic multi-device identity is being represented as complete. Existing direct/group messages and media remain server-readable. See the [encryption assessment and design](docs/ENCRYPTION_DESIGN.md).
 
@@ -51,7 +57,7 @@ Expected paths after a successful build:
 - `build/app/outputs/flutter-apk/app-debug.apk`
 - `build/app/outputs/flutter-apk/app-release.apk`
 
-**No APK exists in this environment.** The debug command was retried in Phase 4 and remains blocked by proxy HTTP 403 during CONNECT to `storage.googleapis.com/download.flutter.io`. A release was not attempted this phase because signing credentials are absent. Compilation and installation are not verified. See the [latest debug log](docs/phase4-debug-build.txt), [Phase 4 report](docs/PHASE4_SECURITY.md) and [release instructions](docs/RELEASE.md).
+**No APK exists in this environment.** The debug command was retried in Phase 5 and remains blocked by proxy HTTP 403 during CONNECT to `storage.googleapis.com/download.flutter.io`. A release was not attempted this phase because signing credentials are absent. Compilation and installation are not verified. See the [latest debug log](docs/phase5-debug-build.txt), [Phase 5 report](docs/PHASE5_CALLS.md) and [release instructions](docs/RELEASE.md).
 
 Debug signing uses Android's standard development key. A distributable release requires your private signing configuration in ignored `android/key.properties`. Without it, the release configuration is unsigned; no production credentials or debug-signing fallback are invented.
 
@@ -78,7 +84,7 @@ Phase 1 is selected by the `LOCAL_UI_PREVIEW` Dart define, which defaults to `tr
 ./scripts/flutterw run --dart-define-from-file=config/local.json
 ```
 
-Follow the [Phase 2 handoff](docs/PHASE2.md), [current verification report](docs/PHASE4_SECURITY.md), [hosted-test guide](docs/HOSTED_TESTS.md) and [provider setup guide](docs/DEPLOYMENT.md). Connected mode requires account authentication and a separate account-bound PIN. A local preview PIN never authorizes a Supabase session.
+Follow the [Phase 2 handoff](docs/PHASE2.md), [current verification report](docs/PHASE5_CALLS.md), [hosted-test guide](docs/HOSTED_TESTS.md) and [provider setup guide](docs/DEPLOYMENT.md). Connected mode requires account authentication and a separate account-bound PIN. A local preview PIN never authorizes a Supabase session.
 
 Never put Supabase service-role keys, LiveKit secrets, Firebase service-account JSON, signing passwords or private keystores in Flutter config or Git. Client configuration is compiled into APKs and is public.
 

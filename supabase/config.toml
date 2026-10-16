@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.device-security]
 verify_jwt = false
+
+[functions.call-control]
+verify_jwt = false

@@ -28,13 +28,20 @@ export async function dispatchPush() {
     const { data: settings } = await admin.from("user_settings").select(
       "notifications",
     ).eq("user_id", job.recipient_id).single();
+    let invitationExpiry: string | undefined;
     let relevant = settings?.notifications === true;
     if (job.kind === "call") {
       const { data: call } = await admin.from("calls").select(
         "state,created_at",
       ).eq("id", job.resource_id).single();
-      relevant = relevant && call?.state === "ringing" &&
-        Date.now() - Date.parse(call.created_at) < 45000;
+      const { data: invitation } = await admin.from("call_participants")
+        .select("state,invitation_expires_at").eq("call_id", job.resource_id)
+        .eq("user_id", job.recipient_id).maybeSingle();
+      invitationExpiry = invitation?.invitation_expires_at;
+      relevant = relevant &&
+        ["ringing", "accepted"].includes(call?.state ?? "") &&
+        invitation?.state === "invited" &&
+        Date.parse(invitation.invitation_expires_at) > Date.now();
     } else if (job.kind === "message") {
       const { data: message } = await admin.from("messages").select(
         "conversation_id,sender_id,deleted_at,expires_at",
@@ -58,8 +65,10 @@ export async function dispatchPush() {
       }
     }
     const { data: tokens, error: tokenError } = await admin.rpc(
-      "notification_tokens",
-      { recipient: job.recipient_id },
+      job.kind === "call" ? "call_notification_tokens" : "notification_tokens",
+      job.kind === "call"
+        ? { callid: job.resource_id, recipient: job.recipient_id }
+        : { recipient: job.recipient_id },
     );
     if (tokenError) throw tokenError;
     let success = true;
@@ -75,7 +84,9 @@ export async function dispatchPush() {
               Authorization: `Bearer ${access_token}`,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify(pushPayload(job, token)),
+            body: JSON.stringify(
+              pushPayload({ ...job, expires_at: invitationExpiry }, token),
+            ),
           },
         );
         if (response.status === 404) {

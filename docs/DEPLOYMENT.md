@@ -2,7 +2,7 @@
 
 Phase 1 defaults to a local preview without provider initialization. For connected mode set `LOCAL_UI_PREVIEW` to `false` in the public build configuration, as in `config/example.json`. No provider projects were supplied. These steps must be completed in accounts you control. Keep client identifiers and server credentials separate. Neither saving an environment draft nor building source provisions these services.
 
-Phase 4 retains the original seven migrations and adds three; eight Edge entry points require coordinated deployment. No deployment was performed here. No confirmed remote project, Firebase console configuration, LiveKit credentials or staging accounts are available. Local SQL/Edge tests pass; deployment and actual two-user behavior remain BLOCKED. [Current evidence](PHASE4_SECURITY.md).
+Phase 5 preserves the original ten migrations and adds migration 011; nine Edge entry points require coordinated deployment. No deployment was performed here. No confirmed remote project, Firebase console configuration, LiveKit credentials or staging accounts are available. Local SQL/Edge tests pass; deployment and actual two-user behavior remain BLOCKED. [Current evidence](PHASE5_CALLS.md).
 
 The ignored `config/local.json` generated for this phase's build is **preview only**. Prepare a separate ignored file with real public identifiers, then validate connected mode before testing providers:
 
@@ -26,7 +26,7 @@ The Firebase input is Android console configuration, never a service account. Om
    supabase db push --linked --dry-run
    ```
 
-   Run `supabase/remote_preflight.sql` in that project's SQL editor to inspect tables, RLS/policies, grants, publication and buckets without reading user data. Review the remote migration versions, schema and any naming conflicts against the ten local migrations. On an existing deployment, back up first and review function/policy replacements and data effects. Do not automatically repair migration history, reset a remote database, drop unknown objects or use `--include-all` to force mismatched history. Fresh migrations assume a compatible/new schema and do not backfill profiles for pre-existing Auth users. Resolve drift explicitly before applying anything. Then, only on the confirmed reviewed target:
+   Run `supabase/remote_preflight.sql` in that project's SQL editor to inspect tables, RLS/policies, grants, publication and buckets without reading user data. Review the remote migration versions, schema and any naming conflicts against the eleven local migrations. On an existing deployment, back up first and review function/policy replacements and data effects. Do not automatically repair migration history, reset a remote database, drop unknown objects or use `--include-all` to force mismatched history. Fresh migrations assume a compatible/new schema and do not backfill profiles for pre-existing Auth users. Resolve drift explicitly before applying anything. Then, only on the confirmed reviewed target:
 
    ```sh
    supabase login
@@ -58,6 +58,7 @@ The Firebase input is Android console configuration, never a service account. Om
    supabase functions deploy dispatch-push
    supabase functions deploy view-once
    supabase functions deploy device-security
+   supabase functions deploy call-control
    ```
 
    `verify_jwt=false` is deliberate: user functions verify the supplied bearer using Auth `getUser`, supporting current Supabase signing keys; workers require `x-worker-secret`; the webhook verifies LiveKit's signature and body hash. There is no unauthenticated privileged entry point.
@@ -111,7 +112,7 @@ No authorized Supabase link, public URL/key, remote schema/history access, Fireb
 
 The total is now **ten migrations and eight Edge Functions**. The original seven are unchanged. New files `202610150008_message_privacy.sql`, `202610150009_device_access.sql` and `202610150010_privacy_preferences.sql` add retention/view-once policy, session approval and privacy controls. Review against the confirmed remote schema/history using the existing preflight/dry-run procedure. Migration 009 relocates existing client RPC implementations into private guarded functions while preserving public signatures/defaults; review remote custom functions before deployment. No data reset or historical E2EE conversion is performed.
 
-Apply the reviewed schema first, then deploy **all** updated functions: `livekit-token`, `livekit-webhook`, `validate-media`, `delete-account`, `maintenance`, `dispatch-push`, **`view-once`**, **`device-security`**. User functions depend on `device_access_status`; the updated push worker depends on session-filtered token selection. Do not enable device approval before the complete coordinated rollout. The new functions validate Auth server-side with `verify_jwt=false` using the same established pattern; never expose service credentials to clients.
+Apply the reviewed schema first, then deploy **all** updated functions: `livekit-token`, `livekit-webhook`, `validate-media`, `delete-account`, `maintenance`, `dispatch-push`, **`view-once`**, **`device-security`**, **`call-control`**. User functions depend on `device_access_status`; the updated push worker depends on session-filtered token selection. Do not enable device approval before the complete coordinated rollout. The new functions validate Auth server-side with `verify_jwt=false` using the same established pattern; never expose service credentials to clients.
 
 Keep the documented maintenance schedule running. It purges expired rows in batches, deletes queued objects through Storage and acknowledges deletion jobs only after success. Test backlog/failures, tombstones and process crashes in staging. Existing data remains under its previous message policy; profile/invitation defaults preserve prior visibility, and existing last-seen opt-outs seed the new online preference.
 
@@ -132,3 +133,13 @@ deno run --config supabase/functions/deno.json \
 ```
 
 Omit network permission and config to record an honest BLOCKED report. Exit codes are 0 PASS, 1 FAIL, 2 BLOCKED. Logs omit provider response bodies and credentials. The runner restores the prior conversation policy, soft-deletes its own messages and removes its upload where possible; tombstones, direct-conversation metadata, device-policy/audit rows and Auth accounts can remain. An unavailable cleanup is FAIL requiring owner review. App E2EE, actual native rendering, push delivery and calls remain separate tests.
+
+## Phase 5 calling rollout
+
+Read [PHASE5_CALLS.md](PHASE5_CALLS.md) before rollout. Drain active calls, confirm staging/schema/history, review migration `202610160011_advanced_calls.sql`, then deploy the full nine-function set, including the new `call-control`. Update clients, `livekit-token`, `livekit-webhook`, `dispatch-push` and `maintenance` together. Legacy client call identities/invitation state are not a mixed-version compatibility guarantee.
+
+Configure signed LiveKit webhooks for `participant_joined`, `participant_left` and `room_finished`. Maintenance must run frequently to reconcile expired invitations, membership/device removal, 90-second recorded-media departure grace and durable epoch-specific eviction/room deletion. API failures remain queued; no immediate provider eviction guarantee exists. Initial LiveKit room tokens last 90 seconds, require accepted joined state and expose only approved track sources; established media requires teardown/worker enforcement.
+
+Call FCM is high-priority data-only with an invitation deadline and a generic local notification. Install matching Firebase Android resources, deploy the updated sender and client together, and grant Android notification permission. Answer/reject actions require account/device/PIN validation; Answer still needs explicit confirmation before capture. Only one authorized registration is selected per invitation; multi-device calling remains disabled. Verify every background/terminated/force-stop scenario on actual devices; do not assume a push-send response proves delivery.
+
+MediaProjection needs its new non-exported service/permission and explicit system consent. Default background relocking stops sharing on app switch; FLAG_SECURE can blank private app capture. PiP/Telecom/full-screen-intent privileges have not been added. See the exact Android/privacy limits and owner test procedure in the calling report.

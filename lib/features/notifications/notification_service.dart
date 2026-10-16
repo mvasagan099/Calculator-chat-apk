@@ -13,8 +13,73 @@ Future<void> backgroundActivity(RemoteMessage message) async {
   if (Firebase.apps.isEmpty && AppConfig.firebaseConfigured) {
     await Firebase.initializeApp(options: AppConfig.firebaseOptions);
   }
-  // Notification payloads are rendered by Android. No private message data is
-  // downloaded in this background isolate and no duplicate notification shown.
+  final activity = NotificationActivity.parse(message.data);
+  if (activity?['kind'] == 'call') {
+    final local = FlutterLocalNotificationsPlugin();
+    await local.initialize(
+      settings: const InitializationSettings(
+        android: AndroidInitializationSettings('ic_notification'),
+      ),
+    );
+    await showIncomingCall(local, activity!, message.data['expires_at']);
+  }
+  // Other notification payloads are rendered by Android. Never fetch messages,
+  // credentials or room tokens, nor start microphone/camera capture here.
+}
+
+Future<void> showIncomingCall(
+  FlutterLocalNotificationsPlugin local,
+  Map<String, dynamic> activity,
+  dynamic expires,
+) async {
+  final deadline = DateTime.tryParse(expires is String ? expires : '');
+  // Missing/stale TTL is not permission to ring a delayed invitation.
+  if (deadline == null || !deadline.isAfter(DateTime.now())) return;
+  await local
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(
+        const AndroidNotificationChannel(
+          'incoming_calls',
+          'Incoming calls',
+          importance: Importance.max,
+        ),
+      );
+  await local.show(
+    id: activity['resource_id'].hashCode & 0x7fffffff,
+    title: 'Calculator',
+    body: 'New activity',
+    notificationDetails: NotificationDetails(
+      android: AndroidNotificationDetails(
+        'incoming_calls',
+        'Incoming calls',
+        importance: Importance.max,
+        priority: Priority.high,
+        visibility: NotificationVisibility.private,
+        category: AndroidNotificationCategory.call,
+        timeoutAfter: deadline
+            .difference(DateTime.now())
+            .inMilliseconds
+            .clamp(1, 45000),
+        actions: const [
+          AndroidNotificationAction(
+            'answer',
+            'Unlock to answer',
+            showsUserInterface: true,
+            cancelNotification: true,
+          ),
+          AndroidNotificationAction(
+            'reject',
+            'Unlock to reject',
+            showsUserInterface: true,
+            cancelNotification: true,
+          ),
+        ],
+      ),
+    ),
+    payload: jsonEncode(activity),
+  );
 }
 
 class NotificationService extends ChangeNotifier {
@@ -33,9 +98,10 @@ class NotificationService extends ChangeNotifier {
       ),
       onDidReceiveNotificationResponse: (response) {
         try {
-          pending = NotificationActivity.parse(
-            jsonDecode(response.payload ?? '{}') as Map<String, dynamic>,
-          );
+          pending = NotificationActivity.parse({
+            ...jsonDecode(response.payload ?? '{}') as Map<String, dynamic>,
+            'action': response.actionId,
+          });
           if (!_disposed && pending != null) notifyListeners();
         } catch (_) {}
       },
@@ -63,10 +129,11 @@ class NotificationService extends ChangeNotifier {
     final launch = await local.getNotificationAppLaunchDetails();
     if (launch?.didNotificationLaunchApp == true) {
       try {
-        pending = NotificationActivity.parse(
-          jsonDecode(launch!.notificationResponse?.payload ?? '{}')
+        pending = NotificationActivity.parse({
+          ...jsonDecode(launch!.notificationResponse?.payload ?? '{}')
               as Map<String, dynamic>,
-        );
+          'action': launch.notificationResponse?.actionId,
+        });
       } catch (_) {}
     }
     if (!AppConfig.firebaseConfigured) return;
@@ -88,6 +155,10 @@ class NotificationService extends ChangeNotifier {
           final activity = NotificationActivity.parse(message.data);
           if (activity == null) return;
           final call = activity['kind'] == 'call';
+          if (call) {
+            await showIncomingCall(local, activity, message.data['expires_at']);
+            return;
+          }
           await local.show(
             id: message.messageId.hashCode & 0x7fffffff,
             title: 'Calculator',
