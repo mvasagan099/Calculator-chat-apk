@@ -103,8 +103,11 @@ def main():
         with zipfile.ZipFile(args.apk) as archive:
             scan_archive(archive)
         stage = 'SHA-256 digest'
+        checksum = hashlib.sha256()
         with args.apk.open('rb') as source:
-            digest = hashlib.file_digest(source, 'sha256').hexdigest()
+            while chunk := source.read(1024 * 1024):
+                checksum.update(chunk)
+        digest = checksum.hexdigest()
         result.update({'file': args.apk.name, 'bytes': args.apk.stat().st_size, 'sha256': digest, 'variant': args.variant, 'classification': 'development', 'installation': 'NOT TESTED', 'hosted_services': 'NOT TESTED'})
         stage = 'inspection evidence output'
         args.output_dir.mkdir(parents=True, exist_ok=True)
