@@ -11,6 +11,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterFragmentActivity() {
+    private var pinKdf: PinKdfChannel? = null
     private var permissionResult: MethodChannel.Result? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -18,6 +19,8 @@ class MainActivity : FlutterFragmentActivity() {
     }
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        pinKdf?.close()
+        pinKdf = PinKdfChannel(flutterEngine.dartExecutor.binaryMessenger)
         val calls = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "calculator_messenger/calls")
         CallForegroundService.onEnd = { id -> runOnUiThread { calls.invokeMethod("endCall", id) } }
         calls.setMethodCallHandler { call, result ->
@@ -106,6 +109,8 @@ class MainActivity : FlutterFragmentActivity() {
         else result?.error("permission", if (requestCode == 502) "Nearby devices permission is required for Bluetooth routing" else "Microphone and requested camera permission are required", null)
     }
     override fun onDestroy() {
+        pinKdf?.close()
+        pinKdf = null
         permissionResult?.error("cancelled", "Activity closed", null)
         permissionResult = null
         CallForegroundService.onEnd = null

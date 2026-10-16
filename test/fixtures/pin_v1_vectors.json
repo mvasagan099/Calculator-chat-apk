@@ -1,0 +1,20 @@
+[
+  {
+    "pin": "0000",
+    "iterations": 1000,
+    "salt": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    "hash": "AQuaP2Yq8JRcpH7JfTCUhxU9BHjP2/Q4s3d8R/W1vWs="
+  },
+  {
+    "pin": "258012",
+    "iterations": 600000,
+    "salt": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    "hash": "MB5FBvsrmwhlbKehEt0ficA7Zf0CCLikgcUYXmGwcYk="
+  },
+  {
+    "pin": "012345678901",
+    "iterations": 1000,
+    "salt": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+    "hash": "MhGr7mAWyEBSPzFlLaiyTdoZr2bjoLDGuVpCkTgbAN0="
+  }
+]

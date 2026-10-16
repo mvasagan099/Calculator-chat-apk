@@ -4,9 +4,54 @@ import 'package:go_router/go_router.dart';
 import 'package:calculator_messenger/core/security/lock_controller.dart';
 import 'package:calculator_messenger/core/security/pin_vault.dart';
 import 'package:calculator_messenger/features/calculator/calculator_screen.dart';
+import 'preview_app_test.dart' show PendingVault;
 import 'pin_vault_test.dart' show MemorySecrets;
 
 void main() {
+  testWidgets(
+    'pending numeric result looks normal and keys cancel late unlock',
+    (tester) async {
+      final pending = PendingVault();
+      final lock = LockController(pending)..hasPin = true;
+      await tester.pumpWidget(MaterialApp(home: CalculatorScreen(lock: lock)));
+      for (final key in ['2', '5', '8', '0', '=']) {
+        await tester.tap(find.text(key).last);
+        await tester.pump();
+      }
+      expect(find.text('2580'), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(lock.unlocked, isFalse);
+      // A normal chained calculation remains responsive while the KDF awaits.
+      for (final key in ['+', '1', '=']) {
+        await tester.tap(find.text(key).last);
+        await tester.pump();
+      }
+      expect(find.text('2581'), findsOneWidget);
+      pending.verification.complete(true);
+      await tester.pumpAndSettle();
+      expect(lock.unlocked, isFalse);
+      expect(tester.takeException(), isNull);
+      lock.dispose();
+    },
+  );
+
+  testWidgets('leaving calculator during verification cannot unlock later', (
+    tester,
+  ) async {
+    final pending = PendingVault();
+    final lock = LockController(pending)..hasPin = true;
+    await tester.pumpWidget(MaterialApp(home: CalculatorScreen(lock: lock)));
+    for (final key in ['2', '5', '8', '0', '=']) {
+      await tester.tap(find.text(key).last);
+      await tester.pump();
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    pending.verification.complete(true);
+    await tester.pump();
+    expect(lock.unlocked, isFalse);
+    expect(tester.takeException(), isNull);
+    lock.dispose();
+  });
   testWidgets('calculator computes without opening private routes', (
     tester,
   ) async {

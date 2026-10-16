@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 import 'pin_vault.dart';
+import 'pin_performance.dart';
 
 class LockController extends ChangeNotifier with WidgetsBindingObserver {
   LockController(this.vault) {
@@ -44,12 +45,12 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
     if (!_disposed) notifyListeners();
   }
 
-  Future<bool> unlock(String pin) async {
+  Future<bool> unlock(String pin, {PinTrace? trace}) async {
     if (_disposed || !hasPin || authenticating) return false;
     final epoch = _epoch;
     authenticating = true;
     try {
-      if (!await vault.verify(pin) ||
+      if (!await vault.verify(pin, trace: trace) ||
           _disposed ||
           !_foreground ||
           epoch != _epoch) {
@@ -101,6 +102,10 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
     _timer?.cancel();
     notifyListeners();
   }
+
+  // Cancels a disposed calculator's in-flight result without notifying widgets
+  // during route teardown. Existing foreground/background guards still apply.
+  void cancelPendingUnlock() => ++_epoch;
 
   void touch() {
     _timer?.cancel();

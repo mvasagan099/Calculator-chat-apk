@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:calculator_messenger/core/security/lock_controller.dart';
 import 'package:calculator_messenger/core/security/pin_vault.dart';
+import 'package:calculator_messenger/core/security/pin_performance.dart';
 import 'package:calculator_messenger/core/services/device_settings.dart';
 import 'package:calculator_messenger/features/calculator/calculator_screen.dart';
 import 'package:calculator_messenger/features/preview/preview_app.dart';
@@ -16,7 +17,7 @@ class PendingVault extends PinVault {
   PendingVault() : super(MemorySecrets());
   final verification = Completer<bool>();
   @override
-  Future<bool> verify(String pin) => verification.future;
+  Future<bool> verify(String pin, {PinTrace? trace}) => verification.future;
 }
 
 class FailingStore extends MemorySecrets {

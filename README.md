@@ -6,6 +6,10 @@ A Flutter Android app that opens as a functional calculator and unlocks a privat
 
 Android 10/API 29 and above. Flutter 3.44.0, Dart 3.12.0, Riverpod, GoRouter and Supabase Flutter. Light/dark themes and responsive portrait/landscape layouts are included.
 
+## PIN responsiveness update
+
+PIN verification retains the existing 600,000-iteration salted PBKDF2 verifier and Keystore protection. Android uses a standard JCA worker; other hosts retain isolated Dart derivation without unnecessary timer waits. Clean successful checks skip redundant secure-storage writes; wrong attempts/backoff/reset persistence remain enforced. The calculator displays normal results immediately, keeps keys responsive and cancels stale unlock results. **95 Flutter tests and 37 tooling tests pass**; analysis is clean. Optional ARM64 profile comparisons and duration-only developer instrumentation are documented in [PIN performance](docs/PIN_PERFORMANCE.md). Desktop measurements are not Android benchmarks; no new profile APK/device performance is claimed.
+
 ## Phase 7 live activation status
 
 The owner reports a successful GitHub Actions **preview APK**, passing static package/signature/SDK/known-secret checks and installation/basic operation on Android. This supersedes older blanket “no APK exists” statements. Its run URL/hash were not independently accessible here. A preview is not a verified live messenger.

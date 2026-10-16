@@ -82,7 +82,7 @@ def main():
     parser.add_argument('apk', type=Path)
     parser.add_argument('--android-sdk', required=True, type=Path)
     parser.add_argument('--output-dir', type=Path, required=True)
-    parser.add_argument('--variant', choices=['debug', 'release'], default='debug')
+    parser.add_argument('--variant', choices=['debug', 'profile', 'release'], default='debug')
     parser.add_argument('--expected-cert-sha256')
     parser.add_argument('--target-sdk', type=int, default=36)
     args = parser.parse_args()

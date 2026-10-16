@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:isolate';
 import 'dart:math';
-import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'pin_derivation.dart';
+import 'pin_performance.dart';
 
 abstract interface class SecretStore {
   Future<String?> read(String key);
@@ -21,16 +21,6 @@ class DeviceSecretStore implements SecretStore {
   @override
   Future<void> delete(String key) => _storage.delete(key: key);
 }
-
-Future<List<int>> _derivePin(String pin, List<int> salt, int iterations) =>
-    Isolate.run(() async {
-      final key = await Pbkdf2(
-        macAlgorithm: Hmac.sha256(),
-        iterations: iterations,
-        bits: 256,
-      ).deriveKey(secretKey: SecretKey(utf8.encode(pin)), nonce: salt);
-      return key.extractBytes();
-    });
 
 /// The PIN never leaves the device. A verifier and persisted throttle record
 /// live together in Android Keystore-backed encrypted storage.
@@ -54,7 +44,7 @@ class PinVault {
     }
     final random = Random.secure();
     final salt = List.generate(32, (_) => random.nextInt(256));
-    final hash = await _derivePin(pin, salt, iterations);
+    final hash = await PinDerivation.derive(pin, salt, iterations);
     await store.write(
       storageKey,
       jsonEncode({
@@ -68,19 +58,26 @@ class PinVault {
   }
 
   bool _busy = false;
-  Future<bool> verify(String pin) async {
+  Future<bool> verify(String pin, {PinTrace? trace}) async {
     if (_busy) return false;
     _busy = true;
+    final timing = trace ?? PinTrace.begin();
     try {
-      final raw = await store.read(storageKey);
+      final raw = timing == null
+          ? await store.read(storageKey)
+          : await timing.measure(
+              PinStage.storageRead,
+              () => store.read(storageKey),
+            );
       if (raw == null) return false;
       final r = jsonDecode(raw) as Map<String, dynamic>;
       final now = clock().millisecondsSinceEpoch;
       if (now < (r['until'] as int)) return false;
-      final actual = await _derivePin(
+      final actual = await PinDerivation.derive(
         pin,
         base64Decode(r['salt'] as String),
         r['iterations'] as int,
+        trace: timing,
       );
       final expected = base64Decode(r['hash'] as String);
       var difference = actual.length ^ expected.length;
@@ -88,6 +85,9 @@ class PinVault {
         difference |= actual[i] ^ expected[i];
       }
       if (difference == 0) {
+        // Keystore reads stay authoritative. Skip only an already-clean reset;
+        // failed attempts and a successful dirty reset must still persist.
+        if (r['failures'] == 0 && r['until'] == 0) return true;
         r['failures'] = 0;
         r['until'] = 0;
       } else {
@@ -99,12 +99,20 @@ class PinVault {
                 ? 0
                 : min(3600, 30 * pow(2, min(7, failures - 5))).toInt() * 1000);
       }
-      await store.write(storageKey, jsonEncode(r));
+      if (timing == null) {
+        await store.write(storageKey, jsonEncode(r));
+      } else {
+        await timing.measure(
+          PinStage.storageWrite,
+          () => store.write(storageKey, jsonEncode(r)),
+        );
+      }
       return difference == 0;
     } catch (_) {
       return false;
     } finally {
       _busy = false;
+      if (trace == null) timing?.finish();
     }
   }
 

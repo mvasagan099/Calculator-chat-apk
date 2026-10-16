@@ -1,0 +1,59 @@
+{
+  "generated_at": "2026-10-16T08:46:24.633548+00:00",
+  "scope": "desktop synthetic microbenchmarks only; not Android unlock benchmarks",
+  "dart": [
+    {
+      "scope": "desktop Dart JIT synthetic isolate",
+      "implementation": "old-default-pauses",
+      "iterations": 600000,
+      "derive_us": [
+        2208665,
+        2178668,
+        2300083
+      ],
+      "isolate_startup_us": [
+        3606,
+        689,
+        772
+      ],
+      "total_us": [
+        2212965,
+        2179453,
+        2300962
+      ]
+    },
+    {
+      "scope": "desktop Dart JIT synthetic isolate",
+      "implementation": "dart-no-pauses",
+      "iterations": 600000,
+      "derive_us": [
+        1719686,
+        1895164,
+        1792482
+      ],
+      "isolate_startup_us": [
+        512,
+        484,
+        467
+      ],
+      "total_us": [
+        1720341,
+        1895900,
+        1793100
+      ]
+    }
+  ],
+  "jca": {
+    "scope": "desktop JDK synthetic, not Android",
+    "iterations": 600000,
+    "derive_us": [
+      136757,
+      131354,
+      136697
+    ]
+  },
+  "android_device_measurements": null,
+  "secure_storage_read_write_measurements": null,
+  "navigation_measurements": null,
+  "android_total_latency_measurements": null
+}

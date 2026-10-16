@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/security/lock_controller.dart';
+import '../../core/security/pin_performance.dart';
 import 'calculator_engine.dart';
 
 class CalculatorScreen extends StatefulWidget {
@@ -15,61 +16,93 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   String expression = '';
   String result = '0';
   bool busy = false;
+  int _operation = 0;
+  final _displayRevision = ValueNotifier(0);
+
+  @override
+  void dispose() {
+    ++_operation;
+    if (busy) widget.lock.cancelPendingUnlock();
+    _displayRevision.dispose();
+    super.dispose();
+  }
+
   final engine = CalculatorEngine();
   Future<void> press(String key) async {
-    if (busy) return;
+    if (busy) {
+      ++_operation;
+      busy = false;
+      // Continuing a calculation cancels the pending unlock, not its persisted
+      // attempt accounting. No calculator key needs to wait for the KDF.
+      widget.lock.cancelPendingUnlock();
+    }
     HapticFeedback.selectionClick();
     if (key == '=') {
-      setState(() => busy = true);
+      final trace = PinTrace.begin();
+      final operation = ++_operation;
       final input = expression;
-      if (RegExp(r'^\d{4,12}$').hasMatch(input) &&
-          await widget.lock.unlock(input)) {
-        expression = '';
-        result = '0';
-        if (mounted) context.go('/chats');
-      } else {
-        try {
-          result = engine.evaluate(input);
-        } on FormatException {
-          result = 'Error';
-        }
-        expression = '';
+      busy = true;
+      // Show ordinary arithmetic output immediately for every '=' operation.
+      // No spinner, unlock label or outcome is exposed by the calculator.
+      try {
+        result = engine.evaluate(input);
+      } on FormatException {
+        result = 'Error';
       }
-      if (mounted) setState(() => busy = false);
+      expression = '';
+      _displayRevision.value++;
+      var navigating = false;
+      try {
+        if (RegExp(r'^\d{4,12}$').hasMatch(input) &&
+            await widget.lock.unlock(input, trace: trace) &&
+            mounted &&
+            operation == _operation &&
+            widget.lock.unlocked) {
+          final navigation = Stopwatch()..start();
+          context.go('/chats');
+          navigating = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            trace?.record(PinStage.navigation, navigation.elapsedMicroseconds);
+            trace?.finish();
+          });
+        }
+      } finally {
+        if (operation == _operation) busy = false;
+        if (!navigating) trace?.finish();
+      }
       return;
     }
-    setState(() {
-      if (key == 'AC') {
-        expression = '';
-        result = '0';
-      } else if (key == '⌫') {
-        if (expression.isNotEmpty) {
-          expression = expression.substring(0, expression.length - 1);
-        }
-      } else if (key == '±') {
-        if (expression.isEmpty && double.tryParse(result) != null) {
-          expression = result;
-        }
-        final number = RegExp(r'(\d*\.?\d+%*)$').firstMatch(expression);
-        if (number != null) {
-          final start = number.start;
-          final unary =
-              start > 0 &&
-              expression[start - 1] == '-' &&
-              (start == 1 || '+−×÷*/-'.contains(expression[start - 2]));
-          expression = unary
-              ? expression.substring(0, start - 1) + expression.substring(start)
-              : '${expression.substring(0, start)}-${expression.substring(start)}';
-        }
-      } else if (expression.length < 100) {
-        if (expression.isEmpty &&
-            '+−×÷'.contains(key) &&
-            double.tryParse(result) != null) {
-          expression = result;
-        }
-        expression += key;
+    if (key == 'AC') {
+      expression = '';
+      result = '0';
+    } else if (key == '⌫') {
+      if (expression.isNotEmpty) {
+        expression = expression.substring(0, expression.length - 1);
       }
-    });
+    } else if (key == '±') {
+      if (expression.isEmpty && double.tryParse(result) != null) {
+        expression = result;
+      }
+      final number = RegExp(r'(\d*\.?\d+%*)$').firstMatch(expression);
+      if (number != null) {
+        final start = number.start;
+        final unary =
+            start > 0 &&
+            expression[start - 1] == '-' &&
+            (start == 1 || '+−×÷*/-'.contains(expression[start - 2]));
+        expression = unary
+            ? expression.substring(0, start - 1) + expression.substring(start)
+            : '${expression.substring(0, start)}-${expression.substring(start)}';
+      }
+    } else if (expression.length < 100) {
+      if (expression.isEmpty &&
+          '+−×÷'.contains(key) &&
+          double.tryParse(result) != null) {
+        expression = result;
+      }
+      expression += key;
+    }
+    _displayRevision.value++;
   }
 
   @override
@@ -110,7 +143,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     if (landscape) {
                       return Row(
                         children: [
-                          Expanded(child: _display()),
+                          Expanded(child: _reactiveDisplay()),
                           SizedBox(
                             width: available.maxWidth * .66,
                             height: available.maxHeight,
@@ -121,7 +154,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                     }
                     return Column(
                       children: [
-                        Expanded(child: _display()),
+                        Expanded(child: _reactiveDisplay()),
                         SizedBox(
                           height: (available.maxHeight * .72).clamp(0, 520),
                           child: _keypad(false),
@@ -137,6 +170,11 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       ),
     );
   }
+
+  Widget _reactiveDisplay() => ValueListenableBuilder<int>(
+    valueListenable: _displayRevision,
+    builder: (_, _, _) => _display(),
+  );
 
   Widget _display() {
     final colors = Theme.of(context).colorScheme;
