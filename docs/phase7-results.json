@@ -1,0 +1,135 @@
+{
+  "generated_at": "2026-10-16T07:57:22.353381+00:00",
+  "preview": {
+    "build": "OWNER_REPORTED_PASS",
+    "static_apk_checks": "OWNER_REPORTED_PASS",
+    "android_install_and_basic_preview": "OWNER_REPORTED_PASS",
+    "workflow_run_url": null,
+    "sha256": null,
+    "independently_downloaded_in_this_environment": false
+  },
+  "connected_apk": {
+    "status": "BLOCKED",
+    "artifact_name": "calculator-messenger-debug-connected",
+    "workflow_url": "https://github.com/mvasagan099/Calculator-chat-apk/actions/workflows/android-debug.yml",
+    "run_url": null,
+    "sha256": null,
+    "reason": "No connected public configuration in this environment; workflow dispatch API returns Forbidden"
+  },
+  "remote": {
+    "confirmed_project_ref": null,
+    "applied_migrations": null,
+    "deployed_functions": null,
+    "mutations_performed": false,
+    "migration_approval": "NOT REQUESTED: no selected, inspected target"
+  },
+  "local_migrations": [
+    {
+      "version": "202610150001",
+      "file": "202610150001_core.sql",
+      "sha256": "7e968232c2b0d15b7489fdb2bcc4335fc1036d117155825885c695cdfdb9c58a"
+    },
+    {
+      "version": "202610150002",
+      "file": "202610150002_groups_calls_storage.sql",
+      "sha256": "6f5c69eedf8e8126abcf63be10a14dcf09d85585610f55320245c01d06a7c53d"
+    },
+    {
+      "version": "202610150003",
+      "file": "202610150003_media_and_cleanup.sql",
+      "sha256": "8432efd7f5a73d3d62bfd4a77ce3da834e686e60c550809e34c68e493bc2a3a6"
+    },
+    {
+      "version": "202610150004",
+      "file": "202610150004_notification_leases.sql",
+      "sha256": "d0e0f590d2c30183bf3def70227dbf6acf0b65b2d3804bef9620b372b9244866"
+    },
+    {
+      "version": "202610150005",
+      "file": "202610150005_mentions_and_limits.sql",
+      "sha256": "2411e73edb971a18f3328c292e23fa25e1d04862ab9a8de8d0eb75535dc9e6a7"
+    },
+    {
+      "version": "202610150006",
+      "file": "202610150006_call_cleanup.sql",
+      "sha256": "232d5acb80d3e5ddd85b249a5720f44774fad1af3f3f323a7bc646a9d92f2f31"
+    },
+    {
+      "version": "202610150007",
+      "file": "202610150007_call_authorization.sql",
+      "sha256": "b2c87e74f2ac267c98479d6e88a537310166fc12643af33c0db178d975d8e7a3"
+    },
+    {
+      "version": "202610150008",
+      "file": "202610150008_message_privacy.sql",
+      "sha256": "abfea3159e95a2ce4964f080588ecf8183b0630845ddd73a5bd0589477d41428"
+    },
+    {
+      "version": "202610150009",
+      "file": "202610150009_device_access.sql",
+      "sha256": "39df28e730ea2beb3605ed40f84ad02dfc2f64305493aa4e9978bd4a0f37301c"
+    },
+    {
+      "version": "202610150010",
+      "file": "202610150010_privacy_preferences.sql",
+      "sha256": "301ecbe0e2a81eed7ada7a71a07a970b03d74a0eeddfdd2be24eaadf9d36a54c"
+    },
+    {
+      "version": "202610160011",
+      "file": "202610160011_advanced_calls.sql",
+      "sha256": "ebe33411f1e1ed6f1ad8545ba090f3dd6d9937264032b766fab86b6d1e263579"
+    }
+  ],
+  "local_edge_functions": [
+    "call-control",
+    "delete-account",
+    "device-security",
+    "dispatch-push",
+    "livekit-token",
+    "livekit-webhook",
+    "maintenance",
+    "validate-media",
+    "view-once"
+  ],
+  "checks": {
+    "locked_pub": "PASS",
+    "flutter_analyze": "PASS",
+    "flutter_tests": {
+      "passed": 87,
+      "skipped": 1
+    },
+    "python_tooling_tests": {
+      "passed": 36
+    },
+    "postgresql": {
+      "suites_passed": 8,
+      "concurrency_checks_passed": 2,
+      "scope": "disposable local PostgreSQL, not hosted Supabase"
+    },
+    "edge_typecheck": "PASS",
+    "edge_tests": {
+      "passed": 7
+    },
+    "actionlint": "PASS",
+    "connected_public_config": {
+      "status": "BLOCKED",
+      "exit_code": 2
+    },
+    "hosted": {
+      "blocked": 16,
+      "exit_code": 2,
+      "evidence": "hosted-results.json"
+    },
+    "adb_devices": 0
+  },
+  "tested_source_commit": "1e940a137e53bb2ba69268572c2686044d0cc4b2",
+  "environment_draft": {
+    "saved_requirements": [
+      "SUPABASE_URL",
+      "SUPABASE_ANON_KEY"
+    ],
+    "values_added": false,
+    "runtime_applied": false,
+    "environment_published": false
+  }
+}

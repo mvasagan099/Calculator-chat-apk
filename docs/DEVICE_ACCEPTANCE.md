@@ -1,6 +1,6 @@
 # Android acceptance procedure and current report
 
-**Current result (2026-10-16): all 20 cases BLOCKED.** No APK, configured staging accounts/providers or attached Android devices are available. No case below has been executed on hardware. Unit/adapter/SQL tests are separate evidence. Use only two owner-authorized phones/profiles and disposable staging data, never personal chats/accounts.
+**Current connected acceptance: all 20 cases BLOCKED.** The owner reports a preview APK built, statically checked, installed and running on Android. That is separate preview evidence: it does not complete these connected two-phone cases. No connected APK/hash, configured staging accounts/providers or attached Android devices are available to this agent. No connected case below has been executed by this agent on hardware. Unit/adapter/SQL tests are separate evidence. Use only two owner-authorized phones/profiles and disposable staging data, never personal chats/accounts.
 
 ## Prerequisites and evidence
 

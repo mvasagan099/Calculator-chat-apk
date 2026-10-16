@@ -6,17 +6,25 @@ A Flutter Android app that opens as a functional calculator and unlocks a privat
 
 Android 10/API 29 and above. Flutter 3.44.0, Dart 3.12.0, Riverpod, GoRouter and Supabase Flutter. Light/dark themes and responsive portrait/landscape layouts are included.
 
-## Phase 6 release status
+## Phase 7 live activation status
+
+The owner reports a successful GitHub Actions **preview APK**, passing static package/signature/SDK/known-secret checks and installation/basic operation on Android. This supersedes older blanket “no APK exists” statements. Its run URL/hash were not independently accessible here. A preview is not a verified live messenger.
+
+**Connected APK and live backend: BLOCKED pending staging configuration.** No confirmed Supabase project/public URL/key, remote schema/history access or disposable accounts exist in this cloud checkout. GitHub Actions API access returns Forbidden; existing repository variables/secrets cannot be inspected here. Current local checks pass: analysis, 87 Flutter tests (one hosted skip), eight PostgreSQL suites/two concurrency checks, seven Edge tests, 36 tooling tests and workflow lint. The hosted runner reports 16 BLOCKED scenarios. No remote migrations/functions/workers were applied. Application E2EE remains disabled.
+
+See [Phase 7 evidence, deployment consent and exact owner actions](docs/PHASE7_ACTIVATION.md). The existing Android SDK fix, runner disk cleanup and corrected APK verification are preserved. Expected connected artifact after a successful workflow: **calculator-messenger-debug-connected**; no connected checksum or two-device/provider success is claimed.
+
+## Phase 6 release status (historical)
 
 **DEVELOPMENT — not production/beta certified.** A demonstrated cache race across relocking/account changes is fixed. **87 Flutter tests**, eight PostgreSQL suites/two concurrent transaction checks, seven Edge tests, 29 release/config/JDK-signature tooling tests and 17 native Signal checks pass; analysis is clean. See the [release audit and gates](docs/PHASE6_RELEASE.md) and [two-phone test procedure](docs/DEVICE_ACCEPTANCE.md).
 
-No APK/AAB exists: the official Flutter artifact host is still denied by proxy CONNECT 403. Supabase/LiveKit/FCM deployment, two-account/device media, Android privacy/stability and signing remain BLOCKED. Application E2EE is not enabled. The existing debug CI workflow is preserved; a new manually gated workflow prepares owner-signed **development** APK/AAB artifacts when protected configuration exists. It does not publish an app or certify release gates. [Signing/download instructions](docs/RELEASE.md).
+At the Phase 6 checkpoint no APK/AAB had been produced in this environment because the official artifact host returned proxy CONNECT 403; the later owner-reported preview success is recorded above. Supabase/LiveKit/FCM deployment, two-account/device media, Android privacy/stability and signing remain BLOCKED. Application E2EE is not enabled. The existing debug CI workflow is preserved; a new manually gated workflow prepares owner-signed **development** APK/AAB artifacts when protected configuration exists. It does not publish an app or certify release gates. [Signing/download instructions](docs/RELEASE.md).
 
 ## Phase 5 status (historical)
 
 Advanced calling source adds group voice/video rooms, participant invitations/rejoin/leave/removal, call waiting, retry-safe initiation, scoped room tokens, network indicators/audio fallback, MediaProjection controls and privacy-preserving incoming-call actions. **83 Flutter tests, eight PostgreSQL suites plus two concurrent transaction checks, seven Edge tests and 11 public-config tests pass locally.** See the [Phase 5 calling report and acceptance matrix](docs/PHASE5_CALLS.md).
 
-**Actual calls, notifications and screen capture are not device-verified. No APK exists:** the official Flutter artifact host still returns HTTP 403. Supabase/LiveKit/Firebase credentials, staging accounts, physical devices and release signing remain unavailable. Multi-device calling, PiP and Telecom are disabled/unimplemented; application E2EE remains disabled. Connected mode now requires 11 migrations and nine coordinated Edge Functions.
+**Actual calls, notifications and screen capture were not device-verified at this historical checkpoint. Its APK attempt failed:** the official Flutter artifact host still returns HTTP 403. Supabase/LiveKit/Firebase credentials, staging accounts, physical devices and release signing remain unavailable. Multi-device calling, PiP and Telecom are disabled/unimplemented; application E2EE remains disabled. Connected mode now requires 11 migrations and nine coordinated Edge Functions.
 
 ## Phase 4 status (historical)
 
@@ -63,13 +71,13 @@ Expected paths after a successful build:
 - `build/app/outputs/flutter-apk/app-debug.apk`
 - `build/app/outputs/flutter-apk/app-release.apk`
 
-**No APK exists in this environment.** The debug command was retried in Phase 6 and remains blocked by proxy HTTP 403 during CONNECT to `storage.googleapis.com/download.flutter.io`. A release was not attempted this phase because signing credentials are absent. Compilation and installation are not verified. See the [latest debug log](docs/phase6-debug-build.txt), [Phase 6 report](docs/PHASE6_RELEASE.md) and [release instructions](docs/RELEASE.md).
+**The preview APK is owner-reported built and installed through GitHub Actions; no APK bytes are present in this cloud checkout.** The older local Phase 6 debug attempt failed on official Flutter artifact HTTP 403. Connected compilation/installation and owner-signed release remain unverified. See the [latest debug log](docs/phase6-debug-build.txt), [Phase 6 report](docs/PHASE6_RELEASE.md) and [release instructions](docs/RELEASE.md).
 
 Debug signing uses Android's standard development key. A distributable release requires your private signing configuration in ignored `android/key.properties`. Without valid signing inputs and an existing keystore, release tasks now fail closed; no production credentials or debug-signing fallback are invented.
 
 ## GitHub Actions build fallback
 
-`.github/workflows/android-debug.yml` installs the exact official Flutter version, runs locked dependency resolution, analysis and tests, builds a signed debug APK and verifies its signature, application ID, minimum API and known secret formats. On success it uploads **calculator-messenger-debug-preview** or **calculator-messenger-debug-connected**, including SHA-256 and metadata. Build logs are uploaded on failure. Workflow lint passed and the source was pushed to [codex/phase2-apk-verification](https://github.com/mvasagan099/Calculator-chat-apk/tree/codex/phase2-apk-verification). GitHub API access is blocked, so no completed workflow artifact is claimed. See [download/run instructions](docs/RELEASE.md).
+`.github/workflows/android-debug.yml` installs the exact official Flutter version, runs locked dependency resolution, analysis and tests, builds a signed debug APK and verifies its signature, application ID, minimum API and known secret formats. On success it uploads **calculator-messenger-debug-preview** or **calculator-messenger-debug-connected**, including SHA-256 and metadata. Build logs are uploaded on failure. Workflow lint passed and the source was pushed to [codex/phase2-apk-verification](https://github.com/mvasagan099/Calculator-chat-apk/tree/codex/phase2-apk-verification). GitHub API access is blocked in this environment; the owner-reported successful preview run is distinguished from the still-unverified connected artifact. See [download/run instructions](docs/RELEASE.md).
 
 For connected builds, first prepare public config and Android Firebase resources:
 
@@ -90,7 +98,7 @@ Phase 1 is selected by the `LOCAL_UI_PREVIEW` Dart define, which defaults to `tr
 ./scripts/flutterw run --dart-define-from-file=config/local.json
 ```
 
-Follow the [Phase 2 handoff](docs/PHASE2.md), [current verification report](docs/PHASE6_RELEASE.md), [hosted-test guide](docs/HOSTED_TESTS.md) and [provider setup guide](docs/DEPLOYMENT.md). Connected mode requires account authentication and a separate account-bound PIN. A local preview PIN never authorizes a Supabase session.
+Follow the [Phase 2 handoff](docs/PHASE2.md), [current verification report](docs/PHASE7_ACTIVATION.md), [hosted-test guide](docs/HOSTED_TESTS.md) and [provider setup guide](docs/DEPLOYMENT.md). Connected mode requires account authentication and a separate account-bound PIN. A local preview PIN never authorizes a Supabase session.
 
 Never put Supabase service-role keys, LiveKit secrets, Firebase service-account JSON, signing passwords or private keystores in Flutter config or Git. Client configuration is compiled into APKs and is public.
 
@@ -98,7 +106,7 @@ Never put Supabase service-role keys, LiveKit secrets, Firebase service-account 
 
 `lib/features/calculator` contains arithmetic and calculator UI. `lib/core/security` contains PIN/session protection; `lib/features/preview` contains isolated local fixtures and Phase 1 navigation. Connected features, typed models, repositories and services remain separated under `lib/features`, `lib/models`, `lib/repositories` and `lib/core`.
 
-The retained Supabase migrations/Edge Functions, private Storage policies, authenticated Realtime paths, media, LiveKit and FCM integration code are **not validated hosted services**. No provider projects or physical Android devices were supplied. Optional phone OTP, address-book sync and application E2EE are not implemented. Group calling has source/local tests but no verified device media. HTTPS/RLS are not E2EE.
+The retained Supabase migrations/Edge Functions, private Storage policies, authenticated Realtime paths, media, LiveKit and FCM integration code are **not validated hosted services**. No provider target or attached Android devices were supplied to this cloud session; the owner separately reports preview installation. Optional phone OTP, address-book sync and application E2EE are not implemented. Group calling has source/local tests but no verified device media. HTTPS/RLS are not E2EE.
 
 See [test evidence](docs/TESTING.md) and [security model](docs/SECURITY.md). The hosted two-account test is explicitly skipped until disposable verified accounts and public configuration are supplied. Backend checks can be reproduced with:
 

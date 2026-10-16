@@ -42,3 +42,7 @@ The original fixtures are a valid generated 1×1 PNG and a 0.5-second 440 Hz Opu
 Voice/video media, foreground/background/terminated notifications and Android unlock behavior remain BLOCKED in this runner. Run these on two real authenticated devices and record separate evidence. Never convert a token or database success into a voice/video PASS.
 
 Cleanup attempts every run-owned message, object, group, status and call, and removes only contacts/blocks it inserted. A failed cleanup is FAIL and requires owner review. Message soft-delete tombstones, the direct conversation, notification jobs and Auth identities may remain for normal retention/owner cleanup. Signup-created accounts are not automatically deleted. This is why a disposable staging project is required.
+
+## Phase 7 rerun
+
+The current `hosted-results.json` was regenerated with the real runner: **16 BLOCKED**, exit 2, because no staging/test configuration exists. No network permission or provider writes were granted for that blocked run. All 11 migrations pass the separate local SQL suites; no remote migration state can be inferred from that. Preview APK build/installation is owner-reported successful and is not evidence for these hosted scenarios. See [PHASE7_ACTIVATION.md](PHASE7_ACTIVATION.md).

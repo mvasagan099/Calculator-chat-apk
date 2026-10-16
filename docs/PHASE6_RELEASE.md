@@ -1,4 +1,6 @@
-# Phase 6 release audit
+# Phase 6 release audit (historical)
+
+Later evidence: the owner reports a successful preview APK build/static verification and Android installation. The no-artifact statements below describe only the original Phase 6 checkpoint. Connected APK, hosted services and two-device verification remain unverified; see [Phase 7](PHASE7_ACTIVATION.md).
 
 Recorded 2026-10-16 (Asia/Kolkata). Existing checkout/branch preserved; no worktree, app recreation, dependency upgrade, remote deployment or public app publication occurred. **Classification: DEVELOPMENT — NOT PRODUCTION READY.** No APK/AAB or install result exists.
 

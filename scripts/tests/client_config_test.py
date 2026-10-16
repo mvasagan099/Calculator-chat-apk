@@ -13,8 +13,8 @@ config = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(config)
 
 
-def jwt(role):
-    payload = base64.urlsafe_b64encode(json.dumps({'role': role}).encode()).decode().rstrip('=')
+def jwt(role, **claims):
+    payload = base64.urlsafe_b64encode(json.dumps({'role': role, **claims}).encode()).decode().rstrip('=')
     return f'eyJhbGciOiJIUzI1NiJ9.{payload}.unitTestSignatureOnly'
 
 
@@ -40,6 +40,14 @@ class PublicBuildConfigTest(unittest.TestCase):
         result, resource = config.prepare(self.connected(), 'connected')
         self.assertFalse(result['LOCAL_UI_PREVIEW'])
         self.assertIsNone(resource)
+
+    def test_legacy_key_project_ref_must_match_standard_supabase_host(self):
+        data = self.connected()
+        data['SUPABASE_ANON_KEY'] = jwt('anon', ref='another-project')
+        with self.assertRaises(ValueError):
+            config.prepare(data, 'connected')
+        data['SUPABASE_ANON_KEY'] = jwt('anon', ref='staging')
+        config.prepare(data, 'connected')
 
     def test_modern_public_key_is_allowed(self):
         data = self.connected()

@@ -22,7 +22,7 @@ Prepare connected public config, deploy/verify services, then execute [DEVICE_AC
 
 ## Supabase
 
-1. Create a Supabase project. Enable email confirmation, configure SMTP and password strength/rate limits, set a suitable email redirect policy and register `app.calculatorspace.calculator://auth-callback`. Set the site URL to a domain you control for email fallback. Android custom schemes are not domain-verified; for production configure a verified HTTPS Android App Link and update the redirect URI in both manifest and auth calls.
+1. Select the owner-authorized existing Supabase staging project; do not create another project when a suitable project already exists. Enable email confirmation, configure SMTP and password strength/rate limits, set a suitable email redirect policy and register `app.calculatorspace.calculator://auth-callback`. Set the site URL to a domain you control for email fallback. Android custom schemes are not domain-verified; for production configure a verified HTTPS Android App Link and update the redirect URI in both manifest and auth calls.
 2. Before any migration or function deployment, confirm a dedicated **development/staging** project in the dashboard. Record its exact project ref and HTTPS origin. No target is currently configured in this checkout; do not infer a target from the local `project_id` label in `supabase/config.toml`. Use your own account to authenticate the official CLI and inspect the linked target:
 
    ```sh
@@ -40,7 +40,7 @@ Prepare connected public config, deploy/verify services, then execute [DEVICE_AC
    supabase db push
    ```
 
-   This applies the ten versioned migrations. They create user-data tables, indexes, constraints, Auth profile trigger, RLS, private Storage buckets, authenticated RPCs, and Realtime publication entries. Review migrations before applying to an existing project. The application uses public profile discovery by username/public ID; email addresses are never in public profiles.
+   This applies the eleven versioned migrations; obtain explicit owner confirmation on the reviewed target before running it. They create user-data tables, indexes, constraints, Auth profile trigger, RLS, private Storage buckets, authenticated RPCs, and Realtime publication entries. Review migrations before applying to an existing project. The application uses public profile discovery by username/public ID; email addresses are never in public profiles.
 3. In Realtime settings enable private-channel authorization and disable public-channel access. Database changes use the caller's RLS; typing/presence use private `conversation:<uuid>` topics. Message history lives in PostgreSQL.
 4. Set server secrets securely using the dashboard or `supabase secrets set --env-file <ignored-file>`. Built-in `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` are supplied by Supabase. Add:
 
@@ -100,9 +100,9 @@ Notification delivery is best effort. Android force-stop prevents delivery until
 
 Use LiveKit Cloud or a supported self-hosted deployment with HTTPS/WSS, trusted TLS, UDP connectivity and TURN/TLS fallback. Configure LiveKit's advertised public addresses and firewall ports from its current deployment documentation. Supabase does not relay call media.
 
-Save the server API key/secret only in Supabase. Configure the LiveKit webhook URL as `https://PROJECT_REF.supabase.co/functions/v1/livekit-webhook` with events including `room_finished`. Its receiver verifies the signed webhook. The token function calls `authorize_call`, which checks the existing participant, both current conversation memberships, blocks, call state and age, then issues a five-minute room-scoped token. Apply migration `202610150007_call_authorization.sql` before deploying the updated token function. A callee must accept before obtaining a token. Tokens are not an E2EE implementation and token expiry does not itself terminate an already connected participant.
+Save the server API key/secret only in Supabase. Configure the LiveKit webhook URL as `https://PROJECT_REF.supabase.co/functions/v1/livekit-webhook` with events including `room_finished`. Its receiver verifies the signed webhook. The token function calls `authorize_call`, which checks the existing participant, both current conversation memberships, blocks, call state and age, then issues a 90-second room-scoped token (current migration 011/Phase 5 implementation). Apply migration `202610150007_call_authorization.sql` before deploying the updated token function. A callee must accept before obtaining a token. Tokens are not an E2EE implementation and token expiry does not itself terminate an already connected participant.
 
-Use short room empty/departure timeouts and monitor webhooks. The SQL worker marks unanswered ringing calls missed and caps accepted call metadata at two hours and closes ended LiveKit rooms through its server API; the webhook closes metadata when a room finishes. Test timeout, disconnect, cancellation, busy and reconnect paths. Group calling is deliberately excluded. Do not distribute until both physical devices can exchange real audio/video over Wi-Fi, mobile data and a TURN-only restrictive network.
+Use short room empty/departure timeouts and monitor webhooks. The SQL worker marks unanswered ringing calls missed and caps accepted call metadata at two hours and closes ended LiveKit rooms through its server API; the webhook closes metadata when a room finishes. Test timeout, disconnect, cancellation, busy and reconnect paths. Group calling has implemented authorization/UI and local tests; actual group SFU media is not verified. Do not distribute until both physical devices can exchange real audio/video over Wi-Fi, mobile data and a TURN-only restrictive network.
 
 ## Cloud network requirements
 
@@ -149,3 +149,7 @@ Configure signed LiveKit webhooks for `participant_joined`, `participant_left` a
 Call FCM is high-priority data-only with an invitation deadline and a generic local notification. Install matching Firebase Android resources, deploy the updated sender and client together, and grant Android notification permission. Answer/reject actions require account/device/PIN validation; Answer still needs explicit confirmation before capture. Only one authorized registration is selected per invitation; multi-device calling remains disabled. Verify every background/terminated/force-stop scenario on actual devices; do not assume a push-send response proves delivery.
 
 MediaProjection needs its new non-exported service/permission and explicit system consent. Default background relocking stops sharing on app switch; FLAG_SECURE can blank private app capture. PiP/Telecom/full-screen-intent privileges have not been added. See the exact Android/privacy limits and owner test procedure in the calling report.
+
+## Phase 7 current checkpoint
+
+The owner reports a successful installed preview APK. Live backend activation and the connected APK are not verified. No selected staging reference, public URL/key, CLI/database access or disposable hosted-test accounts are available here. Review [PHASE7_ACTIVATION.md](PHASE7_ACTIVATION.md) before deploying; explicit owner confirmation is required after the exact remote target/history/schema and pending migrations are reviewed. No migrations/functions/workers were deployed in Phase 7. The Firebase console secret is owner-reported configured in GitHub and is not available to this process.

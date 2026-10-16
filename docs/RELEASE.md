@@ -145,3 +145,7 @@ adb -s PHONE_A_SERIAL install -r app-release.apk
 ```
 
 These are future download/install instructions, not existing paths/artifacts. Check the owner certificate before installation. Git works in this environment but the Actions API is CONNECT-blocked, so no run ID, checksum, artifact URL or installation result is invented. Follow [the phone test plan](DEVICE_ACCEPTANCE.md) and [transparent store disclosure review](STORE_REVIEW.md) before any beta/production claim. An inspected signed artifact alone does not satisfy hosted/media/privacy/stability gates.
+
+## Phase 7 preview versus connected artifacts
+
+The owner confirms a successful preview APK build/static inspection and installation. Historical “no APK” entries describe earlier local attempts, not the current owner report. No run ID/hash or downloaded APK could be independently inspected here because Actions API access returns Forbidden. The connected artifact remains unverified: select the current branch and connected mode in the debug workflow after setting the real public Supabase pair and raw Firebase JSON secret. Expected artifact: `calculator-messenger-debug-connected`. Preserve the existing preview installation/data on signing mismatch; use its original signer or an owner-approved fresh disposable device/profile. Never silently uninstall/clear data. See [PHASE7_ACTIVATION.md](PHASE7_ACTIVATION.md).
