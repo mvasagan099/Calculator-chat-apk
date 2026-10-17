@@ -27,6 +27,7 @@ void main() {
   test('unavailable encrypted cache permits online reads and confirmed text only, without clearing files', () async {
     final failed = _FailedCache();
     final sent = <Map<String, dynamic>>[];
+    final viewOnceSent = <Map<String, dynamic>>[];
     var online = true;
     final client = SupabaseClient('https://fixture.invalid', 'public-fixture-key',
       authOptions: const AuthClientOptions(autoRefreshToken: false),
@@ -36,9 +37,15 @@ void main() {
         if (request.url.path.endsWith('/rpc/conversation_list')) {
           return json([{'id': 'chat', 'title': 'Private', 'archived': false}]);
         }
-        if (request.url.path.endsWith('/rpc/send_message')) {
+        if (request.url.path.endsWith('/rpc/send_message') ||
+            request.url.path.endsWith('/rpc/send_view_once_message')) {
           if (!online) throw http.ClientException('offline');
-          sent.add(Map<String, dynamic>.from(jsonDecode(request.body) as Map));
+          final data = Map<String, dynamic>.from(jsonDecode(request.body) as Map);
+          if (request.url.path.endsWith('/rpc/send_view_once_message')) {
+            viewOnceSent.add(data);
+          } else {
+            sent.add(data);
+          }
           return json('delivered');
         }
         throw StateError('Unexpected HTTP request');
@@ -61,7 +68,21 @@ void main() {
       expect(sent.single['content'], 'please retry');
       await repo.flush();
       expect(sent, hasLength(1));
-      await expectLater(repo.send('chat', '', kind: 'image', attachment: {'id': 'fixture'}),
+      final image = {'object_path': 'chat/owner-a/image.jpg', 'mime_type': 'image/jpeg', 'size_bytes': 100};
+      final imageId = await repo.send('chat', '', kind: 'image', attachment: image);
+      expect(sent.last['mid'], imageId);
+      expect(sent.last['attachment'], image);
+      expect(sent.last['message_kind'], 'image');
+      final video = {'object_path': 'chat/owner-a/video.mp4', 'mime_type': 'video/mp4', 'size_bytes': 300};
+      final videoId = await repo.send('chat', '', kind: 'video', attachment: video, viewOnce: true);
+      expect(viewOnceSent.single['mid'], videoId);
+      expect(viewOnceSent.single['attachment'], video);
+      expect(viewOnceSent.single['media_kind'], 'video');
+      online = false;
+      await expectLater(repo.send('chat', '', kind: 'image', attachment: {'object_path': 'x'}),
+        throwsStateError);
+      expect(sent, hasLength(2));
+      await expectLater(repo.send('chat', '', kind: 'file', attachment: {'object_path': 'x'}),
         throwsStateError);
       expect(failed.cleared, isFalse);
     } finally {

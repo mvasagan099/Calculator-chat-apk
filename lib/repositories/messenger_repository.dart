@@ -507,22 +507,40 @@ class MessengerRepository {
       // Never claim delivery based on a volatile RAM outbox. Confirm with
       // Supabase before clearing the sender's message field. A retry of the
       // same unchanged text reuses its UUID if the prior response was lost.
-      if (kind != 'text' || attachment != null || viewOnce) {
+      final media = ['image', 'video'].contains(kind);
+      if (!((kind == 'text' && attachment == null && !viewOnce) ||
+            (media && attachment != null))) {
         throw StateError(
-          'Encrypted local cache requires recovery before sending attachments.',
+          'Encrypted local cache requires recovery before sending this file type.',
         );
       }
-      final fingerprint = jsonEncode([cid, body, replyTo, forwarded, seconds]);
+      final fingerprint = jsonEncode([
+        cid, body, kind, replyTo, forwarded, seconds, viewOnce, attachment,
+      ]);
       final onlineId = _onlineAttemptIds.putIfAbsent(
         fingerprint,
         () => const Uuid().v4(),
       );
       try {
-        await client.rpc('send_message', params: {
-          'cid': cid, 'mid': onlineId, 'content': body,
-          'message_kind': kind, 'reply': replyTo,
-          'is_forwarded': forwarded, 'attachment': null,
-        }).timeout(const Duration(seconds: 15));
+        await client.rpc(
+          viewOnce ? 'send_view_once_message' : 'send_message',
+          params: viewOnce
+              ? {
+                  'cid': cid,
+                  'mid': onlineId,
+                  'attachment': attachment,
+                  'media_kind': kind,
+                }
+              : {
+                  'cid': cid,
+                  'mid': onlineId,
+                  'content': body,
+                  'message_kind': kind,
+                  'reply': replyTo,
+                  'is_forwarded': forwarded,
+                  'attachment': attachment,
+                },
+        ).timeout(const Duration(seconds: 15));
         _requireCache(scope);
         _onlineAttemptIds.remove(fingerprint);
         return onlineId;
@@ -530,7 +548,11 @@ class MessengerRepository {
         _requireCache(scope);
         // Keep the attempt ID in memory for retry. The UI retains text when
         // this future fails; no error is mistaken for successful delivery.
-        throw StateError('Message was not confirmed by server. Retry when online.');
+        throw StateError(
+          media
+              ? 'Media send not confirmed. Check chat before trying again to avoid duplicates.'
+              : 'Message was not confirmed by server. Retry when online.',
+        );
       }
     }
     await _saveOutbox([..._outbox, item], scope: scope);
