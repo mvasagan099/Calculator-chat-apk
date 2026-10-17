@@ -123,14 +123,22 @@ void main() {
         expect(pickerCalls, 1);
       }
       lock.didChangeAppLifecycleState(AppLifecycleState.resumed);
-      selected.complete(outcome == 'cancel' ? null : outcome == 'missing file'
-          ? MissingMediaFile()
-          : XFile.fromData(Uint8List.fromList([1, 2, 3]), path: outcome == 'video' ? '/fixture.mp4' : '/fixture.jpg'));
-      await tester.pump();
+      // File/Storage SDK work can use real asynchronous I/O. Do not advance
+      // the fake two-minute lock timer while waiting for those operations.
+      await tester.runAsync(() async {
+        selected.complete(outcome == 'cancel' ? null : outcome == 'missing file'
+            ? MissingMediaFile()
+            : XFile.fromData(Uint8List.fromList([1, 2, 3]), path: outcome == 'video' ? '/fixture.mp4' : '/fixture.jpg'));
+        final deadline = DateTime.now().add(const Duration(seconds: 5));
+        while (state.mounted && (state as dynamic).posting == true) {
+          if (DateTime.now().isAfter(deadline)) fail('Picker operation did not finish: $requests');
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+      });
       await tester.pumpAndSettle();
       final posts = requests.where((path) => path.endsWith('/rpc/create_status'));
       final expectedPost = ['image', 'video', 'repeated launch'].contains(outcome);
-      expect(posts.length, expectedPost ? 1 : 0);
+      expect(posts.length, expectedPost ? 1 : 0, reason: 'Requests: $requests; visible text: ${tester.widgetList<Text>(find.byType(Text)).map((widget) => widget.data).toList()}');
       if (expectedPost) {
         expect(requests.any((path) => path.endsWith('/functions/v1/validate-media')), isTrue);
         expect(requests.any((path) => path.contains('/storage/v1/object/status-media/')), isTrue);
@@ -147,8 +155,10 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       auth.dispose();
       lock.dispose();
-      await repository.dispose();
-      await client.dispose();
+      await tester.runAsync(() async {
+        await repository.dispose();
+        await client.dispose();
+      });
     }, timeout: const Timeout(Duration(minutes: 2)));
   }
 }
