@@ -171,6 +171,7 @@ void main() {
     expect(calls.length, 1); expect(jsonDecode(calls.single.body), {'peer': owner});
     expect(requests.any((r) => r.path.endsWith('/contacts')), isFalse);
     expect(find.text('Self conversation opened'), findsOneWidget);
+    lock.lock();
     await tester.pumpWidget(const SizedBox.shrink()); router.dispose();
   }, timeout: const Timeout(Duration(minutes: 2)));
   testWidgets('chat list offers Message Yourself even with no conversations', (tester) async {
@@ -201,6 +202,7 @@ void main() {
     await tester.tap(find.text('Message Yourself')); await tester.pump();
     lock.lock(); deferredCreate!.complete(cid); await tester.pumpAndSettle();
     expect(find.text('Private self chat'), findsNothing);
+    lock.lock();
     await tester.pumpWidget(const SizedBox.shrink()); router.dispose();
   }, timeout: const Timeout(Duration(minutes: 2)));
   for (final outcome in ['valid', 'locked', 'stale', 'missing', 'recipient mismatch', 'device revoked']) {
@@ -224,6 +226,7 @@ void main() {
       }
       expect(routing.router.routeInformationProvider.value.uri.path, outcome == 'valid' ? '/chat/$cid' : '/');
       routing.dispose(); device.dispose();
+      lock.lock(); // Cancel the fixture timer before binding invariant checks.
     }, timeout: const Timeout(Duration(minutes: 2)));
   }
 }
