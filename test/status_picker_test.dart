@@ -78,7 +78,7 @@ void main() {
           return http.Response(jsonEncode(response), 200, request: request,
               headers: {'content-type': 'application/json'});
         }));
-      await client.auth.setSession('fixture-refresh');
+      await tester.runAsync(() => client.auth.setSession('fixture-refresh'));
       final native = ControlledMediaPicker();
       final lock = LockController(ImmediatePinVault(), mediaPicker: native)..hasPin = true;
       final auth = PickerFixtureAuth(client, lock);
