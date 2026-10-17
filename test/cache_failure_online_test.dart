@@ -57,6 +57,7 @@ void main() {
       final rows = await repo.conversations().first.timeout(const Duration(seconds: 4));
       expect(rows.single['id'], 'chat');
       expect(repo.onlineOnly, isTrue);
+      expect(repo.cacheRecoveryStage, 'unknown');
       expect(failed.forgotten, isTrue);
       expect(failed.cleared, isFalse);
       online = false;
@@ -78,12 +79,25 @@ void main() {
       expect(viewOnceSent.single['mid'], videoId);
       expect(viewOnceSent.single['attachment'], video);
       expect(viewOnceSent.single['media_kind'], 'video');
+      final audio = {'object_path': 'chat/owner-a/clip.ogg', 'mime_type': 'audio/ogg', 'size_bytes': 40};
+      final audioId = await repo.send('chat', '', kind: 'audio', attachment: audio);
+      expect(sent.last['mid'], audioId);
+      expect(sent.last['message_kind'], 'audio');
+      final voiceId = await repo.send('chat', '', kind: 'voice', attachment: audio);
+      expect(sent.last['mid'], voiceId);
+      expect(sent.last['message_kind'], 'voice');
+      final document = {'object_path': 'chat/owner-a/report.pdf', 'mime_type': 'application/pdf', 'size_bytes': 60};
+      final docId = await repo.send('chat', '', kind: 'file', attachment: document);
+      expect(sent.last['mid'], docId);
+      expect(sent.last['message_kind'], 'file');
       online = false;
       await expectLater(repo.send('chat', '', kind: 'image', attachment: {'object_path': 'x'}),
         throwsStateError);
-      expect(sent, hasLength(2));
+      expect(sent, hasLength(5));
       await expectLater(repo.send('chat', '', kind: 'file', attachment: {'object_path': 'x'}),
         throwsStateError);
+      expect(sent, hasLength(5));
+      await expectLater(repo.send('chat', '', kind: 'file'), throwsStateError);
       expect(failed.cleared, isFalse);
       await expectLater(repo.clearLocal(), throwsStateError);
       expect(failed.cleared, isFalse);

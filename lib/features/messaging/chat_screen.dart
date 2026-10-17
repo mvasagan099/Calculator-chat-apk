@@ -210,10 +210,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> attach(String source) async {
     if (uploading) return;
-    if (ref.read(messengerProvider).onlineOnly &&
-        !['image', 'camera', 'video', 'image_once', 'video_once'].contains(source)) {
-      throw StateError('Encrypted cache recovery is required before sending this file type.');
-    }
     final access = PrivateMediaAccess(ref.read(lockProvider),
         ref.read(authServiceProvider), ref.read(supabaseProvider), isCurrent: () => mounted);
     access.check();
@@ -255,9 +251,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _voice() async {
-    if (ref.read(messengerProvider).onlineOnly) {
-      throw StateError('Encrypted cache recovery is required before sending voice recordings.');
-    }
     if (recording) {
       final path = await recorder.stop();
       await amplitude?.cancel();
@@ -857,11 +850,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       child: Column(
         children: [
           if (ref.read(messengerProvider).onlineOnly)
-            const ListTile(
+            ListTile(
               dense: true,
-              leading: Icon(Icons.lock_outline),
-              title: Text('Online-only recovery mode'),
-              subtitle: Text('Encrypted drafts stay untouched. Text, photos and videos require server confirmation; other files remain unavailable.'),
+              leading: const Icon(Icons.lock_outline),
+              title: const Text('Online-only recovery mode'),
+              subtitle: Text('Stage: ${ref.read(messengerProvider).cacheRecoveryStage ?? 'unknown'}. Encrypted drafts are untouched. New attachments require server confirmation.'),
             ),
           ExpirationBanner(cid: widget.id, canChange: direct || admin),
           if (uploading) LinearProgressIndicator(value: uploadProgress),

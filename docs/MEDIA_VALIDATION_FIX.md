@@ -1,29 +1,11 @@
-# Image/video upload validation fix
+# Media uploads: ownership-safe validation
 
-When Storage's restrictive visual-read policy is enforced, an uploaded picture
-is not yet attached to a chat message. The old `validate-media` function used
-the *user* Storage download, which could fail with 403 in this pre-attachment
-state. The project showed three JPEG objects present with no media validation
-records while a text file was successfully validated.
+Uploads for chat images, videos, voice, audio and supported documents use private `chat-media` (25 MiB). Status media uses `status-media` (25 MiB); profile images use `avatars` (5 MiB).
 
-The updated Edge validation function first requires a valid Supabase JWT and
-approved device (existing `authenticated` gate), verifies the exact Storage
-uploader ID from privileged object metadata, and checks the caller's **current**
-conversation membership using a user-scoped database request. Only after all
-checks pass does the Edge function download bytes internally using its existing
-service role to validate file signatures, MIME, size, and 48-hour visual expiry.
-The normal authenticated media *viewing* policies are unchanged; no bytes, media
-URLs, or service-role credentials are returned to the client.
+**Verified failure:** Existing live `validate-media` v9 reads newly uploaded media through the uploader's SELECT RLS. The uploaded object is not yet linked to a message; the visual-media viewing policy rejects the read. Function logs show 403 after upload.
 
-**Deployment required:** Deploy the updated `validate-media` Edge Function
-from this branch after tests pass. No bucket-public setting, RLS disablement,
-or SQL migration is required. Do not attempt to revalidate orphaned older files
-by hand or rerun migration history. Existing unvalidated objects are not
-automatically retried; test with a **new** JPEG and an MP4 in a currently
-approved conversation. Test blocked/non-member requests and account/device
-revocation; inspect 403 and 200 responses. Confirm the Flutter picker remains
-unlocked on return, separately: that is native handoff behavior, not fixed by
-this server-side upload patch.
+**Fix:** Migration `202610180015_media_upload_owner.sql` adds `public.media_upload_owned`, callable **only** by `service_role`, returning a boolean after matching the exact bucket, object path, and `storage.objects.owner_id` with the authenticated user. The updated Edge Function verifies user/device, exact Storage ownership, and current conversation membership before downloading with admin credentials solely to check content signatures. It still enforces existing size/MIME/expiry rules and doesn't expose storage bytes or admin credentials. Current Supabase Storage `.list()` no longer includes an `owner` field; the previous pending validator patch using `.list()` must **not** be deployed unchanged. <https://supabase.com/docs/reference/javascript/file-buckets-list>
 
-Current tests are isolated logic tests, not live Supabase Storage or Android
-device tests. A successful GitHub CI run does not imply the function is deployed.
+**Deployment order:** Run migrations only after review. Verify `public.media_upload_owned` is restricted to service-role execution. Then deploy the updated `validate-media` Edge Function with its `_shared` imports and existing JWT settings. Never publish buckets, disable RLS, or loosen attachment permissions. New client APK with online-only audio/voice/file support is also needed for the SQLite fallback.
+
+**Device testing:** New image, video, voice clip, MP3/M4A, PDF/TXT/ZIP/VCF in an approved chat. Ensure a failed validation does not insert a message. Then test readback, expiration, sender/recipient permissions, device revocation and size/MIME denial. Pending orphan media is **not** automatically committed or deleted. Do not delete encrypted local cache or change app signing key.

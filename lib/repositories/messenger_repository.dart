@@ -45,6 +45,9 @@ class MessengerRepository {
   bool _onlineOnly = false;
   /// Local encrypted drafts have NOT been recovered. No optimistic offline sends.
   bool get onlineOnly => _onlineOnly;
+  /// A fixed allowlisted failure stage, never message bodies or file paths.
+  String? get cacheRecoveryStage => _cacheRecoveryStage;
+  String? _cacheRecoveryStage;
   final _onlineAttemptIds = <String, String>{};
   Completer<void>? _flushDone;
   Future<void>? _preparing, _suspending;
@@ -106,9 +109,19 @@ class MessengerRepository {
     final epoch = _sessionEpoch;
     LocalCache cache = _cacheFactory(owner);
     bool onlineFallback = false;
+    String? recoveryStage;
     try {
       await cache.initialize();
-    } catch (_) {
+    } catch (error) {
+      // Extract only a fixed stage code; never display exception details.
+      const safeStages = {
+        'key-read', 'key-derive', 'sqlite-open', 'sqlite-meta',
+        'legacy-decrypt', 'initial-save', 'initial-verify',
+        'sqlite-decrypt', 'cache-refresh',
+      };
+      final candidate = RegExp(r'Encrypted local cache is unavailable \(([a-z-]+)\)')
+          .firstMatch(error.toString())?.group(1);
+      recoveryStage = safeStages.contains(candidate) ? candidate : 'unknown';
       // Cache initialize fails closed and preserves its files. Never recreate
       // its Keystore key, purge ciphertext or migrate an unreadable outbox.
       try { await cache.forget(); } catch (_) {}
@@ -137,6 +150,7 @@ class MessengerRepository {
     _cacheOwner = owner;
     _cache = cache;
     _onlineOnly = onlineFallback;
+    _cacheRecoveryStage = recoveryStage;
     _onlineAttemptIds.clear();
     _connection = (connectivity ?? Connectivity().onConnectivityChanged).listen(
       (_) {
@@ -507,9 +521,10 @@ class MessengerRepository {
       // Never claim delivery based on a volatile RAM outbox. Confirm with
       // Supabase before clearing the sender's message field. A retry of the
       // same unchanged text reuses its UUID if the prior response was lost.
-      final media = ['image', 'video'].contains(kind);
+      final media = ['image', 'video', 'audio', 'voice', 'file'].contains(kind);
       if (!((kind == 'text' && attachment == null && !viewOnce) ||
-            (media && attachment != null))) {
+            (media && attachment != null &&
+                (!viewOnce || ['image', 'video'].contains(kind))))) {
         throw StateError(
           'Encrypted local cache requires recovery before sending this file type.',
         );
@@ -550,7 +565,7 @@ class MessengerRepository {
         // this future fails; no error is mistaken for successful delivery.
         throw StateError(
           media
-              ? 'Media send not confirmed. Check chat before trying again to avoid duplicates.'
+              ? 'Attachment send not confirmed. Check chat before trying again to avoid duplicates.'
               : 'Message was not confirmed by server. Retry when online.',
         );
       }
@@ -703,6 +718,7 @@ class MessengerRepository {
     await _cache?.forget();
     _cache = null;
     _onlineOnly = false;
+    _cacheRecoveryStage = null;
     _onlineAttemptIds.clear();
     _hiddenIds.clear();
   }
@@ -726,6 +742,7 @@ class MessengerRepository {
     _cache = null;
     _cacheOwner = null;
     _onlineOnly = false;
+    _cacheRecoveryStage = null;
     _onlineAttemptIds.clear();
     _hiddenIds.clear();
   }
@@ -747,6 +764,7 @@ class MessengerRepository {
     await _cache?.forget();
     _cache = null;
     _onlineOnly = false;
+    _cacheRecoveryStage = null;
     _onlineAttemptIds.clear();
     await _changes.close();
   }
