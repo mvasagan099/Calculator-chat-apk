@@ -64,14 +64,32 @@ acceptance boundary are documented in [MEDIA_PICKER_HANDOFF.md](MEDIA_PICKER_HAN
 ## Auth adapter and atomic identity creation
 
 Supabase password Auth uses an email/phone identifier. The `account-auth` Edge
-adapter resolves User IDs server-side and never asks for a real address. For NEW
-accounts it generates a random UUID mailbox under **an explicitly owner-controlled
-subdomain** configured as `ACCOUNT_ALIAS_DOMAIN`. There is no default domain.
-Do not configure another organization's domain, a borrowed address or a real
-user mailbox. The operator must own the domain and route it to a non-delivering
-mail sink/null-MX configuration; it is not an account-recovery channel. Provider
-Auth can expose the alias to its own signed-in user: it is not a secret, an
-authorization token or a rate-limit boundary.
+adapter resolves User IDs server-side and never asks for a real address. With the
+owner-approved no-domain mode, NEW accounts receive a random UUID identifier at
+`calculator-messenger.invalid`, generated exclusively on the server by
+`newAccountAlias()`. RFC 6761 reserves `.invalid` and all its subdomains: no domain
+purchase, third-party namespace, mailbox, DNS setup or email delivery is involved.
+`ACCOUNT_ALIAS_DOMAIN` is no longer read or required. Client email/alias/domain
+fields cannot influence the generated identifier. The UUID local part is not the
+chosen User ID and is not the internal Auth ownership UUID. Existing account
+identifiers remain untouched and are still resolved from their original profile.
+
+This is a Supabase compatibility identifier, not a recovery address. Provider
+Auth can expose it to its own signed-in user: it is not a secret, authorization
+token or rate-limit boundary. Keep recovery-code authentication and password
+proofs; do not add email OTP, invitations, magic links or emailed password resets
+for these synthetic identifiers. Review hosted Auth hooks and security-email
+settings before activation so they do not attempt mail delivery to aliases.
+
+Primary references: [IANA special-use domains](https://www.iana.org/assignments/special-use-domain-names),
+[RFC 6761 section 6.4](https://www.rfc-editor.org/rfc/rfc6761#section-6.4), and
+[Supabase Auth email validation](https://github.com/supabase/auth/blob/master/internal/api/mail.go).
+The current upstream validator checks address format rather than DNS delivery;
+this is implementation evidence, not proof of compatibility with a particular
+hosted project's version, allowlists or hooks. Hosted Admin createUser followed
+by password sign-in under `.invalid` must pass on disposable accounts before
+enabling registration. If the provider rejects the reserved namespace, fail
+closed and investigate; never fall back to a real or borrowed domain.
 
 Only Admin `createUser` receives that random alias and `email_confirm: true`.
 This confirms a server-created synthetic identifier for this account only;
@@ -170,8 +188,8 @@ Supabase Auth's own limits remain necessary because its direct token APIs exist.
    11-migration `setup-all.sql` as an upgrade. CLI generation/deployment was not
    available in this local session; the new migration follows the repository's
    versioned naming convention. No migration history was repaired or fabricated.
-2. Securely configure Edge-only `ACCOUNT_ALIAS_DOMAIN`,
-   `ACCOUNT_RECOVERY_PEPPER` (at least 32 random characters),
+2. Securely configure Edge-only `ACCOUNT_RECOVERY_PEPPER` (at least 32 random
+   characters),
    `ACCOUNT_AUTH_IP_HEADER`, and initially leave `ACCOUNT_AUTH_ENABLED` unset/false.
    Keep built-in service-role/anon/project runtime inputs server-side. These new
    values must NOT be Flutter defines or release workflow secrets.
@@ -182,7 +200,7 @@ Supabase Auth's own limits remain necessary because its direct token APIs exist.
    the email/password provider enabled for Admin-created alias accounts. Do not
    globally disable password Auth or silently disable email confirmation for old
    flows. Verify Admin createUser still works with the approved settings. Audit
-   existing hooks/SMTP: no email recovery should be delivered for the alias domain.
+   existing hooks/SMTP: no mail should be delivered for the reserved alias namespace.
    These account-specific changes have not been applied by this patch.
 5. Verify global/native Auth limits, ingress spoof resistance, legacy account
    compatibility, concurrent signup, one-time recovery, stale claims, interrupted
@@ -215,3 +233,24 @@ Official API references used: [Admin createUser](https://supabase.com/docs/refer
 [Admin updateUserById](https://supabase.com/docs/reference/javascript/auth-admin-updateuserbyid),
 [signOut scopes](https://supabase.com/docs/reference/javascript/auth-signout),
 [Flutter setSession](https://supabase.com/docs/reference/dart/auth-setsession).
+
+## No-domain follow-up — 2026-10-17
+
+The owner confirmed that no domain is owned and authorized this alternative.
+Only the server helper, its two handler call sites, executable account tests and
+this document change. No migration, Auth setting, secret, existing account,
+release workflow or Flutter source is changed by this follow-up. Existing PIN,
+device authorization, recovery HMACs and trusted-ingress quotas are preserved.
+The prior deployment bundle contains the old domain-required handler and is
+superseded for account-auth by the no-domain patch; do not deploy that old copy.
+Hosted provider compatibility, ingress spoof tests and server secret setup remain
+pending. The adapter remains disabled unless ACCOUNT_AUTH_ENABLED is exactly true.
+
+Follow-up validation: all 15 account-handler tests passed locally with injected
+provider fixtures. Because the pinned npm dependencies are absent from the local
+Deno cache and registry DNS is unavailable, the test-only import map substitutes
+a fail-on-use Supabase SDK module; real handler logic and Web Crypto execute, but
+no real provider SDK calls are exercised. Normal dependency typechecking/full
+Edge suite could not run locally and must run in CI after publication approval.
+The pure account helper typechecks independently. No hosted test identity was
+created and no existing user identifier was changed.

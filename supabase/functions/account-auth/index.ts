@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { adminClient, authenticated, body, HttpError, json, required, uuid } from "../_shared/http.ts";
-import { AccountError, accountPassword, aliasDomain, displayName, keyedHash, loginId, newRecoveryCodes, recoveryCode } from "../_shared/account_auth.ts";
+import { AccountError, accountPassword, displayName, keyedHash, loginId, newAccountAlias, newRecoveryCodes, recoveryCode } from "../_shared/account_auth.ts";
 
 const invalid = () => new AccountError(401, "invalid_credentials", "User ID or password is incorrect.");
 const boundedFetch: typeof fetch = (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(15000) });
@@ -67,7 +67,7 @@ export async function handleAccount(req: Request, dependencies = accountDependen
       if (target) throw new AccountError(409, "user_id_unavailable", "This User ID is unavailable.");
       const next = await codes();
       const intent = crypto.randomUUID();
-      const alias = crypto.randomUUID() + "@" + aliasDomain(required("ACCOUNT_ALIAS_DOMAIN"));
+      const alias = newAccountAlias();
       const { error: intentError } = await admin.rpc("account_signup_intent", {
         intent, login_id: id, display_name: name, hashes: next.hashes,
       });
@@ -99,7 +99,7 @@ export async function handleAccount(req: Request, dependencies = accountDependen
       if (typeof input.password !== "string" || input.password.length < 1 || input.password.length > 256) throw invalid();
       // Always perform a password verification, including unknown IDs. Random
       // dummy aliases avoid an account-existence fast path. Auth also rate limits.
-      const alias = target?.alias ?? crypto.randomUUID() + "@" + aliasDomain(required("ACCOUNT_ALIAS_DOMAIN"));
+      const alias = target?.alias ?? newAccountAlias();
       const { data, error } = await publicClient().auth.signInWithPassword({ email: alias, password: input.password });
       if (error || !target || !data.session || data.user?.id !== target.id) throw invalid();
       return json({ refresh_token: data.session.refresh_token, user_uuid: data.user.id });

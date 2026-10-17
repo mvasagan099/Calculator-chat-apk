@@ -1,4 +1,4 @@
-import { accountPassword, aliasDomain, displayName, keyedHash, loginId, newRecoveryCodes, recoveryCode } from "./account_auth.ts";
+import { accountPassword, displayName, keyedHash, loginId, newAccountAlias, newRecoveryCodes, recoveryCode } from "./account_auth.ts";
 import { handleAccount, accountDependencies } from "../account-auth/index.ts";
 
 function assert(value: unknown, message = "assertion failed"): asserts value { if (!value) throw new Error(message); }
@@ -13,6 +13,8 @@ function fixture() {
   const users = new Map<string, Identity>();
   const intents = new Map<string, Record<string, unknown>>();
   const calls: { name: string; args: Record<string, unknown> }[] = [];
+  const created: { email: string; email_confirm: boolean }[] = [];
+  const loginAliases: string[] = [];
   let limited = false, approved = true, passwordFailure = false, wrongOwner = false;
   let claimUsed = false;
   let proofSignouts = 0;
@@ -34,7 +36,8 @@ function fixture() {
     auth: {
       getUser: () => Promise.resolve({ data: { user: { id: owner } }, error: null }),
       admin: {
-        createUser: async (input: { email: string; password: string; app_metadata: { calculator_signup_intent: string } }) => {
+        createUser: async (input: { email: string; email_confirm: boolean; password: string; app_metadata: { calculator_signup_intent: string } }) => {
+          created.push({ email: input.email, email_confirm: input.email_confirm });
           const intent = intents.get(input.app_metadata.calculator_signup_intent)!;
           await Promise.resolve();
           if (users.has(String(intent.login_id))) return { data: { user: null }, error: new Error("duplicate") };
@@ -52,6 +55,7 @@ function fixture() {
   };
   const proof = { auth: {
     signInWithPassword: (input: { email: string; password: string }) => {
+      loginAliases.push(input.email);
       const found = [...users.values()].find((u) => u.alias === input.email && u.password === input.password);
       const token = "header." + btoa(JSON.stringify({ session_id: sessionId })) + ".signature";
       return Promise.resolve({ data: { user: found ? { id: wrongOwner ? "other" : found.id } : null,
@@ -61,7 +65,11 @@ function fixture() {
   } };
   const dependencies = {
     enabled: () => true,
-    required: (key: string) => ({ ACCOUNT_RECOVERY_PEPPER: pepper, ACCOUNT_AUTH_IP_HEADER: "x-trusted-ip", ACCOUNT_ALIAS_DOMAIN: "accounts.owner-domain.net" })[key as "ACCOUNT_RECOVERY_PEPPER"],
+    required: (key: string) => {
+      if (key === "ACCOUNT_RECOVERY_PEPPER") return pepper;
+      if (key === "ACCOUNT_AUTH_IP_HEADER") return "x-trusted-ip";
+      throw new Error("Unexpected configuration requirement: " + key);
+    },
     adminClient: () => admin, publicClient: () => proof,
     authenticated: async () => {
       if (!approved) throw new Error("not approved");
@@ -71,7 +79,7 @@ function fixture() {
   const request = (input: Record<string, unknown>, headers = { "x-trusted-ip": "192.0.2.1" }) =>
     handleAccount(new Request("https://fixture.invalid", { method: "POST", headers, body: JSON.stringify(input) }), dependencies);
   const seed = () => users.set("chosen_id", { id: owner, alias: "random@accounts.owner-domain.net", password });
-  return { request, seed, users, calls, intents, setLimited: () => limited = true,
+  return { request, seed, users, calls, intents, created, loginAliases, setLimited: () => limited = true,
     denyDevice: () => approved = false, failPassword: () => passwordFailure = true,
     wrongOwner: () => wrongOwner = true, signouts: () => proofSignouts };
 }
@@ -82,8 +90,30 @@ Deno.test("account input: strict User IDs, Unicode display names, confirmation a
   for (const name of [" ", "a".repeat(81)]) rejects(() => displayName(name));
   rejects(() => accountPassword("short", "short")); rejects(() => accountPassword(password, "different"));
   rejects(() => accountPassword("a".repeat(257))); accountPassword(password, password);
-  rejects(() => aliasDomain("example.com")); rejects(() => aliasDomain("injected@owner.net"));
   rejects(() => recoveryCode("short"));
+});
+Deno.test("internal aliases: unique server-generated UUIDs use only reserved .invalid", () => {
+  const aliases = Array.from({ length: 128 }, () => newAccountAlias());
+  assert(new Set(aliases).size === aliases.length);
+  assert(aliases.every((alias) => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}@calculator-messenger\.invalid$/.test(alias)));
+});
+Deno.test("signup: no domain configuration, caller email ignored, synthetic identity confirmed server-side", async () => {
+  const f = fixture();
+  const response = await f.request({ action: "signup", user_id: "chosen_id", username: "Name", password, confirm_password: password,
+    email: "untrusted@example.com", alias: "chosen_id@untrusted.example", alias_domain: "untrusted.example" });
+  assert(response.status === 200 && f.created.length === 1);
+  assert(f.created[0].email.endsWith("@calculator-messenger.invalid") && f.created[0].email_confirm === true);
+  assert(!f.created[0].email.includes("chosen_id") && !f.created[0].email.includes("untrusted"));
+  const login = await f.request({ action: "login", user_id: "chosen_id", password });
+  assert(login.status === 200 && f.loginAliases.at(-1) === f.created[0].email);
+});
+Deno.test("login: unknown IDs use a fresh reserved dummy alias; legacy alias is unchanged", async () => {
+  const f = fixture(); f.seed();
+  const legacy = f.users.get("chosen_id")!.alias;
+  assert((await f.request({ action: "login", user_id: "unknown_id", password })).status === 401);
+  assert(f.loginAliases.at(-1)!.endsWith("@calculator-messenger.invalid"));
+  assert((await f.request({ action: "login", user_id: "chosen_id", password })).status === 200);
+  assert(f.loginAliases.at(-1) === legacy && f.users.get("chosen_id")!.alias === legacy);
 });
 Deno.test("recovery: eight unique random codes, domain-separated keyed hashes", async () => {
   const next = await newRecoveryCodes(pepper);

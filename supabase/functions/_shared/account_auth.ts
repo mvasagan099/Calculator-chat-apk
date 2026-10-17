@@ -25,13 +25,11 @@ export function displayName(value: unknown): string {
   }
   return value.trim();
 }
-export function aliasDomain(value: string): string {
-  // Explicit owner-controlled subdomain only. No fabricated/default domain.
-  if (!/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/.test(value) ||
-      /(?:^|\.)(?:example\.(?:com|net|org)|invalid|test|localhost)$/.test(value)) {
-    throw new Error("Configure an owner-controlled account alias domain");
-  }
-  return value;
+export function newAccountAlias(): string {
+  // Server-generated Auth identifier only, never a delivery/recovery address.
+  // RFC 6761 reserves .invalid (including subdomains); no domain purchase or
+  // another organization's namespace is involved. Existing aliases stay intact.
+  return crypto.randomUUID() + "@calculator-messenger.invalid";
 }
 export function recoveryCode(value: unknown): string {
   if (typeof value !== "string" || !/^[0-9a-f]{64}$/.test(value)) {
