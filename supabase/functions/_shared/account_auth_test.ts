@@ -7,6 +7,7 @@ const password = "a-long-fixture-password";
 const owner = "12000000-0000-0000-0000-000000000001";
 const sessionId = "12000000-0000-0000-0000-000000000002";
 const pepper = "fixture-pepper-never-a-production-secret";
+const gatewaySecret = "unit-test-gateway-secret-a".repeat(2);
 type Identity = { id: string; alias: string; password: string };
 
 function fixture() {
@@ -68,6 +69,7 @@ function fixture() {
     required: (key: string) => {
       if (key === "ACCOUNT_RECOVERY_PEPPER") return pepper;
       if (key === "ACCOUNT_AUTH_IP_HEADER") return "x-trusted-ip";
+      if (key === "ACCOUNT_AUTH_GATEWAY_SECRET") return gatewaySecret;
       throw new Error("Unexpected configuration requirement: " + key);
     },
     adminClient: () => admin, publicClient: () => proof,
@@ -76,7 +78,9 @@ function fixture() {
       return { user: { id: owner, email: users.get("chosen_id")?.alias }, client: { rpc }, admin };
     },
   } as unknown as typeof accountDependencies;
-  const request = (input: Record<string, unknown>, headers = { "x-trusted-ip": "192.0.2.1" }) =>
+  const request = (input: Record<string, unknown>, headers: Record<string, string> = {
+    "x-trusted-ip": "192.0.2.1", "x-account-gateway-secret": gatewaySecret,
+  }) =>
     handleAccount(new Request("https://fixture.invalid", { method: "POST", headers, body: JSON.stringify(input) }), dependencies);
   const seed = () => users.set("chosen_id", { id: owner, alias: "random@accounts.owner-domain.net", password });
   return { request, seed, users, calls, intents, created, loginAliases, setLimited: () => limited = true,
@@ -186,4 +190,21 @@ Deno.test("rotation: password proof and approved device required; proof session 
   const r = await f.request({ action: "rotate_codes", password });
   assert(r.status === 200 && (await r.json()).recovery_codes.length === 8 && f.signouts() === 1);
   f.denyDevice(); assert((await f.request({ action: "rotate_codes", password })).status !== 200);
+});
+
+Deno.test("trusted ingress: direct, missing or forged gateway secret fails before database access", async () => {
+  const f = fixture();
+  const input = { action: "signup", user_id: "chosen_id", username: "Name", password, confirm_password: password };
+  assert((await f.request(input, { "x-trusted-ip": "198.51.100.100" })).status === 503);
+  assert((await f.request(input, { "x-trusted-ip": "198.51.100.100", "x-account-gateway-secret": "bad" })).status === 503);
+  assert(f.calls.length === 0 && f.created.length === 0);
+  assert((await f.request(input, { "x-trusted-ip": "198.51.100.100", "x-account-gateway-secret": gatewaySecret })).status === 200);
+});
+Deno.test("trusted ingress: authenticated gateway still requires a single canonical client IP", async () => {
+  const f = fixture();
+  const input = { action: "login", user_id: "chosen_id", password };
+  for (const ip of ["", "203.0.113.10, 192.0.2.20", "x".repeat(129)]) {
+    assert((await f.request(input, { "x-trusted-ip": ip, "x-account-gateway-secret": gatewaySecret })).status === 503);
+  }
+  assert(f.calls.length === 0);
 });

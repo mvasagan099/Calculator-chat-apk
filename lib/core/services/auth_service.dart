@@ -7,6 +7,8 @@ import '../security/lock_controller.dart';
 import '../security/pin_vault.dart';
 import 'device_access_service.dart';
 import 'account_input.dart';
+import 'account_gateway.dart';
+import '../config/app_config.dart';
 
 class AuthService extends ChangeNotifier {
   AuthService(this.client, this.lock, this.store) {
@@ -159,6 +161,7 @@ class AuthService extends ChangeNotifier {
       _freshAt != null &&
       DateTime.now().difference(_freshAt!) < const Duration(minutes: 5);
   List<String> recoveryCodes = const [];
+  AccountGateway? _accountGateway;
   bool _accountBusy = false;
   int _loginGeneration = 0;
   String get nextSecurityRoute => !deviceAuthorized
@@ -171,6 +174,12 @@ class AuthService extends ChangeNotifier {
 
   Future<Map<String, dynamic>> _accountRequest(Map<String, dynamic> input) async {
     if (client == null) throw StateError('Configure Supabase first');
+    if (AppConfig.accountAuthGatewayUrl.isNotEmpty) {
+      return (_accountGateway ??= AccountGateway(AppConfig.accountAuthGatewayUrl))
+          .invoke(input, accessToken: client!.auth.currentSession?.accessToken);
+    }
+    // Legacy fixture path. Production connected configuration now requires a
+    // gateway URL; direct public Supabase invocation fails closed.
     try {
       final response = await client!.functions.invoke('account-auth', body: input);
       if (response.status != 200 || response.data is! Map) {
@@ -352,6 +361,7 @@ class AuthService extends ChangeNotifier {
     _expiry?.cancel();
     ++_accessGeneration;
     _subscription?.cancel();
+    _accountGateway?.close();
     super.dispose();
   }
 }

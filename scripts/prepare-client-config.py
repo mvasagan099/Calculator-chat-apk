@@ -14,7 +14,7 @@ import sys
 
 PACKAGE = 'app.calculatorspace.calculator_messenger'
 PUBLIC_FIELDS = {
-    'LOCAL_UI_PREVIEW', 'SUPABASE_URL', 'SUPABASE_ANON_KEY',
+    'LOCAL_UI_PREVIEW', 'SUPABASE_URL', 'SUPABASE_ANON_KEY', 'ACCOUNT_AUTH_GATEWAY_URL',
     'FIREBASE_API_KEY', 'FIREBASE_APP_ID', 'FIREBASE_SENDER_ID', 'FIREBASE_PROJECT_ID',
 }
 FIREBASE_FIELDS = ('FIREBASE_API_KEY', 'FIREBASE_APP_ID', 'FIREBASE_SENDER_ID', 'FIREBASE_PROJECT_ID')
@@ -61,6 +61,10 @@ def prepare(data, mode, firebase_android=None):
     # Publishable keys/custom domains require an actual authenticated provider check.
     project_ref = url.hostname.removesuffix('.supabase.co') if url.hostname.endswith('.supabase.co') else None
     validate_public_key(data.get('SUPABASE_ANON_KEY'), project_ref)
+    gateway = urlsplit(data.get('ACCOUNT_AUTH_GATEWAY_URL', ''))
+    if (gateway.scheme != 'https' or not gateway.hostname or gateway.username or gateway.password
+            or gateway.query or gateway.fragment or gateway.path != '/account-auth' or gateway.port not in (None, 443)):
+        raise ValueError('Connected builds require the public HTTPS account gateway URL ending /account-auth')
     if any('YOUR_' in v.upper() for k, v in data.items() if k != 'LOCAL_UI_PREVIEW'):
         raise ValueError('Replace example provider identifiers before building')
     result = {'LOCAL_UI_PREVIEW': False, **{k: v for k, v in data.items() if k != 'LOCAL_UI_PREVIEW' and v}}
@@ -138,7 +142,7 @@ def main():
             args.resources.unlink()  # Retire only our old generated XML to avoid duplicate resources.
         print('Validated public configuration: ' + args.mode + '; Google Services: ' + ('configured' if android else 'disabled'))
     except (ValueError, KeyError, TypeError, OSError):
-        print('Client configuration rejected. Connected builds require a public HTTPS Supabase URL/key. FIREBASE_ANDROID_CONFIG must be the complete raw google-services.json object (not base64 or a service account), matching app.calculatorspace.calculator_messenger. No values were logged.', file=sys.stderr)
+        print('Client configuration rejected. Connected builds require public HTTPS Supabase URL/key and ACCOUNT_AUTH_GATEWAY_URL (https://.../account-auth). FIREBASE_ANDROID_CONFIG must be complete raw google-services.json, not a service account. No values were logged.', file=sys.stderr)
         return 2
     return 0
 

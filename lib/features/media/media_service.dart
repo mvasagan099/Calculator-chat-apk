@@ -172,7 +172,24 @@ class MediaService {
       if (previous == null || trustedExpiry.isBefore(previous)) {
         attachment['media_expires_at'] = trustedExpiry.toUtc().toIso8601String();
       }
-      final bytes = await client.storage.from('chat-media').download(attachment['object_path']);
+      if (session == null) throw StateError('Media unavailable');
+      final transport = http.Client();
+      late final Uint8List bytes;
+      try {
+        // Authenticated Storage GET matches the restrictive visual-read RLS
+        // operation; the ordinary Storage SDK URL may use a different route.
+        bytes = await downloadAuthenticatedVisualBytes(
+          transport: transport,
+          projectUrl: AppConfig.supabaseUrl,
+          anonKey: AppConfig.supabaseKey,
+          accessToken: session,
+          path: attachment['object_path'] as String,
+          expected: expected,
+          onProgress: onProgress,
+        );
+      } finally {
+        transport.close();
+      }
       if (owner == null || owner != client.auth.currentUser?.id || session != client.auth.currentSession?.accessToken ||
           visualAttachmentExpired(attachment, DateTime.now()) || bytes.length != expected) {
         bytes.fillRange(0, bytes.length, 0);
@@ -239,6 +256,47 @@ class _UploadRequest extends http.BaseRequest {
       progress?.call(end / bytes.length);
     }
   }
+}
+
+/// Uses the private authenticated GET route without exposing signed URLs.
+/// The calling service must first check the current message's server deadline
+/// and re-check the account/session after receiving the bytes.
+Future<Uint8List> downloadAuthenticatedVisualBytes({
+  required http.Client transport,
+  required String projectUrl,
+  required String anonKey,
+  required String accessToken,
+  required String path,
+  required int expected,
+  void Function(double)? onProgress,
+}) async {
+  if (expected < 1 || expected > MediaService.maxBytes ||
+      path.isEmpty || path.split('/').any((part) => part.isEmpty || part == '.' || part == '..')) {
+    throw const FormatException('Invalid media reference');
+  }
+  final encoded = path.split('/').map(Uri.encodeComponent).join('/');
+  final request = http.Request(
+    'GET',
+    Uri.parse('$projectUrl/storage/v1/object/authenticated/chat-media/$encoded'),
+  )..followRedirects = false;
+  request.headers.addAll({
+    'Authorization': 'Bearer $accessToken',
+    'apikey': anonKey,
+  });
+  final response = await transport.send(request).timeout(const Duration(seconds: 30));
+  if (response.statusCode != 200) {
+    await response.stream.drain<void>();
+    throw StateError('Authenticated media download unavailable');
+  }
+  if (response.contentLength != null && response.contentLength != expected) {
+    await response.stream.drain<void>();
+    throw StateError('Attachment size changed');
+  }
+  return readAttachmentBytes(
+    response.stream.timeout(const Duration(seconds: 30)),
+    expected: expected,
+    onProgress: onProgress,
+  );
 }
 
 /// Enforces trusted metadata before retaining bytes, including chunked responses.

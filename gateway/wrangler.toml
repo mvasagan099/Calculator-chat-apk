@@ -1,0 +1,4 @@
+name = "calculator-messenger-auth"
+main = "account-auth-worker.mjs"
+compatibility_date = "2026-10-17"
+workers_dev = true

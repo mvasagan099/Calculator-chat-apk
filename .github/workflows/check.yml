@@ -12,6 +12,7 @@ jobs:
           deno-version: v2.9.6
       - run: deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/tests/hosted*.ts
       - run: deno test --allow-env=BUF_BIGINT_DISABLE --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts
+      - run: node --test gateway/account-auth-worker.test.mjs
       - run: ./scripts/test-database.sh
 
   protocol-prototype:
