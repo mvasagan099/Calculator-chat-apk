@@ -1,4 +1,4 @@
-import { accountPassword, displayName, keyedHash, loginId, newAccountAlias, newRecoveryCodes, recoveryCode } from "./account_auth.ts";
+import { accountPassword, displayName, keyedHash, loginId, newAccountAlias, newRecoveryCodes, recoveryCode, recoveryPhone } from "./account_auth.ts";
 import { handleAccount, accountDependencies } from "../account-auth/index.ts";
 
 function assert(value: unknown, message = "assertion failed"): asserts value { if (!value) throw new Error(message); }
@@ -95,11 +95,24 @@ Deno.test("account input: strict User IDs, Unicode display names, confirmation a
   rejects(() => accountPassword("short", "short")); rejects(() => accountPassword(password, "different"));
   rejects(() => accountPassword("a".repeat(257))); accountPassword(password, password);
   rejects(() => recoveryCode("short"));
+  assert(recoveryPhone(null) === null && recoveryPhone("+91 98765 43210") === "+919876543210");
+  rejects(() => recoveryPhone("123"));
 });
 Deno.test("internal aliases: unique server-generated UUIDs use only reserved .invalid", () => {
   const aliases = Array.from({ length: 128 }, () => newAccountAlias());
   assert(new Set(aliases).size === aliases.length);
   assert(aliases.every((alias) => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}@calculator-messenger\.invalid$/.test(alias)));
+});
+Deno.test("signup: username, display name and optional mobile without separate User ID", async () => {
+  const f = fixture();
+  const response = await f.request({ action: "signup", username: "new_user",
+    display_name: "Display name", recovery_phone: "+91 9876543210",
+    password, confirm_password: password });
+  assert(response.status === 200);
+  const registration = f.calls.find((c) => c.name === "account_signup_intent");
+  assert(registration?.args.login_id === "new_user" && registration.args.display_name === "Display name");
+  assert(registration.args.recovery_phone === "+919876543210");
+  assert((await f.request({ action: "login", user_id: "new_user", password })).status === 200);
 });
 Deno.test("signup: no domain configuration, caller email ignored, synthetic identity confirmed server-side", async () => {
   const f = fixture();

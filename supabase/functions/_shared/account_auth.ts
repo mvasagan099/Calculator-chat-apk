@@ -25,6 +25,18 @@ export function displayName(value: unknown): string {
   }
   return value.trim();
 }
+// Optional contact only. It is not recovery proof until verified by SMS OTP.
+export function recoveryPhone(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string") {
+    throw new AccountError(400, "invalid_mobile", "Invalid mobile number.");
+  }
+  const normalized = value.replace(/[\\s()-]/g, "");
+  if (!/^\\+[1-9][0-9]{7,14}$/.test(normalized)) {
+    throw new AccountError(400, "invalid_mobile", "Enter an international mobile number with country code.");
+  }
+  return normalized;
+}
 export function newAccountAlias(): string {
   // Server-generated Auth identifier only, never a delivery/recovery address.
   // RFC 6761 reserves .invalid (including subdomains); no domain purchase or

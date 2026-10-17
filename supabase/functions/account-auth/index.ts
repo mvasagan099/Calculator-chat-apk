@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { adminClient, authenticated, body, HttpError, json, required, uuid } from "../_shared/http.ts";
-import { AccountError, accountPassword, displayName, keyedHash, loginId, newAccountAlias, newRecoveryCodes, recoveryCode } from "../_shared/account_auth.ts";
+import { AccountError, accountPassword, displayName, keyedHash, loginId, newAccountAlias, newRecoveryCodes, recoveryCode, recoveryPhone } from "../_shared/account_auth.ts";
 
 const invalid = () => new AccountError(401, "invalid_credentials", "User ID or password is incorrect.");
 const boundedFetch: typeof fetch = (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(15000) });
@@ -40,7 +40,10 @@ export async function handleAccount(req: Request, dependencies = accountDependen
     const address = req.headers.get(header);
     if (!address || address.includes(",") || address.length > 128) throw new HttpError(503, "Trusted ingress required");
     const authorized = action === "rotate_codes" ? await authenticated(req) : null;
-    const id = authorized?.user.id ?? loginId(input.user_id);
+    // Legacy APKs use user_id for login and a display name in username.
+    // New signup APKs send username as the actual login identifier.
+    const id = authorized?.user.id ?? loginId(action === "signup"
+      ? (input.user_id ?? input.username) : input.user_id);
     for (const [scope, maximum] of [
       ["global:" + action, 100],
       ["ip:" + action + ":" + address, action === "signup" ? 5 : 30],
@@ -75,13 +78,15 @@ export async function handleAccount(req: Request, dependencies = accountDependen
     if (lookupError) throw new HttpError(503, "Account service unavailable");
     if (action === "signup") {
       const password = accountPassword(input.password, input.confirm_password ?? null);
-      const name = displayName(input.username);
-      if (target) throw new AccountError(409, "user_id_unavailable", "This User ID is unavailable.");
+      const name = displayName(input.display_name ?? input.username);
+      const mobile = recoveryPhone(input.recovery_phone);
+      if (target) throw new AccountError(409, "user_id_unavailable", "This username is unavailable.");
       const next = await codes();
       const intent = crypto.randomUUID();
       const alias = newAccountAlias();
       const { error: intentError } = await admin.rpc("account_signup_intent", {
         intent, login_id: id, display_name: name, hashes: next.hashes,
+        recovery_phone: mobile,
       });
       if (intentError) throw new HttpError(503, "Registration unavailable");
       let owner: string | undefined;
@@ -96,14 +101,14 @@ export async function handleAccount(req: Request, dependencies = accountDependen
       }
       if (!owner) {
         const { data: occupied } = await admin.rpc("account_login_target", { login_id: id });
-        if (occupied) throw new AccountError(409, "user_id_unavailable", "This User ID is unavailable.");
+        if (occupied) throw new AccountError(409, "user_id_unavailable", "This username is unavailable.");
         throw new HttpError(503, "Registration unavailable. Try signing in before retrying.");
       }
       const { data, error } = await publicClient().auth.signInWithPassword({ email: alias, password });
       if (error || !data.session || data.user?.id !== owner) {
         // Do not delete a valid newly created account on a transient sign-in
         // failure. The owner can sign in and regenerate codes with their password.
-        throw new AccountError(503, "account_created", "Account created. Sign in with your User ID and password, then save new recovery codes in Settings.");
+        throw new AccountError(503, "account_created", "Account created. Sign in with your username and password, then save new recovery codes in Settings.");
       }
       return json({ refresh_token: data.session.refresh_token, user_uuid: owner, recovery_codes: next.codes });
     }
