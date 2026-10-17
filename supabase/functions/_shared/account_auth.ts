@@ -31,8 +31,8 @@ export function recoveryPhone(value: unknown): string | null {
   if (typeof value !== "string") {
     throw new AccountError(400, "invalid_mobile", "Invalid mobile number.");
   }
-  const normalized = value.replace(/[\\s()-]/g, "");
-  if (!/^\\+[1-9][0-9]{7,14}$/.test(normalized)) {
+  const normalized = value.replace(/[\s()-]/g, "");
+  if (!/^\+[1-9][0-9]{7,14}$/.test(normalized)) {
     throw new AccountError(400, "invalid_mobile", "Enter an international mobile number with country code.");
   }
   return normalized;

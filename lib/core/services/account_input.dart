@@ -20,23 +20,14 @@ class AccountInput {
     return name;
   }
 
-  // Unverified: not yet usable for password reset without SMS ownership proof.
+  // Unverified: not sufficient for password reset without SMS ownership proof.
   static String? recoveryPhone(String value) {
-    final phone = value.replaceAll(RegExp(r'[\\s()-]'), '');
+    final phone = value.replaceAll(RegExp(r'[\s()-]'), '');
     if (phone.isEmpty) return null;
-    if (!RegExp(r'^\\+[1-9][0-9]{7,14}
-
-  static void password(String value, String confirmation) {
-    if (value.runes.length < 12 || value.length > 256) {
-      throw const FormatException('Use a password of 12–256 characters.');
-    }
-    if (value != confirmation) {
-      throw const FormatException('Passwords do not match.');
-    }
-  }
-}
-).hasMatch(phone)) {
-      throw const FormatException('Enter a mobile number with country code, e.g. +919876543210.');
+    if (!RegExp(r'^\+[1-9][0-9]{7,14}$').hasMatch(phone)) {
+      throw const FormatException(
+        'Enter a mobile number with country code, e.g. +919876543210.',
+      );
     }
     return phone;
   }
