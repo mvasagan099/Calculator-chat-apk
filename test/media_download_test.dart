@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,14 +7,16 @@ import 'package:calculator_messenger/features/media/media_service.dart';
 
 
 void main() {
-  test('visual media fetch uses authenticated private Storage route and user bearer', () async {
+  test('visual media fetch uses private Edge route with bearer and exact path', () async {
     final progress = <double>[];
     final transport = MockClient((request) async {
       expect(request.url.toString(),
-          'https://project.supabase.co/storage/v1/object/authenticated/chat-media/conversation/user/image%20one.jpg');
+          'https://project.supabase.co/functions/v1/download-chat-media');
       expect(request.headers['Authorization'] ?? request.headers['authorization'], 'Bearer fixture-user-token');
       expect(request.headers['apikey'], 'fixture-public-anon');
       expect(request.followRedirects, isFalse);
+      expect(request.method, 'POST');
+      expect(jsonDecode(request.body)['path'], 'conversation/user/image one.jpg');
       return http.Response.bytes([255, 216, 255, 1], 200,
           headers: {'content-type': 'image/jpeg'});
     });

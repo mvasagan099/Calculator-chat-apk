@@ -1,5 +1,6 @@
 import '../../core/security/local_retention.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import '../../core/config/app_config.dart';
@@ -176,8 +177,8 @@ class MediaService {
       final transport = http.Client();
       late final Uint8List bytes;
       try {
-        // Authenticated Storage GET matches the restrictive visual-read RLS
-        // operation; the ordinary Storage SDK URL may use a different route.
+        // The private Edge gateway authorizes the approved device and enforces
+        // current chat membership/expiry before privileged Storage reading.
         bytes = await downloadAuthenticatedVisualBytes(
           transport: transport,
           projectUrl: AppConfig.supabaseUrl,
@@ -258,9 +259,8 @@ class _UploadRequest extends http.BaseRequest {
   }
 }
 
-/// Uses the private authenticated GET route without exposing signed URLs.
-/// The calling service must first check the current message's server deadline
-/// and re-check the account/session after receiving the bytes.
+/// Uses a private JWT-and-device-verified Edge route, never bearer signed URLs.
+/// The caller checks the server media deadline and session before and after.
 Future<Uint8List> downloadAuthenticatedVisualBytes({
   required http.Client transport,
   required String projectUrl,
@@ -274,11 +274,12 @@ Future<Uint8List> downloadAuthenticatedVisualBytes({
       path.isEmpty || path.split('/').any((part) => part.isEmpty || part == '.' || part == '..')) {
     throw const FormatException('Invalid media reference');
   }
-  final encoded = path.split('/').map(Uri.encodeComponent).join('/');
   final request = http.Request(
-    'GET',
-    Uri.parse('$projectUrl/storage/v1/object/authenticated/chat-media/$encoded'),
+    'POST',
+    Uri.parse('$projectUrl/functions/v1/download-chat-media'),
   )..followRedirects = false;
+  request.headers['content-type'] = 'application/json';
+  request.body = jsonEncode({'path': path});
   request.headers.addAll({
     'Authorization': 'Bearer $accessToken',
     'apikey': anonKey,
