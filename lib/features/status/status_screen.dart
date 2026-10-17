@@ -17,23 +17,30 @@ class StatusScreen extends ConsumerStatefulWidget {
   ConsumerState<StatusScreen> createState() => _StatusScreenState();
 }
 
+// Use the concrete ownership FK: an unqualified profiles embed can return
+// PostgREST HTTP 300 when the schema exposes multiple relationship candidates.
+Future<List<Map<String, dynamic>>> fetchVisibleStatusUpdates(
+  SupabaseClient client,
+) async {
+  final muted = await client.from('status_mutes').select('user_id');
+  final ids = muted.map((e) => e['user_id']).toSet();
+  final rows = await client
+      .from('status_updates')
+      .select('*,profiles!status_updates_user_id_fkey(display_name,avatar_path)')
+      .gt('expires_at', DateTime.now().toUtc().toIso8601String())
+      .order('created_at', ascending: false)
+      .limit(100);
+  return rows.where((s) => !ids.contains(s['user_id'])).toList();
+}
+
 class _StatusScreenState extends ConsumerState<StatusScreen> {
   bool posting = false;
-  late final stream = ref.read(messengerProvider).watch(
-    ['status_updates'],
-    () async {
-      final client = ref.read(supabaseProvider);
-      final muted = await client.from('status_mutes').select('user_id');
-      final ids = muted.map((e) => e['user_id']).toSet();
-      final rows = await client
-          .from('status_updates')
-          .select('*,profiles(display_name,avatar_path)')
-          .gt('expires_at', DateTime.now().toUtc().toIso8601String())
-          .order('created_at', ascending: false)
-          .limit(100);
-      return rows.where((s) => !ids.contains(s['user_id'])).toList();
-    },
-  );
+  Stream<List<Map<String, dynamic>>> _createStream() =>
+      ref.read(messengerProvider).watch(
+        ['status_updates'],
+        () => fetchVisibleStatusUpdates(ref.read(supabaseProvider)),
+      );
+  late Stream<List<Map<String, dynamic>>> stream = _createStream();
   Future<void> create(String kind) async {
     if (posting) return;
     final client = ref.read(supabaseProvider);
@@ -140,7 +147,7 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
           child: StreamBuilder<List<Map<String, dynamic>>>(
             stream: stream,
             builder: (context, s) {
-              if (s.hasError) return LoadError(retry: () => setState(() {}));
+              if (s.hasError) return LoadError(retry: () => setState(() => stream = _createStream()));
               if (!s.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
