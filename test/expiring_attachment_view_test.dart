@@ -35,6 +35,6 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       lock.dispose(); await client.dispose();
-    });
+    }, timeout: const Timeout(Duration(minutes: 2)));
   }
 }

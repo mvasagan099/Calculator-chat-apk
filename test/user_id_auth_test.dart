@@ -130,5 +130,5 @@ void main() {
     expect(find.text('Email'), findsNothing);
     expect(find.textContaining('verify your account'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }

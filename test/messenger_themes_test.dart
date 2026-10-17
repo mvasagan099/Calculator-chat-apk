@@ -28,7 +28,7 @@ void main() {
         expect(find.text('='), findsOneWidget);
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink()); lock.dispose();
-      });
+      }, timeout: const Timeout(Duration(minutes: 2)));
     }
   }
   test('messenger style and appearance persist independently of calculator theme', () async {
@@ -58,7 +58,7 @@ void main() {
     expect(find.text('Private content'), findsNothing);
     expect(Theme.of(tester.element(find.byType(CalculatorScreen))).colorScheme, baseline.colorScheme);
     await tester.pumpWidget(const SizedBox.shrink()); lock.dispose();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
   test('unknown stored style safely falls back to Default', () async {
     SharedPreferences.setMockInitialValues({'messenger.theme': 'future'});
     final lock = LockController(ImmediatePinVault());

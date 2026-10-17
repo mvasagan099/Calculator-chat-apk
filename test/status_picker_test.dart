@@ -149,6 +149,6 @@ void main() {
       lock.dispose();
       await repository.dispose();
       await client.dispose();
-    });
+    }, timeout: const Timeout(Duration(minutes: 2)));
   }
 }

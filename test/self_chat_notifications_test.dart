@@ -172,7 +172,7 @@ void main() {
     expect(requests.any((r) => r.path.endsWith('/contacts')), isFalse);
     expect(find.text('Self conversation opened'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink()); router.dispose();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
   testWidgets('chat list offers Message Yourself even with no conversations', (tester) async {
     final repository = EmptyConversationFixture(client);
     await tester.pumpWidget(ProviderScope(overrides: [messengerProvider.overrideWithValue(repository)],
@@ -180,14 +180,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Message Yourself'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink()); await repository.dispose();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
   for (final selection in [false, true]) {
     testWidgets('New Chat self option is present only outside contact selection=$selection', (tester) async {
       await tester.pumpWidget(ProviderScope(overrides: [supabaseProvider.overrideWithValue(client)],
         child: MaterialApp(home: ContactsScreen(selectOnly: selection))));
       expect(find.text('Message Yourself'), selection ? findsNothing : findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
-    });
+    }, timeout: const Timeout(Duration(minutes: 2)));
   }
   testWidgets('stale self creation cannot navigate after manual locking', (tester) async {
     await lock.unlock('2580'); deferredCreate = Completer<dynamic>();
@@ -202,7 +202,7 @@ void main() {
     lock.lock(); deferredCreate!.complete(cid); await tester.pumpAndSettle();
     expect(find.text('Private self chat'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink()); router.dispose();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
   for (final outcome in ['valid', 'locked', 'stale', 'missing', 'recipient mismatch', 'device revoked']) {
     testWidgets('notification routing remains gated: $outcome', (tester) async {
       final device = DeviceSettings(await SharedPreferences.getInstance(), lock);
@@ -224,6 +224,6 @@ void main() {
       }
       expect(routing.router.routeInformationProvider.value.uri.path, outcome == 'valid' ? '/chat/$cid' : '/');
       routing.dispose(); device.dispose();
-    });
+    }, timeout: const Timeout(Duration(minutes: 2)));
   }
 }

@@ -52,7 +52,7 @@ void main() {
       expect(lock.mediaPickerActive, isFalse);
       expect(lock.unlocked, isTrue);
       lock.dispose();
-    });
+    }, timeout: const Timeout(Duration(minutes: 2)));
   }
   for (final reason in ['Home', 'Recents', 'screen off', 'manual lock', 'session revocation', 'device authorization', 'account change', 'timeout', 'process detach']) {
     testWidgets('$reason rejects stale selection without reopening', (tester) async {
@@ -80,7 +80,7 @@ void main() {
       expect(lock.unlocked, isFalse);
       expect(lock.mediaPickerActive, isFalse);
       lock.dispose();
-    });
+    }, timeout: const Timeout(Duration(minutes: 2)));
   }
   testWidgets('normal background still locks without a picker', (tester) async {
     final lock = LockController(ImmediatePinVault(), mediaPicker: ControlledMediaPicker())..hasPin = true;
@@ -88,7 +88,7 @@ void main() {
     lock.didChangeAppLifecycleState(AppLifecycleState.paused);
     expect(lock.unlocked, isFalse);
     lock.dispose();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
   testWidgets('cancelled selection returns no media and stays unlocked', (tester) async {
     final lock = LockController(ImmediatePinVault(), mediaPicker: ControlledMediaPicker())..hasPin = true;
     await lock.unlock('2580');
@@ -98,7 +98,7 @@ void main() {
     expect(await result, isNull);
     expect(lock.unlocked, isTrue);
     lock.dispose();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
   testWidgets('failed native proof or authorization keeps private UI locked', (tester) async {
     for (final native in [false, true]) {
       final platform = ControlledMediaPicker();
@@ -115,7 +115,7 @@ void main() {
       expect(lock.unlocked, isFalse);
       lock.dispose();
     }
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
   testWidgets('repeated launch and PIN entry are rejected during picker work', (tester) async {
     final platform = ControlledMediaPicker();
     final lock = LockController(ImmediatePinVault(), mediaPicker: platform)..hasPin = true;
@@ -132,7 +132,7 @@ void main() {
     await tester.pump();
     await result;
     lock.dispose();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
   testWidgets('old result cannot post or relock a newly unlocked session', (tester) async {
     final lock = LockController(ImmediatePinVault(), mediaPicker: ControlledMediaPicker())..hasPin = true;
     await lock.unlock('2580');
@@ -147,7 +147,7 @@ void main() {
     expect(await result, isNull);
     expect(lock.unlocked, isTrue);
     lock.dispose();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
   testWidgets('Home during return authorization check immediately locks', (tester) async {
     final platform = ControlledMediaPicker();
     final lock = LockController(ImmediatePinVault(), mediaPicker: platform)..hasPin = true;
@@ -165,5 +165,5 @@ void main() {
     expect(await result, isNull);
     expect(lock.unlocked, isFalse);
     lock.dispose();
-  });
+  }, timeout: const Timeout(Duration(minutes: 2)));
 }
