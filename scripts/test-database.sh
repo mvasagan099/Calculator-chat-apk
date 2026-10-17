@@ -7,7 +7,7 @@ cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
 docker run --name "$container" -d -e POSTGRES_HOST_AUTH_METHOD=trust "$image" -c wal_level=logical >/dev/null
 for attempt in {1..30}; do
- if docker logs "$container" 2>&1 | rg -q "PostgreSQL init process complete" && docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; then break; fi
+ if docker logs "$container" 2>&1 | grep -q "PostgreSQL init process complete" && docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; then break; fi
  sleep 0.5
 done
 docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/bootstrap.sql
