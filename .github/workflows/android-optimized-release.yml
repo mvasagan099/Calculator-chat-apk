@@ -16,7 +16,7 @@ on:
         description: 'Exact reviewed source ref (must also match the Run workflow branch selector)'
         type: string
         required: true
-        default: refs/heads/codex/phase2-apk-verification
+        default: refs/heads/codex/optimized-media-release
       expected_sha:
         description: 'Independently reviewed immutable source commit: exactly 40 lowercase hex characters'
         type: string
@@ -72,7 +72,7 @@ jobs:
           test "$RUN_ATTEMPT" = 1
           test "$ACKNOWLEDGED" = true
           test "$ACKNOWLEDGED_TRUST" = true
-          test "$EXPECTED_REF" = refs/heads/codex/phase2-apk-verification
+          test "$EXPECTED_REF" = refs/heads/codex/optimized-media-release
           test "$SOURCE_REF" = "$EXPECTED_REF"
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$SOURCE_SHA" = "$EXPECTED_SHA"
