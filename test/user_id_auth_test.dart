@@ -81,7 +81,7 @@ void main() {
     expect(requests, isEmpty);
   });
   test('signup authenticates immediately but requires device/PIN and code acknowledgment', () async {
-    await auth.signUp('chosen_id', 'Chosen name', '+91 9876543210', password, password');
+    await auth.signUp('chosen_id', 'Chosen name', '+91 9876543210', password, password);
     expect(auth.signedIn, isTrue);
     expect(auth.recentlyAuthenticated, isTrue);
     expect(lock.unlocked, isFalse);
