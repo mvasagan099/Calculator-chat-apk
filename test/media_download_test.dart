@@ -9,8 +9,8 @@ void main() {
   test('visual media fetch uses authenticated private Storage route and user bearer', () async {
     final progress = <double>[];
     final transport = MockClient((request) async {
-      expect(request.url.path,
-          '/storage/v1/object/authenticated/chat-media/conversation/user/image%20one.jpg');
+      expect(request.url.toString(),
+          'https://project.supabase.co/storage/v1/object/authenticated/chat-media/conversation/user/image%20one.jpg');
       expect(request.headers['Authorization'] ?? request.headers['authorization'], 'Bearer fixture-user-token');
       expect(request.headers['apikey'], 'fixture-public-anon');
       expect(request.followRedirects, isFalse);
@@ -58,7 +58,7 @@ void main() {
       ), throwsFormatException);
     }
     client.close();
-  }
+  });
 
   test('bounded attachment reader reports progress and exact bytes', () async {
     final progress = <double>[];
