@@ -16,7 +16,7 @@ on:
         description: 'Exact reviewed source ref (must also match the Run workflow branch selector)'
         type: string
         required: true
-        default: refs/heads/codex/phase2-apk-verification
+        default: refs/heads/codex/optimized-auth-media-release
       expected_sha:
         description: 'Independently reviewed immutable source commit: exactly 40 lowercase hex characters'
         type: string
@@ -72,7 +72,7 @@ jobs:
           test "$RUN_ATTEMPT" = 1
           test "$ACKNOWLEDGED" = true
           test "$ACKNOWLEDGED_TRUST" = true
-          test "$EXPECTED_REF" = refs/heads/codex/phase2-apk-verification
+          test "$EXPECTED_REF" = refs/heads/codex/optimized-auth-media-release
           test "$SOURCE_REF" = "$EXPECTED_REF"
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
           test "$SOURCE_SHA" = "$EXPECTED_SHA"
@@ -109,6 +109,7 @@ jobs:
           set -o pipefail
           deno check --config supabase/functions/deno.json supabase/functions/*/index.ts supabase/tests/hosted*.ts 2>&1 | tee build-evidence/edge-check.txt
           deno test --allow-env=BUF_BIGINT_DISABLE --config supabase/functions/deno.json supabase/functions/_shared/*_test.ts 2>&1 | tee build-evidence/edge-tests.txt
+          node --test gateway/account-auth-worker.test.mjs 2>&1 | tee build-evidence/gateway-tests.txt
           bash scripts/test-database.sh 2>&1 | tee build-evidence/database-tests.txt
           python3 scripts/test-pin-kdf.py 2>&1 | tee build-evidence/pin-kdf.txt
           python3 scripts/test-signal-prototype.py 2>&1 | tee build-evidence/protocol-prototype.txt
