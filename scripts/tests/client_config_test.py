@@ -161,6 +161,7 @@ class PublicBuildConfigTest(unittest.TestCase):
             env.update({
                 'SUPABASE_URL': self.connected()['SUPABASE_URL'],
                 'SUPABASE_ANON_KEY': self.connected()['SUPABASE_ANON_KEY'],
+                'ACCOUNT_AUTH_GATEWAY_URL': self.connected()['ACCOUNT_AUTH_GATEWAY_URL'],
                 'FIREBASE_ANDROID_CONFIG': json.dumps(self.firebase()),
             })
             result = subprocess.run([
