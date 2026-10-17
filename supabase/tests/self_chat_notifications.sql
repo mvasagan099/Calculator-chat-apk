@@ -14,7 +14,7 @@ do $$declare row jsonb;begin
  select x into row from jsonb_array_elements(public.conversation_list()) x where x->>'id'=current_setting('test.self_cid');
  if row is null or row->>'title' is distinct from 'Message Yourself' or row->>'is_self' is distinct from 'true' or (row->>'unread')::int is distinct from 0 then raise exception 'Self list metadata incorrect';end if;
  begin perform public.begin_call(current_setting('test.self_cid')::uuid,false,gen_random_uuid());raise exception 'Self calling allowed';exception when raise_exception then if sqlerrm='Self calling allowed' then raise;end if;end;
- begin perform public.create_call(current_setting('test.self_cid')::uuid,false);raise exception 'Legacy self call allowed';exception when raise_exception then if sqlerrm='Legacy self call allowed' then raise;end if;end;
+ begin perform public.start_call(current_setting('test.self_cid')::uuid,false);raise exception 'Legacy self call allowed';exception when raise_exception then if sqlerrm='Legacy self call allowed' then raise;end if;end;
 end $$;
 select public.send_message(:'self_cid','13100000-0000-0000-0000-000000000001','A saved note');
 select public.send_message(:'self_cid','13100000-0000-0000-0000-000000000002','A reply','text','13100000-0000-0000-0000-000000000001');
