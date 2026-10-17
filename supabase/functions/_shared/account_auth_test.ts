@@ -67,7 +67,7 @@ function fixture() {
     enabled: () => true,
     required: (key: string) => {
       if (key === "ACCOUNT_RECOVERY_PEPPER") return pepper;
-      if (key === "ACCOUNT_AUTH_IP_HEADER") return "x-trusted-ip";
+
       throw new Error("Unexpected configuration requirement: " + key);
     },
     adminClient: () => admin, publicClient: () => proof,
@@ -163,7 +163,7 @@ Deno.test("login: provider session must belong to resolved UUID", async () => {
 Deno.test("rate limits and trusted ingress fail closed before credential verification", async () => {
   const f = fixture(); f.seed(); f.setLimited();
   assert((await f.request({ action: "login", user_id: "chosen_id", password })).status === 429);
-  assert((await f.request({ action: "login", user_id: "chosen_id", password }, {} as { "x-trusted-ip": string })).status === 503);
+  assert((await f.request({ action: "login", user_id: "chosen_id", password }, {} as { "x-trusted-ip": string })).status === 429);
 });
 Deno.test("recovery: consume proof, revoke other sessions, bind fresh device and rotate codes", async () => {
   const f = fixture(); f.seed(); const input = { action: "recover", user_id: "chosen_id", recovery_code: "a".repeat(64), password, confirm_password: password, device_id: sessionId };
@@ -186,4 +186,15 @@ Deno.test("rotation: password proof and approved device required; proof session 
   const r = await f.request({ action: "rotate_codes", password });
   assert(r.status === 200 && (await r.json()).recovery_codes.length === 8 && f.signouts() === 1);
   f.denyDevice(); assert((await f.request({ action: "rotate_codes", password })).status !== 200);
+});
+
+Deno.test("Supabase-only: absent/spoofed IP never changes durable limiter scopes", async () => {
+  const f = fixture();
+  const input = { action: "login", user_id: "chosen_id", password };
+  await f.request(input, {});
+  await f.request(input, { "x-trusted-ip": "1.2.3.4", "x-forwarded-for": "8.8.8.8" } as unknown as { "x-trusted-ip": string });
+  assert(f.calls.filter((call) => call.name === "account_auth_limit").length === 4);
+  const scopes = f.calls.filter((call) => call.name === "account_auth_limit")
+    .map((call) => call.args.scope_key);
+  assert(scopes.length === 4 && scopes[0] === scopes[2] && scopes[1] === scopes[3]);
 });

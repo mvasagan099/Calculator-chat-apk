@@ -22,16 +22,15 @@ export async function handleAccount(req: Request, dependencies = accountDependen
     if (!["signup", "login", "recover", "rotate_codes"].includes(action)) throw new HttpError(400, "Invalid operation");
     const admin = adminClient(boundedFetch);
     const pepper = required("ACCOUNT_RECOVERY_PEPPER");
-    // Deployment must strip/overwrite this header at its trusted ingress. Never
-    // use a caller-supplied X-Forwarded-For chain as an authoritative client IP.
-    const header = required("ACCOUNT_AUTH_IP_HEADER");
-    const address = req.headers.get(header);
-    if (!address || address.includes(",") || address.length > 128) throw new HttpError(503, "Trusted ingress required");
+    // Supabase-only deployment: no unverified client-provided IP headers.
+    // Durable per-action/global plus per-User-ID counters fail closed.
+    // Reduced global signup budget limits bulk new-ID abuse at the cost of
+    // a shared project-wide hourly cap. Keep Supabase Auth native limits on.
+    // Do NOT accept X-Forwarded-For / X-Real-IP as authoritative here.
     const authorized = action === "rotate_codes" ? await authenticated(req) : null;
     const id = authorized?.user.id ?? loginId(input.user_id);
     for (const [scope, maximum] of [
-      ["global:" + action, 100],
-      ["ip:" + action + ":" + address, action === "signup" ? 5 : 30],
+      ["global:" + action, action === "signup" ? 20 : 100],
       ["id:" + action + ":" + id, action === "signup" ? 5 : 15],
     ] as const) {
       // The SQL limiter commits false results, so rejected attempts still count.
