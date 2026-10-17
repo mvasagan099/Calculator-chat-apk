@@ -24,11 +24,18 @@ serve(async (req) => {
   // Validate the current approved user, actual Storage uploader, and current
   // conversation membership BEFORE granting the server a one-off inspection.
   // No bytes, URLs, or storage rights are returned to the caller.
-  const { data: metadata, error: metadataError } =
-    await admin.storage.from(bucket).info(path);
-  if (metadataError || !metadata) throw new HttpError(403, "Object unavailable");
+  // Storage .info() does not expose uploader ownership. A service-role
+  // directory listing returns owner; match the EXACT filename before using it.
+  // Searching by the full (randomized) filename bounds the listing and never
+  // accepts a similarly named object from another directory.
+  const directory = segments.slice(0, -1).join("/");
+  const filename = segments.at(-1)!;
+  const { data: objects, error: listError } = await admin.storage
+    .from(bucket).list(directory, { search: filename, limit: 10 });
+  const object = objects?.find((candidate) => candidate.name === filename);
+  if (listError || !object) throw new HttpError(403, "Object unavailable");
   await checkMediaValidationAccess({
-    bucket, path, userId: user.id, uploaderId: metadata.ownerId,
+    bucket, path, userId: user.id, uploaderId: object.owner,
     isConversationMember: async (conversationId) => {
       const { data, error } = await client.from("conversation_members")
         .select("user_id")
