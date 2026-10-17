@@ -17,13 +17,25 @@ export async function handleAccount(req: Request, dependencies = accountDependen
   const { adminClient, authenticated, publicClient, required, enabled } = dependencies;
   try {
     if (!enabled()) throw new HttpError(503, "Account service unavailable");
+    // A no-domain Worker ingress authenticates every request. Never trust a
+    // caller-supplied IP header on the public Supabase Functions endpoint.
+    const gatewaySecret = required("ACCOUNT_AUTH_GATEWAY_SECRET");
+    const presentedSecret = req.headers.get("x-account-gateway-secret") ?? "";
+    if (gatewaySecret.length < 32 || presentedSecret.length !== gatewaySecret.length) {
+      throw new HttpError(503, "Trusted gateway required");
+    }
+    let secretDifference = 0;
+    for (let i = 0; i < gatewaySecret.length; i++) {
+      secretDifference |= gatewaySecret.charCodeAt(i) ^ presentedSecret.charCodeAt(i);
+    }
+    if (secretDifference !== 0) throw new HttpError(503, "Trusted gateway required");
     const input = await body(req);
     const action = String(input.action);
     if (!["signup", "login", "recover", "rotate_codes"].includes(action)) throw new HttpError(400, "Invalid operation");
     const admin = adminClient(boundedFetch);
     const pepper = required("ACCOUNT_RECOVERY_PEPPER");
-    // Deployment must strip/overwrite this header at its trusted ingress. Never
-    // use a caller-supplied X-Forwarded-For chain as an authoritative client IP.
+    // Only the authenticated ingress can assert this header. It MUST set it
+    // from Cloudflare's verified client connection and overwrite client input.
     const header = required("ACCOUNT_AUTH_IP_HEADER");
     const address = req.headers.get(header);
     if (!address || address.includes(",") || address.length > 128) throw new HttpError(503, "Trusted ingress required");

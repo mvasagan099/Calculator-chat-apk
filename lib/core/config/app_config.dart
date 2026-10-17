@@ -9,6 +9,7 @@ class AppConfig {
   );
   static const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
   static const supabaseKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+  static const accountAuthGatewayUrl = String.fromEnvironment('ACCOUNT_AUTH_GATEWAY_URL');
   static const firebaseApiKey = String.fromEnvironment('FIREBASE_API_KEY');
   static const firebaseAppId = String.fromEnvironment('FIREBASE_APP_ID');
   static const firebaseSenderId = String.fromEnvironment('FIREBASE_SENDER_ID');

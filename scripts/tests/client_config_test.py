@@ -20,7 +20,7 @@ def jwt(role, **claims):
 
 class PublicBuildConfigTest(unittest.TestCase):
     def connected(self):
-        return {'LOCAL_UI_PREVIEW': False, 'SUPABASE_URL': 'https://staging.supabase.co', 'SUPABASE_ANON_KEY': jwt('anon')}
+        return {'LOCAL_UI_PREVIEW': False, 'SUPABASE_URL': 'https://staging.supabase.co', 'SUPABASE_ANON_KEY': jwt('anon'), 'ACCOUNT_AUTH_GATEWAY_URL': 'https://calculator-auth.workers.dev/account-auth'}
 
     def firebase(self, package=config.PACKAGE):
         return {'project_info': {'project_id': 'unit-test-project', 'project_number': '123456'}, 'client': [{'client_info': {'mobilesdk_app_id': '1:123456:android:abcdef', 'android_client_info': {'package_name': package}}, 'api_key': [{'current_key': 'public-unit-test-key'}]}]}
@@ -72,6 +72,19 @@ class PublicBuildConfigTest(unittest.TestCase):
         for url in ['http://staging.supabase.co', 'https://user:secret@staging.supabase.co', 'https://staging.supabase.co?key=secret']:
             data = self.connected()
             data['SUPABASE_URL'] = url
+            with self.assertRaises(ValueError):
+                config.prepare(data, 'connected')
+
+    def test_gateway_required_and_unsafe_urls_rejected(self):
+        data = self.connected()
+        del data['ACCOUNT_AUTH_GATEWAY_URL']
+        with self.assertRaises(ValueError):
+            config.prepare(data, 'connected')
+        for url in ['http://gateway.example/account-auth',
+                    'https://gateway.example/other',
+                    'https://user:pass@gateway.example/account-auth',
+                    'https://gateway.example/account-auth?token=secret']:
+            data['ACCOUNT_AUTH_GATEWAY_URL'] = url
             with self.assertRaises(ValueError):
                 config.prepare(data, 'connected')
 
