@@ -27,7 +27,7 @@ def authorization_shell():
 class ManualReleaseGateTest(unittest.TestCase):
     def run_gate(self, changes=None, missing=None):
         sha = 'a' * 40
-        ref = 'refs/heads/codex/phase2-apk-verification'
+        ref = 'refs/heads/codex/optimized-media-release'
         values = dict(
             EVENT_NAME='workflow_dispatch', REPOSITORY='mvasagan099/Calculator-chat-apk',
             REPOSITORY_ID='1420812433', ACTOR='mvasagan099', ACTOR_ID='188013739',
