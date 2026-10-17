@@ -1,3 +1,4 @@
+import 'async_widget_helpers.dart';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
@@ -34,7 +35,7 @@ void main() {
       expect(find.text('Media expired'), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      lock.dispose(); await tester.runAsync(client.dispose);
+      lock.dispose(); await pumpAsyncOperation(tester, client.dispose());
     }, timeout: const Timeout(Duration(minutes: 2)));
   }
 }

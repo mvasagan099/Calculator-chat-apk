@@ -1,3 +1,4 @@
+import 'async_widget_helpers.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -78,7 +79,7 @@ void main() {
           return http.Response(jsonEncode(response), 200, request: request,
               headers: {'content-type': 'application/json'});
         }));
-      await tester.runAsync(() => client.auth.setSession('fixture-refresh'));
+      await pumpAsyncOperation(tester, client.auth.setSession('fixture-refresh'));
       final native = ControlledMediaPicker();
       final lock = LockController(ImmediatePinVault(), mediaPicker: native)..hasPin = true;
       final auth = PickerFixtureAuth(client, lock);
@@ -123,18 +124,10 @@ void main() {
         expect(pickerCalls, 1);
       }
       lock.didChangeAppLifecycleState(AppLifecycleState.resumed);
-      // File/Storage SDK work can use real asynchronous I/O. Do not advance
-      // the fake two-minute lock timer while waiting for those operations.
-      await tester.runAsync(() async {
-        selected.complete(outcome == 'cancel' ? null : outcome == 'missing file'
-            ? MissingMediaFile()
-            : XFile.fromData(Uint8List.fromList([1, 2, 3]), path: outcome == 'video' ? '/fixture.mp4' : '/fixture.jpg'));
-        final deadline = DateTime.now().add(const Duration(seconds: 5));
-        while (state.mounted && (state as dynamic).posting == true) {
-          if (DateTime.now().isAfter(deadline)) fail('Picker operation did not finish: $requests');
-          await Future<void>.delayed(const Duration(milliseconds: 1));
-        }
-      });
+      selected.complete(outcome == 'cancel' ? null : outcome == 'missing file'
+          ? MissingMediaFile()
+          : XFile.fromData(Uint8List.fromList([1, 2, 3]), path: outcome == 'video' ? '/fixture.mp4' : '/fixture.jpg'));
+      await pumpAsyncUntil(tester, () => !state.mounted || (state as dynamic).posting == false);
       await tester.pumpAndSettle();
       final posts = requests.where((path) => path.endsWith('/rpc/create_status'));
       final expectedPost = ['image', 'video', 'repeated launch'].contains(outcome);
@@ -155,10 +148,8 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       auth.dispose();
       lock.dispose();
-      await tester.runAsync(() async {
-        await repository.dispose();
-        await client.dispose();
-      });
+      await pumpAsyncOperation(tester, repository.dispose());
+      await pumpAsyncOperation(tester, client.dispose());
     }, timeout: const Timeout(Duration(minutes: 2)));
   }
 }
