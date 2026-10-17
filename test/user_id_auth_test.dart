@@ -102,7 +102,7 @@ void main() {
   });
   test('duplicate ID and invalid credentials become safe messages', () async {
     duplicate = true;
-    await expectLater(auth.signUp('chosen_id', 'Name', '', password, password'),
+    await expectLater(auth.signUp('chosen_id', 'Name', '', password, password),
       throwsA(isA<FormatException>().having((e) => e.message, 'message', 'This username is unavailable.')));
     duplicate = false; badCredentials = true;
     await expectLater(auth.signIn('chosen_id', 'wrong'),
