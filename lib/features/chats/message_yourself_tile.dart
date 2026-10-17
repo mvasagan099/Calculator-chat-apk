@@ -30,7 +30,7 @@ class _MessageYourselfTileState extends ConsumerState<MessageYourselfTile> {
     setState(() => busy = true);
     try {
       final cid = await client.rpc('create_direct', params: {'peer': owner}) as String;
-      if (!current()) return;
+      if (!mounted || !current()) return;
       if (widget.replace) {
         context.pushReplacement('/chat/$cid');
       } else {

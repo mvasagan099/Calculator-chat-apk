@@ -164,7 +164,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 onTap: () => act(context, () async {
                   final current = await widget.notifications.verifyAppUpdate();
                   if (current?.id != release.id || !mounted || !widget.auth.lock.unlocked ||
-                      !widget.auth.deviceAuthorized || !widget.auth.ownerMatches || !widget.auth.signedIn) return;
+                      !widget.auth.deviceAuthorized || !widget.auth.ownerMatches || !widget.auth.signedIn) {
+                    return;
+                  }
                   if (!await launchUrl(Uri.parse(current!.url), mode: LaunchMode.externalApplication)) {
                     throw StateError('Unable to open the verified release');
                   }

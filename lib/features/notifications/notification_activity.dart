@@ -12,11 +12,13 @@ class NotificationActivity {
     final action = data['action'];
     final recipient = data['recipient_id'];
     if (recipient != null && (recipient is! String ||
-        !RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(recipient))) return null;
+        !RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(recipient))) {
+      return null;
+    }
     return {
       'kind': kind,
       'resource_id': id,
-      if (recipient != null) 'recipient_id': recipient,
+      'recipient_id': ?recipient,
       if (kind == 'call' && ['answer', 'reject'].contains(action))
         'action': action,
     };

@@ -193,8 +193,9 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> _authenticateAccount(
-    Map<String, dynamic> input, {String? recoveredDevice},
-  ) async {
+    Map<String, dynamic> input, {
+    String? recoveredDevice,
+  }) async {
     if (_accountBusy) throw StateError('A sign-in is already in progress');
     _accountBusy = true;
     final generation = ++_loginGeneration;
@@ -266,7 +267,9 @@ class AuthService extends ChangeNotifier {
     final session = tokenSession(client!.auth.currentSession);
     final data = await _accountRequest({'action': 'rotate_codes', 'password': password});
     if (!signedIn || !deviceAuthorized || client!.auth.currentUser!.id != owner ||
-        tokenSession(client!.auth.currentSession) != session) throw StateError('Session changed');
+        tokenSession(client!.auth.currentSession) != session) {
+      throw StateError('Session changed');
+    }
     final codes = data['recovery_codes'];
     if (codes is! List || codes.length != 8 ||
         !codes.every((code) => code is String && RegExp(r'^[0-9a-f]{64}$').hasMatch(code))) {

@@ -125,8 +125,10 @@ class NotificationService extends ChangeNotifier {
   void _receive(Map<String, dynamic> data) {
     final activity = NotificationActivity.parse(data);
     final owner = _client?.auth.currentUser?.id;
-    if (activity == null || (activity['recipient_id'] != null && activity['recipient_id'] != owner)) return;
-    pending = {...activity, if (owner != null) 'recipient_id': owner};
+    if (activity == null || (activity['recipient_id'] != null && activity['recipient_id'] != owner)) {
+      return;
+    }
+    pending = {...activity, 'recipient_id': ?owner};
     if (!_disposed) notifyListeners();
   }
 
@@ -142,7 +144,9 @@ class NotificationService extends ChangeNotifier {
     final owner = client?.auth.currentUser?.id;
     final session = AuthService.tokenSession(client?.auth.currentSession);
     if (client == null || owner == null || session == null || client.auth.currentSession?.isExpired != false ||
-        (activity['recipient_id'] != null && activity['recipient_id'] != owner)) return;
+        (activity['recipient_id'] != null && activity['recipient_id'] != owner)) {
+      return;
+    }
     final key = '$owner:${NotificationActivity.tag(activity)}';
     if (_shown.contains(key) || _showing.length >= 64 || !_showing.add(key)) return;
     try {
@@ -155,7 +159,9 @@ class NotificationService extends ChangeNotifier {
         if (settings['notifications'] != true) return;
       }
       if (_disposed || client.auth.currentUser?.id != owner ||
-          AuthService.tokenSession(client.auth.currentSession) != session || client.auth.currentSession?.isExpired != false) return;
+          AuthService.tokenSession(client.auth.currentSession) != session || client.auth.currentSession?.isExpired != false) {
+        return;
+      }
       await local.show(
         id: 0, title: 'Calculator', body: NotificationActivity.body(activity),
         notificationDetails: NotificationDetails(android: AndroidNotificationDetails(
@@ -197,7 +203,9 @@ class NotificationService extends ChangeNotifier {
     final update = await verifyAppUpdate();
     final owner = _client?.auth.currentUser?.id;
     if (update == null || owner == null || owner != originalOwner ||
-        session != AuthService.tokenSession(_client?.auth.currentSession)) return;
+        session != AuthService.tokenSession(_client?.auth.currentSession)) {
+      return;
+    }
     final key = '$owner:app_update:${update.id}';
     if (_shown.contains(key) || !_showing.add(key)) return;
     try {
