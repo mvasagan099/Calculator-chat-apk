@@ -849,6 +849,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       style: wallpaper,
       child: Column(
         children: [
+          if (ref.read(messengerProvider).onlineOnly)
+            const ListTile(
+              dense: true,
+              leading: Icon(Icons.lock_outline),
+              title: Text('Online-only recovery mode'),
+              subtitle: Text('Encrypted drafts remain untouched. Text sends only after server confirmation; attachments require cache recovery.'),
+            ),
           ExpirationBanner(cid: widget.id, canChange: direct || admin),
           if (uploading) LinearProgressIndicator(value: uploadProgress),
           if (searchResults != null)

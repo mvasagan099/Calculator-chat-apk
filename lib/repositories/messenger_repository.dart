@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -9,6 +10,22 @@ import '../models/message.dart';
 import '../core/security/local_retention.dart';
 
 typedef _CacheScope = ({LocalCache cache, String owner, int epoch});
+
+/// Online-only, RAM-only fallback when encrypted local files cannot be opened.
+/// No data from a failed encrypted cache is read, deleted, copied or replaced.
+class _OnlineOnlyCache implements LocalCache {
+  @override
+  final Map<String, dynamic> data = {};
+  @override
+  Future<void> initialize() async {}
+  @override
+  Future<void> save() async {}
+  @override
+  Future<void> forget() async => data.clear();
+  @override
+  Future<void> clear() async => data.clear();
+}
+
 
 class MessengerRepository {
   MessengerRepository(
@@ -25,6 +42,10 @@ class MessengerRepository {
   LocalCache? _cache;
   String? _cacheOwner;
   bool _flushing = false, _disposed = false;
+  bool _onlineOnly = false;
+  /// Local encrypted drafts have NOT been recovered. No optimistic offline sends.
+  bool get onlineOnly => _onlineOnly;
+  final _onlineAttemptIds = <String, String>{};
   Completer<void>? _flushDone;
   Future<void>? _preparing, _suspending;
   int _sessionEpoch = 0;
@@ -83,8 +104,18 @@ class MessengerRepository {
   Future<void> _initialize() async {
     final owner = uid;
     final epoch = _sessionEpoch;
-    final cache = _cacheFactory(owner);
-    await cache.initialize();
+    LocalCache cache = _cacheFactory(owner);
+    bool onlineFallback = false;
+    try {
+      await cache.initialize();
+    } catch (_) {
+      // Cache initialize fails closed and preserves its files. Never recreate
+      // its Keystore key, purge ciphertext or migrate an unreadable outbox.
+      try { await cache.forget(); } catch (_) {}
+      cache = _OnlineOnlyCache();
+      onlineFallback = true;
+      await cache.initialize();
+    }
     await _connection?.cancel();
     await _flushDone?.future;
     if (_disposed ||
@@ -105,6 +136,8 @@ class MessengerRepository {
     _hiddenIds.clear();
     _cacheOwner = owner;
     _cache = cache;
+    _onlineOnly = onlineFallback;
+    _onlineAttemptIds.clear();
     _connection = (connectivity ?? Connectivity().onConnectivityChanged).listen(
       (_) {
         unawaited(flush().catchError((Object _) {}));
@@ -470,12 +503,43 @@ class MessengerRepository {
       'failed': false,
       'attachment': attachment,
     };
+    if (_onlineOnly) {
+      // Never claim delivery based on a volatile RAM outbox. Confirm with
+      // Supabase before clearing the sender's message field. A retry of the
+      // same unchanged text reuses its UUID if the prior response was lost.
+      if (kind != 'text' || attachment != null || viewOnce) {
+        throw StateError(
+          'Encrypted local cache requires recovery before sending attachments.',
+        );
+      }
+      final fingerprint = jsonEncode([cid, body, replyTo, forwarded, seconds]);
+      final onlineId = _onlineAttemptIds.putIfAbsent(
+        fingerprint,
+        () => const Uuid().v4(),
+      );
+      try {
+        await client.rpc('send_message', params: {
+          'cid': cid, 'mid': onlineId, 'content': body,
+          'message_kind': kind, 'reply': replyTo,
+          'is_forwarded': forwarded, 'attachment': null,
+        }).timeout(const Duration(seconds: 15));
+        _requireCache(scope);
+        _onlineAttemptIds.remove(fingerprint);
+        return onlineId;
+      } catch (_) {
+        _requireCache(scope);
+        // Keep the attempt ID in memory for retry. The UI retains text when
+        // this future fails; no error is mistaken for successful delivery.
+        throw StateError('Message was not confirmed by server. Retry when online.');
+      }
+    }
     await _saveOutbox([..._outbox, item], scope: scope);
     unawaited(flush().catchError((Object _) {}));
     return id;
   }
 
   Future<void> flush({bool includeTerminal = false}) async {
+    if (_onlineOnly) return; // Never flush an undecrypted encrypted outbox.
     if (_flushing) {
       await _flushDone?.future;
       return;
@@ -616,6 +680,8 @@ class MessengerRepository {
     await _flushDone?.future;
     await _cache?.forget();
     _cache = null;
+    _onlineOnly = false;
+    _onlineAttemptIds.clear();
     _hiddenIds.clear();
   }
 
@@ -632,6 +698,8 @@ class MessengerRepository {
     }
     _cache = null;
     _cacheOwner = null;
+    _onlineOnly = false;
+    _onlineAttemptIds.clear();
     _hiddenIds.clear();
   }
 
@@ -651,6 +719,8 @@ class MessengerRepository {
     await _flushDone?.future;
     await _cache?.forget();
     _cache = null;
+    _onlineOnly = false;
+    _onlineAttemptIds.clear();
     await _changes.close();
   }
 }

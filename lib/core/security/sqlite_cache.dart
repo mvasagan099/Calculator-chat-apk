@@ -135,6 +135,7 @@ class SqliteEncryptedCache implements LocalCache {
     _closing = false;
     _path = await _location();
     final legacy = File(_path!.replaceFirst(RegExp(r'\.sqlite$'), '.bin'));
+    var stage = 'key-read';
     try {
       var raw = await store.read('cache.key.$userId');
       if (raw == null) {
@@ -149,11 +150,13 @@ class SqliteEncryptedCache implements LocalCache {
         throw StateError('Local encryption key unavailable');
       }
       _key = SecretKey(bytes);
+      stage = 'key-derive';
       _indexKey = await Hkdf(hmac: Hmac.sha256(), outputLength: 32).deriveKey(
         secretKey: _key!,
         nonce: utf8.encode(userId),
         info: utf8.encode('calculator-sqlite-index:v1'),
       );
+      stage = 'sqlite-open';
       _db = await factory.openDatabase(
         _path!,
         options: OpenDatabaseOptions(
@@ -175,6 +178,7 @@ class SqliteEncryptedCache implements LocalCache {
           },
         ),
       );
+      stage = 'sqlite-meta';
       final meta = await _db!.query(
         'cache_meta',
         where: 'id = ?',
@@ -194,15 +198,19 @@ class SqliteEncryptedCache implements LocalCache {
           _legacyDigest = base64Encode(
             (await Sha256().hash(await legacy.readAsBytes())).bytes,
           );
+          stage = 'legacy-decrypt';
           data = await _readLegacy(legacy);
         }
+        stage = 'initial-save';
         await save(); // Collections + initialized marker commit atomically.
+        stage = 'initial-verify';
         final restored = await _load();
         if (jsonEncode(restored) != jsonEncode(data)) {
           throw StateError('Local cache migration verification failed');
         }
         if (await legacy.exists()) await legacy.delete();
       } else {
+        stage = 'sqlite-decrypt';
         data = await _load();
         // A crash after commit but before deleting v1 must not replay it.
         if (await legacy.exists()) {
@@ -215,6 +223,7 @@ class SqliteEncryptedCache implements LocalCache {
           await legacy.delete();
         }
       }
+      stage = 'cache-refresh';
       pruneLocalData(data, clock());
       await save(); // No transaction if retention and data are unchanged.
     } catch (_) {
@@ -225,7 +234,7 @@ class SqliteEncryptedCache implements LocalCache {
       _persisted.clear();
       data = {};
       throw StateError(
-        'Encrypted local cache is unavailable; existing files were preserved',
+        'Encrypted local cache is unavailable ($stage); existing files were preserved',
       );
     }
   }
