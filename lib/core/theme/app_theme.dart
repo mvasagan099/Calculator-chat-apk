@@ -74,8 +74,26 @@ class AppTheme {
         backgroundColor: colors.surfaceContainerLow,
         indicatorColor: colors.primaryContainer,
       ),
-      snackBarTheme: const SnackBarThemeData(
+      listTileTheme: ListTileThemeData(
+        iconColor: colors.primary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 3),
+      ),
+      cardTheme: CardThemeData(
+        elevation: 0,
+        color: colors.surfaceContainerLow,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      ),
+      dividerTheme: DividerThemeData(color: colors.outlineVariant.withValues(alpha: .6), space: 28),
+      filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
+        minimumSize: const Size(56, 48),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      )),
+      snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        backgroundColor: colors.inverseSurface,
+        contentTextStyle: TextStyle(color: colors.onInverseSurface),
       ),
     );
   }

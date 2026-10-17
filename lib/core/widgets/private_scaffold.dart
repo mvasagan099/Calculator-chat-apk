@@ -33,6 +33,8 @@ class PrivateScaffold extends ConsumerWidget {
     body: body,
     floatingActionButton: floatingActionButton,
     bottomNavigationBar: NavigationBar(
+      height: 72,
+      animationDuration: const Duration(milliseconds: 230),
       selectedIndex: index,
       onDestinationSelected: (i) => context.go(
         ['/chats', '/updates', '/calls', '/groups', '/settings'][i],

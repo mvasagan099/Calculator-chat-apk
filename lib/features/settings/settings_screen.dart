@@ -1,5 +1,6 @@
 import '../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import '../../core/services/launcher_icon_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
@@ -31,7 +32,50 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  final LauncherIconService _launcher = LauncherIconService();
+  late Future<String> _launcherIcon = _launcher.current().catchError((Object _) => 'classic');
   late Future<Map<String, dynamic>> future = load();
+
+  Future<void> selectCalculatorIcon() async {
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Choose calculator icon', style: Theme.of(sheetContext).textTheme.headlineSmall),
+            const SizedBox(height: 8),
+            const Text('Changes the Android home-screen icon, not your calculator PIN or private chats.'),
+            const SizedBox(height: 12),
+            FutureBuilder<String>(future: _launcherIcon, builder: (context, current) => Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [for (final option in LauncherIconService.options)
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  leading: CalculatorIconPreview(option: option, size: 46),
+                  title: Text(option.label),
+                  subtitle: Text(option.description),
+                  trailing: current.data == option.id ? const Icon(Icons.check_circle_rounded) : null,
+                  onTap: () => Navigator.of(sheetContext).pop(option.id),
+                ),
+              ],
+            )),
+          ]),
+        ),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await act(context, () async {
+      if (!widget.auth.signedIn || !widget.auth.deviceAuthorized || !widget.auth.lock.unlocked) {
+        throw StateError('Unlock the private space before changing its icon');
+      }
+      await _launcher.set(selected);
+      if (mounted) setState(() => _launcherIcon = Future.value(selected));
+    });
+  }
+
   Future<Map<String, dynamic>> load() async {
     final c = ref.read(supabaseProvider), id = ref.read(messengerProvider).uid;
     return {
@@ -197,7 +241,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 onTap: () => act(context, () => edit(key, profile[key])),
               ),
             const Divider(),
-            const ListTile(title: Text('Device privacy')),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Text('Security & device', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
             ListTile(
               title: const Text('Generate new recovery codes'),
               subtitle: const Text('Requires your password; replaces all old codes'),
@@ -272,6 +319,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 await device.setBiometrics(v);
                 if (mounted) setState(() {});
               }),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: Text('Personalization', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.apps_rounded),
+              title: const Text('Calculator app icon'),
+              subtitle: const Text('Classic, Midnight, Graphite or Sunrise'),
+              trailing: FutureBuilder<String>(future: _launcherIcon, builder: (context, state) {
+                final selected = LauncherIconService.find(state.data ?? 'classic');
+                return CalculatorIconPreview(option: selected, size: 38);
+              }),
+              onTap: selectCalculatorIcon,
             ),
             ListTile(
               title: const Text('Chat appearance'),

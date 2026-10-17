@@ -86,7 +86,7 @@ class AppRouter {
         ),
         GoRoute(
           path: '/chats',
-          builder: (_, _) => guard(const ChatListScreen()),
+          pageBuilder: (_, state) => privatePage(state, const ChatListScreen()),
         ),
         GoRoute(
           path: '/chat/:id',
@@ -102,7 +102,7 @@ class AppRouter {
         ),
         GoRoute(
           path: '/calls',
-          builder: (_, _) => guard(const CallHistoryScreen()),
+          pageBuilder: (_, state) => privatePage(state, const CallHistoryScreen()),
         ),
         GoRoute(
           path: '/call/:id',
@@ -110,7 +110,7 @@ class AppRouter {
         ),
         GoRoute(
           path: '/groups',
-          builder: (_, _) => guard(const GroupsScreen()),
+          pageBuilder: (_, state) => privatePage(state, const GroupsScreen()),
         ),
         GoRoute(
           path: '/details/:id',
@@ -119,16 +119,12 @@ class AppRouter {
         ),
         GoRoute(
           path: '/updates',
-          builder: (_, _) => guard(const StatusScreen()),
+          pageBuilder: (_, state) => privatePage(state, const StatusScreen()),
         ),
         GoRoute(
           path: '/settings',
-          builder: (_, _) => guard(
-            SettingsScreen(
-              auth: auth,
-              device: device,
-              notifications: notifications,
-            ),
+          pageBuilder: (_, state) => privatePage(state,
+            SettingsScreen(auth: auth, device: device, notifications: notifications),
           ),
         ),
       ],
@@ -141,6 +137,24 @@ class AppRouter {
   final DeviceSettings device;
   final NotificationService notifications;
   late final GoRouter router;
+  // Private pages transition only while unlocked; the public calculator is
+  // never included in a private crossfade or a back-swipe screenshot.
+  Page<void> privatePage(GoRouterState state, Widget screen) => CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: guard(screen),
+    transitionDuration: const Duration(milliseconds: 190),
+    reverseTransitionDuration: const Duration(milliseconds: 130),
+    transitionsBuilder: (context, animation, secondary, child) {
+      final easing = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      return FadeTransition(
+        opacity: easing,
+        child: SlideTransition(
+          position: Tween<Offset>(begin: const Offset(0, .025), end: Offset.zero).animate(easing),
+          child: child,
+        ),
+      );
+    },
+  );
   Widget guard(Widget child) => Builder(builder: (context) => PrivacyGate(
     calculatorTheme: AppTheme.build(switch (device.theme) {
       ThemeMode.light => Brightness.light,

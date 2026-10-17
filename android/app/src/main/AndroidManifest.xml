@@ -45,11 +45,45 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="app.calculatorspace.calculator" android:host="auth-callback" />
             </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
-            </intent-filter>
         </activity>
+        <!-- Exactly one alias is enabled at a time. MainActivity remains
+             enabled for deep links and Flutter's authenticated entry point. -->
+        <activity-alias android:name=".LauncherClassic"
+            android:enabled="true" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherMidnight"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_midnight"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherGraphite"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_graphite"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherSunrise"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_sunrise"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
         <service android:name=".CallForegroundService" android:exported="false" android:foregroundServiceType="microphone|camera" android:stopWithTask="false" />
         <service android:name=".ProjectionForegroundService" android:exported="false" android:foregroundServiceType="mediaProjection" android:stopWithTask="true" />
         <receiver android:name="com.dexterous.flutterlocalnotifications.ActionBroadcastReceiver" android:exported="false" />

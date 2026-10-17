@@ -95,6 +95,23 @@ class MainActivity : FlutterFragmentActivity() {
                 else -> result.notImplemented()
             }
         }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "calculator_messenger/launcher_icon")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "current" -> result.success(LauncherIconSwitcher.current(this))
+                    "set" -> {
+                        val selected = call.argument<String>("id")
+                        if (selected == null) result.error("invalid", "Select a calculator icon", null)
+                        else try { result.success(LauncherIconSwitcher.set(this, selected)) }
+                        catch (_: IllegalArgumentException) {
+                            result.error("invalid", "Unknown calculator icon", null)
+                        } catch (_: Exception) {
+                            result.error("launcher", "Android could not change the launcher icon", null)
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "calculator_messenger/privacy")
             .setMethodCallHandler { call, result ->
                 if (call.method == "secure") {
