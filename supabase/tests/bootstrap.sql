@@ -4,9 +4,15 @@ grant usage on schema public to public;
 do $$ begin if not exists(select 1 from pg_roles where rolname='anon') then create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls; end if; end $$;
 create schema auth;
 create schema storage;
+create function storage.allow_only_operation(operation text) returns boolean language sql stable as $$
+ select coalesce(nullif(current_setting('test.storage_operation',true),''),'object.get_authenticated')=operation
+$$;
 create schema realtime;
 create schema extensions;
-create table auth.users(id uuid primary key,raw_user_meta_data jsonb default '{}');
+create table auth.users(id uuid primary key,raw_user_meta_data jsonb default '{}',
+ raw_app_meta_data jsonb default '{}',email text);
+create table auth.sessions(id uuid primary key,user_id uuid references auth.users on delete cascade,
+ created_at timestamptz not null default now());
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
 grant usage on schema auth to authenticated,anon,service_role;
 grant execute on function auth.uid() to public;

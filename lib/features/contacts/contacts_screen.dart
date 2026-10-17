@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/widgets/actions.dart';
 import '../../core/widgets/private_scaffold.dart';
 import '../../providers/app_providers.dart';
+import '../chats/message_yourself_tile.dart';
 
 class ContactsScreen extends ConsumerStatefulWidget {
   const ContactsScreen({super.key, this.selectOnly = false});
@@ -65,6 +66,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     ),
     body: Column(
       children: [
+        if (!widget.selectOnly) const MessageYourselfTile(replace: true),
         Padding(
           padding: const EdgeInsets.all(16),
           child: SearchBar(

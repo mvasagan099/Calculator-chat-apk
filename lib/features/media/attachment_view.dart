@@ -1,14 +1,14 @@
-import 'dart:io';
+import '../../core/security/local_retention.dart';
+import 'expiring_attachment_view.dart';
+import 'dart:typed_data';
+import '../../core/security/private_media_files.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:video_player/video_player.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/widgets/actions.dart';
 import 'media_service.dart';
-import 'private_media_guard.dart';
 
 class AttachmentView extends StatefulWidget {
   const AttachmentView({
@@ -32,9 +32,6 @@ class _AttachmentViewState extends State<AttachmentView> {
     if (widget.expiresAt != null)
       'expires_at': widget.expiresAt!.toUtc().toIso8601String(),
   };
-  late final Future<String> url = MediaService(
-    widget.client,
-  ).signedUrl(attachment);
   AudioPlayer? player;
   bool playing = false, preparingAudio = false;
   StreamSubscription<PlayerState>? _playerState;
@@ -95,55 +92,14 @@ class _AttachmentViewState extends State<AttachmentView> {
   @override
   Widget build(BuildContext context) {
     final a = attachment;
+    if (visualAttachmentExpired(a, DateTime.now())) return const Text('Media expired');
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         if (downloading) LinearProgressIndicator(value: downloadProgress),
-        if (widget.kind == 'image')
-          FutureBuilder<String>(
-            future: url,
-            builder: (context, s) => s.hasData
-                ? GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => PrivateMediaGuard(
-                          expiresAt: widget.expiresAt,
-                          builder: (_) => Scaffold(
-                            appBar: AppBar(),
-                            body: Center(
-                              child: InteractiveViewer(
-                                child: Image.network(
-                                  s.data!,
-                                  cacheWidth: 2160,
-                                  errorBuilder: (_, _, _) =>
-                                      const Icon(Icons.broken_image),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(14),
-                      child: Image.network(
-                        s.data!,
-                        width: 240,
-                        height: 180,
-                        fit: BoxFit.cover,
-                        cacheWidth: 720,
-                        errorBuilder: (_, _, _) =>
-                            const Icon(Icons.broken_image),
-                      ),
-                    ),
-                  )
-                : const SizedBox(
-                    height: 100,
-                    child: Center(child: CircularProgressIndicator()),
-                  ),
-          ),
+        if (widget.kind == 'image' || widget.kind == 'video')
+          ExpiringAttachmentView(key: ValueKey(a['media_expires_at']), client: widget.client, attachment: a, kind: widget.kind),
         if (widget.kind == 'audio' || widget.kind == 'voice')
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -173,25 +129,6 @@ class _AttachmentViewState extends State<AttachmentView> {
               ),
             ],
           ),
-        if (widget.kind == 'video')
-          TextButton.icon(
-            onPressed: () => act(context, () async {
-              final source = await url;
-              if (context.mounted) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PrivateMediaGuard(
-                      expiresAt: widget.expiresAt,
-                      builder: (_) => VideoViewer(url: source),
-                    ),
-                  ),
-                );
-              }
-            }),
-            icon: const Icon(Icons.play_circle),
-            label: const Text('Play video'),
-          ),
         Text(a['filename'], maxLines: 1, overflow: TextOverflow.ellipsis),
         Row(
           mainAxisSize: MainAxisSize.min,
@@ -209,7 +146,7 @@ class _AttachmentViewState extends State<AttachmentView> {
                   downloading = true;
                   downloadProgress = 0;
                 });
-                late final List<int> bytes;
+                late final Uint8List bytes;
                 try {
                   bytes = await MediaService(widget.client).download(
                     a,
@@ -220,21 +157,19 @@ class _AttachmentViewState extends State<AttachmentView> {
                 } finally {
                   if (mounted) setState(() => downloading = false);
                 }
-                if (!mounted) return;
-                final directory = await getTemporaryDirectory();
-                final basename = (a['filename'] as String).replaceAll(
-                  RegExp(r'[^a-zA-Z0-9._-]'),
-                  '_',
-                );
-                final file = File(
-                  '${directory.path}/${a['id'] ?? 'export'}-$basename',
-                );
-                await file.writeAsBytes(bytes);
+                if (!mounted || visualAttachmentExpired(a, DateTime.now())) {
+                  bytes.fillRange(0, bytes.length, 0);
+                  return;
+                }
+                final file = await PrivateMediaFiles().save(bytes,
+                  extension: (a['filename'] as String).split('.').last,
+                  expiresAt: attachmentDeadline(a));
                 try {
                   await SharePlus.instance.share(
                     ShareParams(files: [XFile(file.path)]),
                   );
                 } finally {
+                  bytes.fillRange(0, bytes.length, 0);
                   if (await file.exists()) await file.delete();
                 }
               }),
@@ -244,60 +179,4 @@ class _AttachmentViewState extends State<AttachmentView> {
       ],
     );
   }
-}
-
-class VideoViewer extends StatefulWidget {
-  const VideoViewer({super.key, required this.url});
-  final String url;
-  @override
-  State<VideoViewer> createState() => _VideoViewerState();
-}
-
-class _VideoViewerState extends State<VideoViewer> {
-  late final VideoPlayerController controller =
-      VideoPlayerController.networkUrl(Uri.parse(widget.url));
-  late final Future<void> ready = controller.initialize();
-  @override
-  void dispose() {
-    controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Video')),
-    body: FutureBuilder<void>(
-      future: ready,
-      builder: (context, s) {
-        if (s.hasError) return const Center(child: Text('Video unavailable'));
-        if (s.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AspectRatio(
-                aspectRatio: controller.value.aspectRatio,
-                child: VideoPlayer(controller),
-              ),
-              VideoProgressIndicator(controller, allowScrubbing: true),
-              IconButton(
-                onPressed: () {
-                  setState(() {
-                    controller.value.isPlaying
-                        ? controller.pause()
-                        : controller.play();
-                  });
-                },
-                icon: Icon(
-                  controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    ),
-  );
 }

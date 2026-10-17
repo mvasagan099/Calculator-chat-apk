@@ -80,6 +80,7 @@ Future<void> main() async {
   final auth = AuthService(client, lock, store);
   await auth.initialize();
   final notifications = NotificationService();
+  if (client != null) notifications.bindClient(client);
   await notifications.initialize();
   runApp(
     ProviderScope(
@@ -145,6 +146,7 @@ class _MessengerAppState extends State<MessengerApp> {
           builder: (context, _) {
             final path = routing.router.routeInformationProvider.value.uri.path;
             final locked =
+                auth.lock.mediaPickerActive ||
                 !auth.lock.unlocked ||
                 !auth.lock.hasPin ||
                 !auth.signedIn ||
@@ -158,15 +160,18 @@ class _MessengerAppState extends State<MessengerApp> {
                 auth.recentlyAuthenticated
                     ? PinSetupScreen(auth: auth)
                     : AuthScreen(auth: auth, recoverPin: true),
-              '/password' =>
-                auth.recovery
-                    ? PasswordResetScreen(auth: auth)
+              '/password' => PasswordResetScreen(auth: auth),
+              '/recovery-codes' =>
+                auth.signedIn && auth.deviceAuthorized && auth.recoveryCodes.isNotEmpty
+                    ? RecoveryCodesScreen(auth: auth)
                     : CalculatorScreen(lock: auth.lock),
               _ => CalculatorScreen(lock: auth.lock),
             };
             return PrivacyMask(
               locked: locked,
-              publicSurface: InheritedGoRouter(
+              publicSurface: auth.lock.mediaPickerActive
+                  ? const ColoredBox(color: Color(0xFF101010))
+                  : InheritedGoRouter(
                 goRouter: routing.router,
                 child: Navigator(
                   key: ValueKey('locked.$path'),
@@ -174,7 +179,16 @@ class _MessengerAppState extends State<MessengerApp> {
                       MaterialPageRoute<void>(builder: (_) => surface),
                 ),
               ),
-              child: child ?? const SizedBox.shrink(),
+              child: Theme(
+                data: ['/', '/auth', '/recover', '/password', '/pin', '/devices', '/recovery-codes'].contains(path)
+                    ? Theme.of(context)
+                    : AppTheme.messenger(switch (widget.device.messengerAppearance) {
+                  ThemeMode.light => Brightness.light,
+                  ThemeMode.dark => Brightness.dark,
+                  ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+                }, widget.device.messengerTheme),
+                child: child ?? const SizedBox.shrink(),
+              ),
             );
           },
         );

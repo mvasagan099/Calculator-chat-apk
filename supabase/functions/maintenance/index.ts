@@ -1,3 +1,4 @@
+import { cleanupChatMedia } from "../_shared/media_cleanup.ts";
 import { closeRoom, removeParticipant } from "../_shared/livekit.ts";
 import {
   adminClient,
@@ -12,23 +13,7 @@ serve(async (req) => {
   const admin = adminClient();
   const { error: expiryError } = await admin.rpc("expire_messages");
   if (expiryError) throw expiryError;
-  const { data: retention, error: retentionError } = await admin.rpc(
-    "retention_media_jobs",
-  );
-  if (retentionError) throw retentionError;
-  const retentionPaths = (retention ?? []).map((item: { path: string }) =>
-    item.path
-  );
-  if (retentionPaths.length) {
-    const { error: deleteError } = await admin.storage.from("chat-media")
-      .remove(retentionPaths);
-    if (deleteError) throw deleteError;
-    const { error: acknowledgeError } = await admin.rpc(
-      "complete_media_cleanup",
-      { paths: retentionPaths },
-    );
-    if (acknowledgeError) throw acknowledgeError;
-  }
+  const mediaCleanup = await cleanupChatMedia(admin);
   const { error: reconcileError } = await admin.rpc("reconcile_calls");
   if (reconcileError) throw reconcileError;
   const { data: evictions, error: evictionError } = await admin.rpc(
@@ -88,6 +73,7 @@ serve(async (req) => {
   );
   return json({
     cleanup: true,
+    ...mediaCleanup,
     roomCleanupErrors,
     participantCleanupErrors,
     ...await dispatchPush(),

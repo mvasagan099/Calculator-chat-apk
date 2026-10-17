@@ -1,10 +1,13 @@
+import '../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/services/private_media_access.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/services/device_settings.dart';
 import '../../core/widgets/actions.dart';
@@ -73,13 +76,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> avatar() async {
-    final photo = await ImagePicker().pickImage(
+    final access = PrivateMediaAccess(ref.read(lockProvider),
+        ref.read(authServiceProvider), ref.read(supabaseProvider), isCurrent: () => mounted);
+    final photo = await access.pick('image', () => ImagePicker().pickImage(
       source: ImageSource.gallery,
       imageQuality: 85,
       maxWidth: 800,
-    );
+    ));
     if (photo == null) return;
+    if (!mounted) return;
+    access.check();
     final bytes = await photo.readAsBytes();
+    if (!mounted) return;
+    access.check();
     if (bytes.length > 5 * 1024 * 1024) {
       throw const FormatException('Avatar must be under 5 MB');
     }
@@ -92,10 +101,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           bytes,
           fileOptions: const FileOptions(contentType: 'image/jpeg'),
         );
+    if (!mounted) return;
+    access.check();
     final check = await c.functions.invoke(
       'validate-media',
       body: {'bucket': 'avatars', 'path': path},
     );
+    if (!mounted) return;
+    access.check();
     if (check.status != 200) throw StateError('Image rejected');
     await c
         .from('profiles')
@@ -143,6 +156,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         final device = widget.device, lock = device.lock;
         return ListView(
           children: [
+            ListenableBuilder(listenable: widget.notifications, builder: (context, _) {
+              final release = widget.notifications.availableUpdate;
+              return release == null ? const SizedBox.shrink() : ListTile(
+                title: const Text('Update to the latest version'),
+                subtitle: Text('Android build ${release.build}'),
+                onTap: () => act(context, () async {
+                  final current = await widget.notifications.verifyAppUpdate();
+                  if (current?.id != release.id || !mounted || !widget.auth.lock.unlocked ||
+                      !widget.auth.deviceAuthorized || !widget.auth.ownerMatches || !widget.auth.signedIn) return;
+                  if (!await launchUrl(Uri.parse(current!.url), mode: LaunchMode.externalApplication)) {
+                    throw StateError('Unable to open the verified release');
+                  }
+                }),
+              );
+            }),
             ListTile(
               leading: PersonAvatar(
                 name: profile['display_name'],
@@ -160,7 +188,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: SelectableText('Public ID: ${profile['public_id']}'),
             ),
-            for (final key in ['username', 'display_name', 'about'])
+            for (final key in ['display_name', 'about'])
               ListTile(
                 title: Text(key.replaceAll('_', ' ')),
                 subtitle: Text(profile[key]),
@@ -168,6 +196,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             const Divider(),
             const ListTile(title: Text('Device privacy')),
+            ListTile(
+              title: const Text('Generate new recovery codes'),
+              subtitle: const Text('Requires your password; replaces all old codes'),
+              onTap: () => act(context, () async {
+                final password = await askText(context, 'Confirm account password', secret: true);
+                if (password == null) return;
+                await widget.auth.rotateRecoveryCodes(password);
+                if (context.mounted) context.push('/recovery-codes');
+              }),
+            ),
             ListTile(
               leading: const Icon(Icons.calculate_outlined),
               title: const Text('Return to Calculator'),
@@ -208,7 +246,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ),
             SwitchListTile(
-              title: const Text('Biometric unlock'),
+              title: const Text('Require biometrics after PIN'),
               value: lock.biometricsEnabled,
               onChanged: (v) => act(context, () async {
                 if (v) {
@@ -234,15 +272,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               }),
             ),
             ListTile(
-              title: const Text('Theme'),
+              title: const Text('Chat appearance'),
+              subtitle: const Text('Light and dark appearance'),
               trailing: DropdownButton<ThemeMode>(
-                value: device.theme,
+                value: device.messengerAppearance,
                 items: [
                   for (final mode in ThemeMode.values)
                     DropdownMenuItem(value: mode, child: Text(mode.name)),
                 ],
                 onChanged: (mode) => act(context, () async {
-                  if (mode != null) await device.setTheme(mode);
+                  if (mode != null) await device.setMessengerAppearance(mode);
+                  if (mounted) setState(() {});
+                }),
+              ),
+            ),
+            ListTile(
+              title: const Text('Messenger style'),
+              trailing: DropdownButton<MessengerTheme>(
+                value: device.messengerTheme,
+                items: [for (final style in MessengerTheme.values)
+                  DropdownMenuItem(value: style, child: Text(style.label))],
+                onChanged: (style) => act(context, () async {
+                  if (style != null) await device.setMessengerTheme(style);
                   if (mounted) setState(() {});
                 }),
               ),

@@ -13,12 +13,15 @@ import io.flutter.plugin.common.MethodChannel
 class MainActivity : FlutterFragmentActivity() {
     private var pinKdf: PinKdfChannel? = null
     private var permissionResult: MethodChannel.Result? = null
+    private var mediaPicker: MediaPickerHandoff? = null
     override fun onCreate(savedInstanceState: Bundle?) {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         super.onCreate(savedInstanceState)
     }
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        mediaPicker?.close()
+        mediaPicker = MediaPickerHandoff(this, flutterEngine.dartExecutor.binaryMessenger)
         pinKdf?.close()
         pinKdf = PinKdfChannel(flutterEngine.dartExecutor.binaryMessenger)
         val calls = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "calculator_messenger/calls")
@@ -97,6 +100,10 @@ class MainActivity : FlutterFragmentActivity() {
                 if (call.method == "secure") {
                     window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
                     result.success(null)
+                } else if (call.method == "appIdentity") {
+                    try {
+                        result.success(InstalledAppIdentity.read(this))
+                    } catch (_: Exception) { result.error("identity", "Package identity unavailable", null) }
                 } else result.notImplemented()
             }
     }
@@ -108,7 +115,24 @@ class MainActivity : FlutterFragmentActivity() {
         if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) result?.success(null)
         else result?.error("permission", if (requestCode == 502) "Nearby devices permission is required for Bluetooth routing" else "Microphone and requested camera permission are required", null)
     }
+    @Suppress("DEPRECATION")
+    override fun startActivityForResult(intent: Intent, requestCode: Int, options: Bundle?) {
+        mediaPicker?.launching(intent, requestCode)
+        super.startActivityForResult(intent, requestCode, options)
+    }
+    @Suppress("DEPRECATION")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        mediaPicker?.result(requestCode)
+        super.onActivityResult(requestCode, resultCode, data)
+    }
+    override fun onResume() { super.onResume(); mediaPicker?.resumed() }
+    override fun onPause() { mediaPicker?.paused(); super.onPause() }
+    override fun onStop() { mediaPicker?.stopped(); super.onStop() }
+    override fun onUserLeaveHint() { mediaPicker?.invalidate(); super.onUserLeaveHint() }
+    override fun onNewIntent(intent: Intent) { mediaPicker?.invalidate(); super.onNewIntent(intent) }
     override fun onDestroy() {
+        mediaPicker?.close()
+        mediaPicker = null
         pinKdf?.close()
         pinKdf = null
         permissionResult?.error("cancelled", "Activity closed", null)

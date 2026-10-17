@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/services/auth_service.dart';
 import '../../core/widgets/actions.dart';
 
@@ -13,53 +12,27 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final email = TextEditingController(),
+  final userId = TextEditingController(),
       password = TextEditingController(),
-      name = TextEditingController();
+      name = TextEditingController(),
+      confirmPassword = TextEditingController();
   bool signup = false, busy = false;
   Future<void> submit() async {
     if (busy) return;
     setState(() => busy = true);
     await act(context, () async {
       if (signup) {
-        if (password.text.length < 12) {
-          throw const FormatException('Use at least 12 characters');
-        }
-        await widget.auth.client!.auth.signUp(
-          email: email.text.trim(),
-          password: password.text,
-          data: {'display_name': name.text.trim()},
-          emailRedirectTo: 'app.calculatorspace.calculator://auth-callback',
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Check your email to verify your account, then sign in.',
-              ),
-            ),
-          );
-          setState(() => signup = false);
-        }
+        await widget.auth.signUp(userId.text, name.text, password.text, confirmPassword.text);
+      } else if (widget.recoverPin && widget.auth.signedIn && widget.auth.deviceAuthorized) {
+        await widget.auth.reauthenticate(password.text);
       } else {
-        if (widget.recoverPin &&
-            widget.auth.signedIn &&
-            widget.auth.deviceAuthorized &&
-            email.text.trim().toLowerCase() ==
-                widget.auth.client!.auth.currentUser!.email?.toLowerCase()) {
-          await widget.auth.reauthenticate(password.text);
-        } else {
-          await widget.auth.signIn(email.text, password.text);
-        }
-        if (mounted) {
-          context.go(
-            !widget.auth.deviceAuthorized
-                ? '/devices'
-                : widget.recoverPin || !widget.auth.lock.hasPin
-                ? '/pin'
-                : '/',
-          );
-        }
+        await widget.auth.signIn(userId.text, password.text);
+      }
+      password.clear();
+      confirmPassword.clear();
+      if (mounted) {
+        context.go(widget.recoverPin && widget.auth.deviceAuthorized
+            ? '/pin' : widget.auth.nextSecurityRoute);
       }
     });
     if (mounted) setState(() => busy = false);
@@ -67,7 +40,8 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   void dispose() {
-    email.dispose();
+    userId.dispose();
+    confirmPassword.dispose();
     password.dispose();
     name.dispose();
     super.dispose();
@@ -100,24 +74,40 @@ class _AuthScreenState extends State<AuthScreen> {
               const SelectableText(
                 'Backend not configured. Follow docs/DEPLOYMENT.md and build with SUPABASE_URL and SUPABASE_ANON_KEY. Calculator functions remain available.',
               ),
+            if (!(widget.recoverPin && widget.auth.signedIn && widget.auth.deviceAuthorized))
+              TextField(
+                controller: userId,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.username],
+                decoration: const InputDecoration(
+                  labelText: 'User ID', helperText: '3–30 lowercase letters, numbers or underscores',
+                ),
+              ),
             if (signup)
               TextField(
                 controller: name,
-                decoration: const InputDecoration(labelText: 'Display name'),
+                decoration: const InputDecoration(labelText: 'Username'),
               ),
-            TextField(
-              controller: email,
-              keyboardType: TextInputType.emailAddress,
-              autofillHints: const [AutofillHints.email],
-              decoration: const InputDecoration(labelText: 'Email'),
-            ),
             TextField(
               controller: password,
               obscureText: true,
-              autofillHints: const [AutofillHints.password],
+              autofillHints: signup ? const [AutofillHints.newPassword] : const [AutofillHints.password],
+              autocorrect: false,
+              enableSuggestions: false,
               decoration: const InputDecoration(labelText: 'Password'),
               onSubmitted: (_) => submit(),
             ),
+            if (signup)
+              TextField(
+                controller: confirmPassword,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.newPassword],
+                decoration: const InputDecoration(labelText: 'Retype password'),
+                onSubmitted: (_) => submit(),
+              ),
             const SizedBox(height: 24),
             FilledButton(
               onPressed: busy || widget.auth.client == null ? null : submit,
@@ -131,7 +121,9 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
             if (!widget.recoverPin)
               TextButton(
-                onPressed: () => setState(() => signup = !signup),
+                onPressed: busy ? null : () => setState(() {
+                  signup = !signup; password.clear(); confirmPassword.clear();
+                }),
                 child: Text(
                   signup
                       ? 'Already have an account? Sign in'
@@ -139,24 +131,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 ),
               ),
             TextButton(
-              onPressed: widget.auth.client == null
-                  ? null
-                  : () => act(context, () async {
-                      await widget.auth.client!.auth.resetPasswordForEmail(
-                        email.text.trim(),
-                        redirectTo:
-                            'app.calculatorspace.calculator://auth-callback',
-                      );
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'If registered, a recovery email is on its way.',
-                            ),
-                          ),
-                        );
-                      }
-                    }),
+              onPressed: busy ? null : () => context.go('/password'),
               child: const Text('Forgot password?'),
             ),
             TextButton(
@@ -218,41 +193,86 @@ class _PinSetupScreenState extends State<PinSetupScreen> {
                     if (pin.text != confirm.text) {
                       throw const FormatException('PINs do not match');
                     }
-                    await widget.auth.configurePin(pin.text);
-                    if (context.mounted) context.go('/');
+                    await widget.auth.configurePin(pin.text, openMessenger: true);
+                    if (context.mounted) context.go(widget.auth.lock.unlocked ? '/chats' : '/');
                   });
                   if (mounted) setState(() => busy = false);
                 },
-          child: const Text('Save PIN and lock'),
+          child: const Text('Save PIN and open messenger'),
         ),
       ],
     ),
   );
 }
 
-class PasswordResetScreen extends StatelessWidget {
+class PasswordResetScreen extends StatefulWidget {
   const PasswordResetScreen({super.key, required this.auth});
   final AuthService auth;
   @override
+  State<PasswordResetScreen> createState() => _PasswordResetScreenState();
+}
+
+class _PasswordResetScreenState extends State<PasswordResetScreen> {
+  final userId = TextEditingController(), code = TextEditingController(),
+      password = TextEditingController(), confirmation = TextEditingController();
+  bool busy = false;
+  @override
+  void dispose() {
+    userId.dispose(); code.dispose(); password.dispose(); confirmation.dispose();
+    super.dispose();
+  }
+  @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Reset account password')),
-    body: Center(
-      child: FilledButton(
-        onPressed: () => act(context, () async {
-          final password = await askText(context, 'New password', secret: true);
-          if (password == null) return;
-          if (password.length < 12) {
-            throw const FormatException('Use at least 12 characters');
-          }
-          await auth.client!.auth.updateUser(
-            UserAttributes(password: password),
-          );
-          auth.recovery = false;
-          await auth.signOut();
-          if (context.mounted) context.go('/auth');
-        }),
-        child: const Text('Choose a new password'),
-      ),
+    appBar: AppBar(title: const Text('Recover account')),
+    body: ListView(padding: const EdgeInsets.all(24), children: [
+      const Text('Use one unused recovery code. Recovery signs out old sessions and authorizes this device. There is no email or support bypass. If a reset is interrupted, use another unused code.'),
+      TextField(controller: userId, autocorrect: false, decoration: const InputDecoration(labelText: 'User ID')),
+      TextField(controller: code, obscureText: true, autocorrect: false, enableSuggestions: false,
+        decoration: const InputDecoration(labelText: 'One-time recovery code')),
+      TextField(controller: password, obscureText: true, autocorrect: false, enableSuggestions: false,
+        decoration: const InputDecoration(labelText: 'New password (minimum 12 characters)')),
+      TextField(controller: confirmation, obscureText: true, autocorrect: false, enableSuggestions: false,
+        decoration: const InputDecoration(labelText: 'Retype password')),
+      FilledButton(onPressed: busy ? null : () async {
+        setState(() => busy = true);
+        await act(context, () async {
+          await widget.auth.recoverAccount(userId.text, code.text, password.text, confirmation.text);
+          code.clear(); password.clear(); confirmation.clear();
+          if (context.mounted) context.go(widget.auth.nextSecurityRoute);
+        });
+        if (mounted) setState(() => busy = false);
+      }, child: Text(busy ? 'Please wait…' : 'Recover account')),
+      TextButton(onPressed: busy ? null : () => context.go('/auth'), child: const Text('Return to sign in')),
+    ]),
+  );
+}
+
+class RecoveryCodesScreen extends StatefulWidget {
+  const RecoveryCodesScreen({super.key, required this.auth});
+  final AuthService auth;
+  @override
+  State<RecoveryCodesScreen> createState() => _RecoveryCodesScreenState();
+}
+class _RecoveryCodesScreenState extends State<RecoveryCodesScreen> {
+  bool saved = false;
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: widget.auth,
+    builder: (context, _) => Scaffold(
+      appBar: AppBar(title: const Text('Save your recovery codes')),
+      body: ListView(padding: const EdgeInsets.all(24), children: [
+        const Text('Write these codes down and keep them somewhere private, separate from this phone. Each works once and can reset your password and approve a replacement device. Recovery leaves other unused codes valid; generating codes in Settings replaces all old codes. These are shown only now and are not saved on this phone.'),
+        const SizedBox(height: 16),
+        for (var index = 0; index < widget.auth.recoveryCodes.length; index++)
+          Padding(padding: const EdgeInsets.only(bottom: 12),
+            child: SelectableText('${index + 1}. ${widget.auth.recoveryCodes[index]}')),
+        CheckboxListTile(value: saved, onChanged: (value) => setState(() => saved = value ?? false),
+          title: const Text('I have saved these codes securely')),
+        FilledButton(onPressed: !saved ? null : () {
+          widget.auth.acknowledgeRecoveryCodes();
+          context.go(widget.auth.lock.unlocked ? '/chats' : widget.auth.nextSecurityRoute);
+        }, child: const Text('Continue')),
+      ]),
     ),
   );
 }

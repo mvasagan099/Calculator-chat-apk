@@ -44,7 +44,7 @@ class DeviceApprovalScreen extends StatelessWidget {
             FilledButton(
               onPressed: () => act(context, () async {
                 await auth.refreshDeviceAccess(initial: true);
-                if (context.mounted && auth.deviceAuthorized) context.go('/');
+                if (context.mounted && auth.deviceAuthorized) context.go(auth.nextSecurityRoute);
               }),
               child: const Text('Check approval'),
             ),

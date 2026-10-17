@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../services/auth_service.dart';
+import '../theme/app_theme.dart';
 import '../../features/devices/device_screens.dart';
 import '../widgets/privacy_gate.dart';
 import '../services/device_settings.dart';
@@ -25,11 +26,12 @@ class AppRouter {
       refreshListenable: Listenable.merge([auth, auth.lock]),
       redirect: (context, state) {
         final path = state.uri.path;
-        if (auth.recovery) return path == '/password' ? null : '/password';
-        if (path == '/' || path == '/auth' || path == '/recover') return null;
+        if (path == '/' || path == '/auth' || path == '/recover' || path == '/password') return null;
         if (path == '/devices') return auth.signedIn ? null : '/auth';
         if (auth.signedIn && !auth.deviceAuthorized) return '/devices';
-        if (path == '/password') return '/';
+        if (path == '/recovery-codes') {
+          return auth.signedIn && auth.recoveryCodes.isNotEmpty ? null : '/auth';
+        }
         if (path == '/pin') {
           return auth.recentlyAuthenticated ? null : '/recover';
         }
@@ -41,11 +43,18 @@ class AppRouter {
         if (!auth.lock.unlocked) return '/';
         return null;
       },
-      errorBuilder: (context, state) => CalculatorScreen(lock: auth.lock),
+      errorBuilder: (context, state) => Theme(
+        data: AppTheme.build(switch (device.theme) {
+          ThemeMode.light => Brightness.light,
+          ThemeMode.dark => Brightness.dark,
+          ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+        }),
+        child: CalculatorScreen(lock: auth.lock),
+      ),
       routes: [
         GoRoute(
           path: '/',
-          builder: (_, _) => CalculatorScreen(lock: auth.lock),
+          builder: (context, _) => Theme(data: AppTheme.build(Theme.of(context).brightness), child: CalculatorScreen(lock: auth.lock)),
         ),
         GoRoute(
           path: '/auth',
@@ -70,6 +79,10 @@ class AppRouter {
         GoRoute(
           path: '/password',
           builder: (_, _) => PasswordResetScreen(auth: auth),
+        ),
+        GoRoute(
+          path: '/recovery-codes',
+          builder: (_, _) => RecoveryCodesScreen(auth: auth),
         ),
         GoRoute(
           path: '/chats',
@@ -121,22 +134,29 @@ class AppRouter {
       ],
     );
     auth.lock.addListener(openPending);
+    auth.addListener(openPending);
     notifications.addListener(openPending);
   }
   final AuthService auth;
   final DeviceSettings device;
   final NotificationService notifications;
   late final GoRouter router;
-  Widget guard(Widget child) => PrivacyGate(
+  Widget guard(Widget child) => Builder(builder: (context) => PrivacyGate(
+    calculatorTheme: AppTheme.build(switch (device.theme) {
+      ThemeMode.light => Brightness.light,
+      ThemeMode.dark => Brightness.dark,
+      ThemeMode.system => MediaQuery.platformBrightnessOf(context),
+    }),
     lock: auth.lock,
     authenticated: () =>
         auth.signedIn && auth.ownerMatches && auth.deviceAuthorized,
     authChanges: auth,
     child: child,
-  );
+  ));
   bool resolving = false;
+  bool _disposed = false;
   Future<void> openPending() async {
-    if (!auth.lock.unlocked ||
+    if (_disposed || auth.lock.mediaPickerActive || !auth.lock.unlocked ||
         !auth.lock.hasPin ||
         !auth.ownerMatches ||
         !auth.deviceAuthorized ||
@@ -148,7 +168,18 @@ class AppRouter {
     resolving = true;
     final activity = notifications.pending!;
     notifications.pending = null;
+    final owner = auth.client!.auth.currentUser!.id;
+    final session = AuthService.tokenSession(auth.client!.auth.currentSession);
+    final epoch = auth.lock.securityEpoch;
+    bool current() => !_disposed && auth.signedIn && auth.ownerMatches && auth.deviceAuthorized &&
+        auth.lock.privateActionValid(epoch) && auth.client!.auth.currentUser?.id == owner &&
+        session != null && AuthService.tokenSession(auth.client!.auth.currentSession) == session;
     try {
+      if (activity['recipient_id'] != null && activity['recipient_id'] != owner) return;
+      // Let Calculator/PIN setup finish its normal post-unlock navigation first.
+      // Otherwise a fast lookup can be overwritten by context.go('/chats').
+      await WidgetsBinding.instance.endOfFrame;
+      if (!current()) return;
       final id = activity['resource_id'];
       if (id is! String || !RegExp(r'^[0-9a-f-]{36}$').hasMatch(id)) return;
       String? path;
@@ -158,11 +189,7 @@ class AppRouter {
             .select('id')
             .eq('id', id)
             .maybeSingle();
-        if (call != null &&
-            auth.lock.unlocked &&
-            auth.signedIn &&
-            auth.deviceAuthorized &&
-            auth.ownerMatches) {
+        if (call != null && current()) {
           if (activity['action'] == 'reject') {
             await auth.client!.functions.invoke(
               'call-control',
@@ -174,30 +201,32 @@ class AppRouter {
           }
         }
       } else if (activity['kind'] == 'message') {
-        final m = await auth.client!
-            .from('messages')
-            .select('conversation_id')
-            .eq('id', id)
-            .maybeSingle();
-        if (m != null) path = '/chat/${m['conversation_id']}';
+        final m = await auth.client!.rpc('notification_message_target', params: {'mid': id});
+        if (m is Map && m['conversation_id'] is String) path = '/chat/${m['conversation_id']}';
       }
-      if (activity['kind'] == 'missed_call') path = '/calls';
-      if (path != null &&
-          auth.lock.unlocked &&
-          auth.lock.hasPin &&
-          auth.ownerMatches &&
-          auth.deviceAuthorized &&
-          auth.signedIn) {
+      if (activity['kind'] == 'missed_call') {
+        final history = await auth.client!.from('call_history').select('call_id')
+            .eq('call_id', id).eq('user_id', owner).maybeSingle();
+        if (history != null) path = '/calls';
+      }
+      if (activity['kind'] == 'app_update') {
+        final release = await notifications.verifyAppUpdate();
+        if (release?.id == id) path = '/settings';
+      }
+      if (path != null && current()) {
         router.go(path);
       }
     } catch (_) {
       /* Stale/unauthorized activity remains private. */
     } finally {
       resolving = false;
+      if (!_disposed && notifications.pending != null) Future.microtask(openPending);
     }
   }
 
   void dispose() {
+    _disposed = true;
+    auth.removeListener(openPending);
     auth.lock.removeListener(openPending);
     notifications.removeListener(openPending);
     router.dispose();

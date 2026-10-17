@@ -35,6 +35,27 @@ serve(async (req) => {
     await admin.storage.from(bucket).remove([path]);
     throw new HttpError(400, "File type validation failed");
   }
+  let mediaExpiresAt: string | null = null;
+  if (
+    bucket === "chat-media" && segments[2] !== "icons" &&
+    (mime.startsWith("image/") || mime.startsWith("video/"))
+  ) {
+    const digest = Array.from(
+      new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+    )
+      .map((value) => value.toString(16).padStart(2, "0")).join("");
+    const { data, error } = await admin.rpc("record_chat_upload", {
+      object_path: path,
+      content_digest: digest,
+    });
+    if (error || typeof data !== "string") {
+      throw new HttpError(403, "Media unavailable");
+    }
+    mediaExpiresAt = data;
+    if (Date.parse(data) <= Date.now()) {
+      throw new HttpError(410, "Media expired");
+    }
+  }
   const { error: saveError } = await admin.from("media_validations").upsert({
     bucket,
     object_path: path,
@@ -43,5 +64,5 @@ serve(async (req) => {
     size_bytes: bytes.length,
   });
   if (saveError) throw new Error("Validation could not be recorded");
-  return json({ valid: true });
+  return json({ valid: true, media_expires_at: mediaExpiresAt });
 });

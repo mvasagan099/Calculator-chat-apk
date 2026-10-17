@@ -1,3 +1,4 @@
+import '../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 /// Static, lightweight decoration; no image decoding or background animation.
@@ -10,10 +11,14 @@ class ChatBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final dark = colors.brightness == Brightness.dark;
-    return ColoredBox(
+    return DecoratedBox(
+      decoration: BoxDecoration(
+      gradient: style == 'plain' && MessengerStyle.of(context).accent != null
+          ? LinearGradient(colors: MessengerStyle.of(context).accent!.colors.map((color) => Color.alphaBlend(color.withValues(alpha: .10), colors.surface)).toList()) : null,
       color: style == 'dusk'
           ? (dark ? const Color(0xff242339) : const Color(0xffeeebf7))
           : colors.surface,
+      ),
       child: CustomPaint(
         painter: style == 'linen'
             ? _LinenPainter(colors.primary.withValues(alpha: dark ? .12 : .07))

@@ -43,26 +43,12 @@ export async function dispatchPush() {
         invitation?.state === "invited" &&
         Date.parse(invitation.invitation_expires_at) > Date.now();
     } else if (job.kind === "message") {
-      const { data: message } = await admin.from("messages").select(
-        "conversation_id,sender_id,deleted_at,expires_at",
-      ).eq("id", job.resource_id).single();
-      if (
-        !message || message.deleted_at ||
-        (message.expires_at && Date.parse(message.expires_at) <= Date.now())
-      ) relevant = false;
-      else {
-        const { data: member } = await admin.from("conversation_members")
-          .select("muted").eq("conversation_id", message.conversation_id).eq(
-            "user_id",
-            job.recipient_id,
-          ).maybeSingle();
-        const { data: blocks } = await admin.from("user_blocks").select(
-          "blocker_id",
-        ).or(
-          `and(blocker_id.eq.${job.recipient_id},blocked_id.eq.${message.sender_id}),and(blocker_id.eq.${message.sender_id},blocked_id.eq.${job.recipient_id})`,
-        ).limit(1);
-        relevant = relevant && !!member && !member.muted && !blocks?.length;
-      }
+      const { data: target, error: targetError } = await admin.rpc("message_push_target", {
+        mid: job.resource_id, recipient: job.recipient_id,
+      });
+      if (targetError) throw targetError; // Fail closed; do not silently drop jobs during schema rollout.
+      relevant = relevant && !!target;
+      invitationExpiry = target?.expires_at ?? undefined;
     }
     const { data: tokens, error: tokenError } = await admin.rpc(
       job.kind === "call" ? "call_notification_tokens" : "notification_tokens",
@@ -74,6 +60,7 @@ export async function dispatchPush() {
     let success = true;
     if (relevant) {
       for (const { token } of tokens ?? []) {
+        if (invitationExpiry && !(Date.parse(invitationExpiry) > Date.now())) break;
         const response = await fetch(
           `https://fcm.googleapis.com/v1/projects/${
             encodeURIComponent(account.project_id)

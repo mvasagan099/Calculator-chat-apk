@@ -7,6 +7,7 @@ import '../../providers/app_providers.dart';
 import '../../models/message.dart';
 import '../media/attachment_view.dart';
 import '../media/media_service.dart';
+import '../../core/services/private_media_access.dart';
 
 class ConversationDetailsScreen extends ConsumerStatefulWidget {
   const ConversationDetailsScreen({super.key, required this.id});
@@ -93,10 +94,14 @@ class _ConversationDetailsScreenState
                 ListTile(
                   title: const Text('Change group picture'),
                   onTap: () => act(context, () async {
+                    final access = PrivateMediaAccess(ref.read(lockProvider),
+                        ref.read(authServiceProvider), ref.read(supabaseProvider), isCurrent: () => mounted);
                     final upload = await MediaService(
                       ref.read(supabaseProvider),
-                    ).pick(widget.id, 'image');
-                    if (upload != null) {
+                      access: access,
+                    ).pick(widget.id, 'image', groupIcon: true);
+                    if (upload != null && mounted) {
+                      access.check();
                       await manage(
                         'avatar',
                         value: upload.attachment['object_path'],

@@ -1,3 +1,4 @@
+import '../../core/security/local_retention.dart';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:http/http.dart' as http;
@@ -7,6 +8,7 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/services/private_media_access.dart';
 
 class MediaUpload {
   const MediaUpload(this.attachment, this.kind);
@@ -15,7 +17,8 @@ class MediaUpload {
 }
 
 class MediaService {
-  MediaService(this.client, {this.onProgress});
+  MediaService(this.client, {this.onProgress, this.access});
+  final PrivateMediaAccess? access;
   final void Function(double)? onProgress;
   final SupabaseClient client;
   static const maxBytes = 25 * 1024 * 1024;
@@ -34,33 +37,43 @@ class MediaService {
     'zip': 'application/zip',
     'vcf': 'text/vcard',
   };
-  Future<MediaUpload?> pick(String cid, String source) async {
-    String? path;
+  Future<MediaUpload?> pick(String cid, String source, {bool groupIcon = false}) async {
+    final guard = access;
+    if (guard == null) throw StateError('Approved media handoff required');
+    final path = await guard.pick<String>(
+      ['image', 'camera', 'video'].contains(source) ? source : 'document', () async {
     if (source == 'image') {
-      path = (await ImagePicker().pickImage(source: ImageSource.gallery))?.path;
+      return (await ImagePicker().pickImage(source: ImageSource.gallery))?.path;
     } else if (source == 'camera') {
-      path = (await ImagePicker().pickImage(source: ImageSource.camera))?.path;
+      return (await ImagePicker().pickImage(source: ImageSource.camera))?.path;
     } else if (source == 'video') {
-      path = (await ImagePicker().pickVideo(
+      return (await ImagePicker().pickVideo(
         source: ImageSource.gallery,
         maxDuration: const Duration(minutes: 5),
       ))?.path;
     } else {
-      path = (await FilePicker.pickFiles(
+      return (await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: types.keys.toList(),
       )).firstOrNull?.path;
     }
+    });
     if (path == null) return null;
-    return upload(cid, File(path));
+    guard.check();
+    return upload(cid, File(path), groupIcon: groupIcon);
   }
 
   Future<MediaUpload> upload(
     String cid,
     File file, {
     String? forcedKind,
+    bool preserveBytes = false,
+    bool groupIcon = false,
+    String? displayFilename,
   }) async {
+    access?.check();
     final size = await file.length();
+    access?.check();
     if (size < 1 || size > maxBytes) {
       throw const FormatException('Files must be between 1 byte and 25 MB');
     }
@@ -68,9 +81,10 @@ class MediaService {
     final mime = types[ext];
     if (mime == null) throw const FormatException('Unsupported file type');
     Uint8List bytes = await file.readAsBytes();
-    var name = file.uri.pathSegments.last;
+    access?.check();
+    var name = displayFilename ?? file.uri.pathSegments.last;
     var outputMime = mime;
-    if (['jpg', 'jpeg', 'png', 'webp'].contains(ext)) {
+    if (!preserveBytes && ['jpg', 'jpeg', 'png', 'webp'].contains(ext)) {
       final compressed = await FlutterImageCompress.compressWithList(
         bytes,
         minWidth: 1920,
@@ -78,6 +92,7 @@ class MediaService {
         quality: 85,
         format: CompressFormat.jpeg,
       );
+      access?.check();
       if (compressed.length < bytes.length) {
         bytes = compressed;
         outputMime = 'image/jpeg';
@@ -85,7 +100,7 @@ class MediaService {
       }
     }
     final path =
-        '$cid/${client.auth.currentUser!.id}/${const Uuid().v4()}-$name';
+        '$cid/${client.auth.currentUser!.id}/${groupIcon ? 'icons/' : ''}${const Uuid().v4()}-$name';
     final token = client.auth.currentSession?.accessToken;
     if (token == null) throw StateError('Sign in before uploading');
     final transport = http.Client();
@@ -108,16 +123,20 @@ class MediaService {
     } finally {
       transport.close();
     }
+    access?.check();
     final check = await client.functions.invoke(
       'validate-media',
       body: {'bucket': 'chat-media', 'path': path},
     );
+    access?.check();
     if (check.status != 200) {
       throw StateError('Media validation failed');
     }
     return MediaUpload(
       {
         'object_path': path,
+        if (check.data is Map && check.data['media_expires_at'] != null)
+          'media_expires_at': check.data['media_expires_at'],
         'filename': name,
         'mime_type': outputMime,
         'size_bytes': bytes.length,
@@ -141,6 +160,27 @@ class MediaService {
     if (expected is! int || expected < 1 || expected > maxBytes) {
       throw const FormatException('Invalid attachment size');
     }
+    final mime = attachment['mime_type']?.toString() ?? '';
+    if (mime.startsWith('image/') || mime.startsWith('video/')) {
+      if (visualAttachmentExpired(attachment, DateTime.now())) throw StateError('Media expired');
+      final owner = client.auth.currentUser?.id;
+      final session = client.auth.currentSession?.accessToken;
+      final trusted = await client.rpc('chat_media_deadline', params: {'path': attachment['object_path']});
+      final trustedExpiry = trusted is Map ? DateTime.tryParse(trusted['expires_at']?.toString() ?? '') : null;
+      if (trustedExpiry == null) throw StateError('Media unavailable');
+      final previous = attachmentDeadline(attachment);
+      if (previous == null || trustedExpiry.isBefore(previous)) {
+        attachment['media_expires_at'] = trustedExpiry.toUtc().toIso8601String();
+      }
+      final bytes = await client.storage.from('chat-media').download(attachment['object_path']);
+      if (owner == null || owner != client.auth.currentUser?.id || session != client.auth.currentSession?.accessToken ||
+          visualAttachmentExpired(attachment, DateTime.now()) || bytes.length != expected) {
+        bytes.fillRange(0, bytes.length, 0);
+        throw StateError('Media unavailable');
+      }
+      onProgress?.call(1);
+      return bytes;
+    }
     final url = await signedUrl(attachment);
     final transport = http.Client();
     try {
@@ -163,6 +203,10 @@ class MediaService {
   }
 
   Future<String> signedUrl(Map<String, dynamic> attachment) {
+    final mime = attachment['mime_type']?.toString() ?? '';
+    if (mime.startsWith('image/') || mime.startsWith('video/')) {
+      throw StateError('Visual media requires an authenticated download');
+    }
     var lifetime = 120;
     if (attachment['expires_at'] != null) {
       final expiry = DateTime.tryParse(attachment['expires_at']);

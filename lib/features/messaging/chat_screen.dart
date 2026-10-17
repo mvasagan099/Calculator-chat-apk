@@ -1,3 +1,6 @@
+import '../../core/security/private_media_files.dart';
+import '../../core/security/local_retention.dart';
+import '../../core/theme/app_theme.dart';
 import '../calls/call_initiator.dart';
 import 'dart:async';
 import 'dart:convert';
@@ -19,6 +22,7 @@ import 'conversation_presence.dart';
 import 'structured_content.dart';
 import 'chat_backdrop.dart';
 import 'expiration_banner.dart';
+import '../../core/services/private_media_access.dart';
 import '../media/view_once_viewer.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -44,7 +48,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   String wallpaper = 'plain';
   bool sending = false, voiceBusy = false;
   String? lastSeen;
-  bool direct = false, admin = false;
+  bool direct = false, admin = false, selfChat = false, detailsLoaded = false;
   int peerCount = 1;
   String? lastAck;
   bool acknowledging = false;
@@ -58,8 +62,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void scheduleRetention(List<ChatMessage> rows) {
     final times =
         rows
-            .where((m) => m.expiresAt != null && !m.expired)
-            .map((m) => m.expiresAt!)
+            .expand((m) => [m.expiresAt, if (m.attachment != null) attachmentDeadline(m.attachment!)])
+            .whereType<DateTime>()
+            .where((time) => time.isAfter(DateTime.now()))
             .toList()
           ..sort();
     final deadline = times.firstOrNull;
@@ -127,7 +132,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         setState(() {
           title = row?['title'] ?? 'Conversation';
           direct = row?['kind'] == 'direct';
-          peerCount = (members.length - 1).clamp(1, 10000);
+          selfChat = row?['is_self'] == true;
+          detailsLoaded = row != null;
+          peerCount = selfChat ? 0 : (members.length - 1).clamp(1, 10000);
           admin = members.any(
             (m) => m['user_id'] == uid && m['role'] == 'admin',
           );
@@ -203,15 +210,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Future<void> attach(String source) async {
     if (uploading) return;
+    final access = PrivateMediaAccess(ref.read(lockProvider),
+        ref.read(authServiceProvider), ref.read(supabaseProvider), isCurrent: () => mounted);
+    access.check();
     setState(() => uploading = true);
     try {
       final upload = await MediaService(
         ref.read(supabaseProvider),
+        access: access,
         onProgress: (value) {
           if (mounted) setState(() => uploadProgress = value);
         },
       ).pick(widget.id, source.replaceAll('_once', ''));
       if (upload != null && mounted) {
+        access.check();
         await ref
             .read(messengerProvider)
             .send(
@@ -409,7 +421,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     // checks membership in both the source and destination conversations.
     for (final m in rows) {
       if (!mounted) return;
-      if (m.viewOnce || m.expired) {
+      if (m.viewOnce || m.expired || (['image', 'video'].contains(m.kind) && (m.attachment == null || visualAttachmentExpired(m.attachment!, DateTime.now())))) {
         throw StateError('This media cannot be forwarded');
       }
       if (m.deleted) continue;
@@ -417,19 +429,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final client = ref.read(supabaseProvider);
         final a = m.attachment!;
         final bytes = await MediaService(client).download(a);
-        final root = await getTemporaryDirectory();
-        final dir = await root.createTemp('forward-');
-        final name = (a['filename'] as String).replaceAll(
-          RegExp(r'[^a-zA-Z0-9._-]'),
-          '_',
-        );
-        final file = File('${dir.path}/$name');
+        final file = await PrivateMediaFiles().save(bytes,
+          extension: (a['filename'] as String).split('.').last,
+          expiresAt: attachmentDeadline(a));
         try {
-          await file.writeAsBytes(bytes);
           if (!mounted) return;
           final upload = await MediaService(
             client,
-          ).upload(cid, file, forcedKind: m.kind);
+          ).upload(cid, file, forcedKind: m.kind, preserveBytes: true, displayFilename: a['filename']);
           if (!mounted) return;
           await ref
               .read(messengerProvider)
@@ -441,7 +448,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 forwarded: true,
               );
         } finally {
-          if (await dir.exists()) await dir.delete(recursive: true);
+          bytes.fillRange(0, bytes.length, 0);
+          if (await file.exists()) await file.delete();
         }
       } else {
         await ref
@@ -583,6 +591,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget bubble(ChatMessage m, {ChatMessage? quoted}) {
     final own = m.senderId == ref.read(messengerProvider).uid;
     final colors = Theme.of(context).colorScheme;
+    final style = MessengerStyle.of(context);
     final read =
             m.receipts.where((r) => r['read_at'] != null).length >= peerCount,
         delivered = m.receipts.length >= peerCount;
@@ -626,16 +635,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               maxWidth: MediaQuery.sizeOf(context).width * .82,
             ),
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: EdgeInsets.all(style.compact ? 9 : 12),
               decoration: BoxDecoration(
+                gradient: style.accent != null && own ? LinearGradient(colors: style.accent!.colors.map((color) => Color.alphaBlend(color.withValues(alpha: .18), colors.surface)).toList()) : null,
+                border: style.accent != null && own ? Border.all(color: colors.primary, width: 2) : null,
                 color: own
                     ? colors.primaryContainer
                     : colors.surfaceContainerHighest,
                 borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(18),
-                  topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(own ? 18 : 4),
-                  bottomRight: Radius.circular(own ? 4 : 18),
+                  topLeft: Radius.circular(style.radius),
+                  topRight: Radius.circular(style.radius),
+                  bottomLeft: Radius.circular(own ? style.radius : 4),
+                  bottomRight: Radius.circular(own ? 4 : style.radius),
                 ),
               ),
               child: Column(
@@ -688,7 +699,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       style: TextStyle(fontStyle: FontStyle.italic),
                     )
                   else ...[
-                    if (m.viewOnce)
+                    if (['image', 'video'].contains(m.kind) && m.attachment == null && !m.viewOnce)
+                      const Text('Media expired')
+                    else if (m.viewOnce)
                       ViewOnceTile(message: m)
                     else if (m.attachment != null)
                       AttachmentView(
@@ -805,7 +818,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             }
           }),
         ),
-        for (final video in [false, true])
+        if (detailsLoaded && !selfChat) for (final video in [false, true])
           IconButton(
             tooltip: video ? 'Video call' : 'Voice call',
             icon: Icon(video ? Icons.videocam_outlined : Icons.call_outlined),
@@ -1119,14 +1132,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     itemBuilder: (_) => [
                       for (final item in {
                         'image': 'Image',
-                        if (direct) 'image_once': 'View-once photo',
-                        if (direct) 'video_once': 'View-once video',
+                        if (direct && !selfChat) 'image_once': 'View-once photo',
+                        if (direct && !selfChat) 'video_once': 'View-once video',
                         'camera': 'Camera',
                         'video': 'Video',
                         'file': 'File or audio',
                         'contact': 'Contact card',
                         'location': 'Current location',
-                        'mention': 'Mention member',
+                        if (!selfChat) 'mention': 'Mention member',
                       }.entries)
                         PopupMenuItem(value: item.key, child: Text(item.value)),
                     ],

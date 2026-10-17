@@ -2,9 +2,11 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../security/lock_controller.dart';
 import '../security/pin_vault.dart';
 import 'device_access_service.dart';
+import 'account_input.dart';
 
 class AuthService extends ChangeNotifier {
   AuthService(this.client, this.lock, this.store) {
@@ -31,9 +33,11 @@ class AuthService extends ChangeNotifier {
       if (event.event == AuthChangeEvent.signedOut) {
         lock.lock();
         _freshUser = null;
+        recoveryCodes = const [];
       }
       if (event.event == AuthChangeEvent.passwordRecovery) {
-        recovery = true;
+        // Legacy provider links never authorize PIN replacement in this UI.
+        _freshUser = null;
         lock.lock();
       }
       if (nextUser != null) unawaited(refreshDeviceAccess());
@@ -138,7 +142,6 @@ class AuthService extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
-  bool recovery = false;
   bool ownerMatches = false;
   Future<void> initialize() async {
     ownerMatches =
@@ -155,24 +158,127 @@ class AuthService extends ChangeNotifier {
       _freshUser == client!.auth.currentUser!.id &&
       _freshAt != null &&
       DateTime.now().difference(_freshAt!) < const Duration(minutes: 5);
-  Future<void> signIn(String email, String password) async {
+  List<String> recoveryCodes = const [];
+  bool _accountBusy = false;
+  int _loginGeneration = 0;
+  String get nextSecurityRoute => !deviceAuthorized
+      ? '/devices'
+      : recoveryCodes.isNotEmpty
+      ? '/recovery-codes'
+      : !lock.hasPin || !ownerMatches
+      ? '/pin'
+      : '/';
+
+  Future<Map<String, dynamic>> _accountRequest(Map<String, dynamic> input) async {
     if (client == null) throw StateError('Configure Supabase first');
-    lock.lock();
-    final response = await client!.auth.signInWithPassword(
-      email: email.trim(),
-      password: password,
-    );
-    _freshUser = response.user?.id;
-    _freshAt = DateTime.now();
-    final owner = await store.read('pin.owner');
-    if (owner != response.user?.id && lock.hasPin) {
-      await lock.vault.clear();
-      lock.hasPin = false;
+    try {
+      final response = await client!.functions.invoke('account-auth', body: input);
+      if (response.status != 200 || response.data is! Map) {
+        throw const FormatException('Account operation unavailable.');
+      }
+      return Map<String, dynamic>.from(response.data as Map);
+    } on FunctionException catch (error) {
+      final details = error.details;
+      // Only render adapter-authored, allowlisted codes; never raw provider errors.
+      final code = details is Map ? details['code'] : null;
+      throw FormatException(switch (code) {
+        'user_id_unavailable' => 'This User ID is unavailable.',
+        'invalid_credentials' => 'User ID or password is incorrect.',
+        'invalid_recovery' => 'User ID or recovery code is invalid or already used.',
+        'rate_limited' => 'Too many attempts. Try again later.',
+        'account_created' => 'Account created. Sign in, then save recovery codes in Settings.',
+        _ => 'Account operation unavailable. Check your connection and try again.',
+      });
     }
-    ownerMatches = owner == response.user?.id;
-    deviceAuthorized = false;
-    await refreshDeviceAccess(initial: true);
-    if (!_disposed) notifyListeners();
+  }
+
+  Future<void> _authenticateAccount(
+    Map<String, dynamic> input, {String? recoveredDevice},
+  ) async {
+    if (_accountBusy) throw StateError('A sign-in is already in progress');
+    _accountBusy = true;
+    final generation = ++_loginGeneration;
+    lock.lock();
+    recoveryCodes = const [];
+    try {
+      final data = await _accountRequest(input);
+      if (_disposed || generation != _loginGeneration) throw StateError('Sign-in cancelled');
+      final token = data['refresh_token'];
+      final expectedOwner = data['user_uuid'];
+      if (token is! String || expectedOwner is! String ||
+          !RegExp(r'^[0-9a-f-]{36}$').hasMatch(expectedOwner)) {
+        throw StateError('Invalid account response');
+      }
+      final response = await client!.auth.setSession(token);
+      if (_disposed || generation != _loginGeneration || response.user?.id != expectedOwner) {
+        await client!.auth.signOut(scope: SignOutScope.local);
+        throw StateError('Sign-in cancelled');
+      }
+      if (recoveredDevice != null) {
+        await store.write('device.id.$expectedOwner', recoveredDevice);
+      }
+      _freshUser = response.user?.id;
+      _freshAt = DateTime.now();
+      final owner = await store.read('pin.owner');
+      if (owner != response.user?.id && lock.hasPin) {
+        await lock.vault.clear();
+        lock.hasPin = false;
+      }
+      ownerMatches = owner == response.user?.id;
+      deviceAuthorized = false;
+      await refreshDeviceAccess(initial: true);
+      if (_disposed || generation != _loginGeneration) throw StateError('Sign-in cancelled');
+      final codes = data['recovery_codes'];
+      if (codes is List && codes.length == 8 &&
+          codes.every((code) => code is String && RegExp(r'^[0-9a-f]{64}$').hasMatch(code))) {
+        recoveryCodes = List<String>.from(codes);
+      }
+      if (!_disposed) notifyListeners();
+    } finally { _accountBusy = false; }
+  }
+
+  Future<void> signIn(String userId, String password) => _authenticateAccount({
+    'action': 'login', 'user_id': AccountInput.userId(userId), 'password': password,
+  });
+
+  Future<void> signUp(String userId, String username, String password, String confirmation) async {
+    AccountInput.password(password, confirmation);
+    await _authenticateAccount({
+      'action': 'signup', 'user_id': AccountInput.userId(userId),
+      'username': AccountInput.username(username), 'password': password,
+      'confirm_password': confirmation,
+    });
+  }
+
+  Future<void> recoverAccount(String userId, String code, String password, String confirmation) async {
+    AccountInput.password(password, confirmation);
+    final device = const Uuid().v4();
+    await _authenticateAccount({
+      'action': 'recover', 'user_id': AccountInput.userId(userId),
+      'recovery_code': code.trim(), 'password': password,
+      'confirm_password': confirmation, 'device_id': device,
+    }, recoveredDevice: device);
+  }
+
+  Future<void> rotateRecoveryCodes(String password) async {
+    if (!signedIn || !deviceAuthorized) throw StateError('Approved sign-in required');
+    final owner = client!.auth.currentUser!.id;
+    final session = tokenSession(client!.auth.currentSession);
+    final data = await _accountRequest({'action': 'rotate_codes', 'password': password});
+    if (!signedIn || !deviceAuthorized || client!.auth.currentUser!.id != owner ||
+        tokenSession(client!.auth.currentSession) != session) throw StateError('Session changed');
+    final codes = data['recovery_codes'];
+    if (codes is! List || codes.length != 8 ||
+        !codes.every((code) => code is String && RegExp(r'^[0-9a-f]{64}$').hasMatch(code))) {
+      throw StateError('Recovery codes unavailable');
+    }
+    recoveryCodes = List<String>.from(codes);
+    notifyListeners();
+  }
+
+  void acknowledgeRecoveryCodes() {
+    recoveryCodes = const [];
+    notifyListeners();
   }
 
   Future<void> reauthenticate(String password) async {
@@ -195,21 +301,36 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> configurePin(String pin) async {
+  Future<void> configurePin(String pin, {bool openMessenger = false}) async {
     if (!recentlyAuthenticated || !deviceAuthorized) {
       throw StateError('Sign in again before setting a PIN');
     }
+    final owner = client!.auth.currentUser!.id;
+    final session = tokenSession(client!.auth.currentSession);
+    final generation = _loginGeneration;
     await lock.vault.configure(pin);
-    await store.write('pin.owner', client!.auth.currentUser!.id);
+    if (!signedIn || !deviceAuthorized || client!.auth.currentUser!.id != owner ||
+        tokenSession(client!.auth.currentSession) != session || generation != _loginGeneration) {
+      lock.lock();
+      throw StateError('Session changed during PIN setup');
+    }
+    await store.write('pin.owner', owner);
     lock.hasPin = true;
     ownerMatches = true;
     await lock.initialize();
     lock.lock();
+    if (openMessenger && signedIn && deviceAuthorized && recentlyAuthenticated &&
+        client!.auth.currentUser!.id == owner && tokenSession(client!.auth.currentSession) == session &&
+        generation == _loginGeneration) {
+      await lock.unlock(pin);
+    }
     notifyListeners();
   }
 
   Future<void> signOut() async {
+    ++_loginGeneration;
     lock.lock();
+    recoveryCodes = const [];
     _freshUser = null;
     final revoking = client == null
         ? Future<void>.value()
@@ -223,6 +344,8 @@ class AuthService extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    ++_loginGeneration;
+    recoveryCodes = const [];
     _expiry?.cancel();
     ++_accessGeneration;
     _subscription?.cancel();

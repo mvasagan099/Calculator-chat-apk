@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
@@ -17,10 +18,21 @@ class PrivateMediaFiles {
     return directory.create(recursive: true);
   }
 
-  Future<File> video(Uint8List bytes) async {
+  Future<File> video(Uint8List bytes, {DateTime? expiresAt}) =>
+      save(bytes, extension: 'mp4', expiresAt: expiresAt);
+
+  Future<File> save(Uint8List bytes, {String extension = 'bin', DateTime? expiresAt}) async {
     final directory = await _directory();
-    final file = File('${directory.path}/${const Uuid().v4()}.mp4');
-    return file.writeAsBytes(bytes, flush: true);
+    final safe = RegExp(r'^[a-zA-Z0-9]{1,10}$').hasMatch(extension) ? extension : 'bin';
+    final file = File('${directory.path}/${const Uuid().v4()}.$safe');
+    await file.writeAsBytes(bytes, flush: true);
+    if (expiresAt != null) {
+      final remaining = expiresAt.difference(DateTime.now());
+      Timer(remaining.isNegative ? Duration.zero : remaining, () async {
+        try { if (await file.exists()) await file.delete(); } on FileSystemException { /* Concurrent viewer/startup cleanup is safe. */ }
+      });
+    }
+    return file;
   }
 
   Future<void> clear() async {

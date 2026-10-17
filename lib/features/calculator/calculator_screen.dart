@@ -119,16 +119,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               onPressed: () => context.go('/auth'),
               child: const Text('Set up'),
             ),
-          if (widget.lock.hasPin && widget.lock.biometricsEnabled)
-            IconButton(
-              tooltip: 'Device authentication',
-              onPressed: () async {
-                if (await widget.lock.biometricUnlock() && context.mounted) {
-                  context.go('/chats');
-                }
-              },
-              icon: const Icon(Icons.fingerprint),
-            ),
         ],
       ),
       body: SafeArea(

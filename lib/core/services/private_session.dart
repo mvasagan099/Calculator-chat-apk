@@ -57,6 +57,7 @@ class _PrivateSessionState extends ConsumerState<PrivateSession> {
       if (!active()) return;
       if (settings['notifications'] == true) {
         await widget.notifications.register(client);
+        if (active()) unawaited(widget.notifications.checkForAppUpdate());
       }
       if (!active()) return;
       subscriptions.add(

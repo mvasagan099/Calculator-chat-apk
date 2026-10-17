@@ -1,3 +1,13 @@
+DateTime? attachmentDeadline(Map<String, dynamic> attachment) =>
+    DateTime.tryParse(attachment['media_expires_at']?.toString() ?? '');
+
+bool visualAttachmentExpired(Map<String, dynamic> attachment, DateTime now) {
+  final mime = attachment['mime_type']?.toString() ?? '';
+  if (!mime.startsWith('image/') && !mime.startsWith('video/')) return false;
+  final deadline = attachmentDeadline(attachment);
+  return deadline == null || !deadline.isAfter(now);
+}
+
 /// Retention is independent of encryption. Invalid expiration metadata fails
 /// closed; old messages without a policy remain unchanged.
 bool recordExpired(Map<String, dynamic> row, DateTime now) {
@@ -20,6 +30,17 @@ bool pruneLocalData(Map<String, dynamic> data, DateTime now) {
         }
         if (recordExpired(value, now)) {
           collectionChanged = true;
+          continue;
+        }
+        final attachment = value['attachment'] ?? (value['message_attachments'] is List
+            ? (value['message_attachments'] as List).firstOrNull : null);
+        if (attachment is Map<String, dynamic> && visualAttachmentExpired(attachment, now)) {
+          collectionChanged = true;
+          if (key == 'outbox') continue; // Never retry a stale attachment.
+          final row = Map<String, dynamic>.from(value);
+          row.remove('attachment');
+          row['message_attachments'] = <Map<String, dynamic>>[];
+          retained.add(row); // Preserve text, reply, timestamp and message UUID.
           continue;
         }
         if (key.startsWith('messages.') &&

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../security/lock_controller.dart';
+import '../theme/app_theme.dart';
 
 class DeviceSettings extends ChangeNotifier {
   DeviceSettings(this.preferences, this.lock, {this.keyPrefix = ''});
@@ -13,6 +14,25 @@ class DeviceSettings extends ChangeNotifier {
     return index >= 0 && index < ThemeMode.values.length
         ? ThemeMode.values[index]
         : ThemeMode.system;
+  }
+
+  ThemeMode get messengerAppearance {
+    final name = preferences.getString(key('messenger.appearance'));
+    return ThemeMode.values.where((mode) => mode.name == name).firstOrNull ?? theme;
+  }
+  Future<void> setMessengerAppearance(ThemeMode value) async {
+    await preferences.setString(key('messenger.appearance'), value.name);
+    notifyListeners();
+  }
+
+  MessengerTheme get messengerTheme {
+    final name = preferences.getString(key('messenger.theme'));
+    return MessengerTheme.values.where((value) => value.name == name).firstOrNull ?? MessengerTheme.defaultTheme;
+  }
+
+  Future<void> setMessengerTheme(MessengerTheme value) async {
+    await preferences.setString(key('messenger.theme'), value.name);
+    notifyListeners();
   }
 
   Future<void> initialize() async {

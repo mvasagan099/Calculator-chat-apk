@@ -1,5 +1,13 @@
 # Service deployment
 
+## Pending User ID / no-email auth rollout
+
+The local no-email implementation adds migration 012 and the `account-auth` Edge
+adapter. Its exact staging prerequisites, legacy-account migration, trusted alias
+domain/ingress, recovery and approval gates are in [NO_EMAIL_AUTH.md](NO_EMAIL_AUTH.md).
+Use that procedure for the new UI rather than the historical email-registration
+instructions below. No production Auth setting or migration has been changed.
+
 Phase 1 defaults to a local preview without provider initialization. For connected mode set `LOCAL_UI_PREVIEW` to `false` in the public build configuration, as in `config/example.json`. No provider projects were supplied. These steps must be completed in accounts you control. Keep client identifiers and server credentials separate. Neither saving an environment draft nor building source provisions these services.
 
 Phase 5 preserves the original ten migrations and adds migration 011; nine Edge entry points require coordinated deployment. No deployment was performed here. No confirmed remote project, Firebase console configuration, LiveKit credentials or staging accounts are available. Local SQL/Edge tests pass; deployment and actual two-user behavior remain BLOCKED. [Current evidence](PHASE5_CALLS.md).

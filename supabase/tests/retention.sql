@@ -40,6 +40,7 @@ select set_config('test.path',:'path',true);
 insert into storage.objects(bucket_id,name,metadata) values('chat-media',:'path','{"size":8,"mimetype":"image/png"}');
 reset role;
 insert into public.media_validations values('chat-media',:'path','40000000-0000-0000-0000-000000000001','image/png',8,now());
+insert into private.chat_upload_deadlines(path,uploaded_at,deadline) select name,created_at,created_at+interval '48 hours' from storage.objects where bucket_id='chat-media' and name=:'path';
 set local role authenticated;
 select public.send_view_once_message(:'cid','41000000-0000-0000-0000-000000000004',jsonb_build_object('object_path',:'path','filename','once.png'),'image');
 -- Retry does not turn an existing normal message into view-once or extend TTL.

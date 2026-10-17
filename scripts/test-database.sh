@@ -12,6 +12,12 @@ for attempt in {1..30}; do
 done
 docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/bootstrap.sql
 for migration in supabase/migrations/*.sql; do
+ if [[ "$migration" == *012_user_id_auth.sql ]]; then
+   docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 <<'SQL'
+insert into auth.users(id,email) values('12000000-0000-0000-0000-000000000099','legacy@owner.invalid');
+update public.profiles set username='legacy_login',display_name='Legacy preserved' where id='12000000-0000-0000-0000-000000000099';
+SQL
+ fi
  docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < "$migration"
 done
 docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/remote_preflight.sql
@@ -19,3 +25,8 @@ for test in supabase/tests/authorization.sql supabase/tests/media.sql supabase/t
  docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < "$test"
 done
 python3 scripts/test-call-races.py "$container"
+docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/user_id_auth.sql
+python3 scripts/test-user-id-races.py "$container"
+docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/self_chat_notifications.sql
+python3 scripts/test-self-chat-races.py "$container"
+docker exec -i "$container" psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/chat_media_deadlines.sql

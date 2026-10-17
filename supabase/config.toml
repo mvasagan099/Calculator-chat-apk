@@ -20,3 +20,8 @@ verify_jwt = false
 
 [functions.call-control]
 verify_jwt = false
+
+[functions.account-auth]
+# Signup/login/recovery are public but enforce durable rate limits. Code
+# rotation validates a genuine Auth token AND approved device in the handler.
+verify_jwt = false

@@ -8,9 +8,11 @@ import 'package:uuid/uuid.dart';
 import '../../core/widgets/actions.dart';
 import '../../core/widgets/private_scaffold.dart';
 import '../../providers/app_providers.dart';
+import '../../core/services/private_media_access.dart';
 
 class StatusScreen extends ConsumerStatefulWidget {
-  const StatusScreen({super.key});
+  const StatusScreen({super.key, this.mediaPicker});
+  final Future<XFile?> Function(String kind)? mediaPicker;
   @override
   ConsumerState<StatusScreen> createState() => _StatusScreenState();
 }
@@ -33,9 +35,13 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
     },
   );
   Future<void> create(String kind) async {
+    if (posting) return;
+    final client = ref.read(supabaseProvider);
+    final access = PrivateMediaAccess(ref.read(lockProvider), ref.read(authServiceProvider), client,
+        isCurrent: () => mounted);
+    access.check();
     setState(() => posting = true);
     try {
-      final client = ref.read(supabaseProvider);
       String? path;
       String body = '';
       if (kind == 'text') {
@@ -44,19 +50,31 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
         if (body.isEmpty) return;
       } else {
         final picker = ImagePicker();
-        final file = kind == 'image'
-            ? await picker.pickImage(
+        final file = await access.pick<XFile>(kind, () => widget.mediaPicker != null
+            ? widget.mediaPicker!(kind)
+            : kind == 'image'
+            ? picker.pickImage(
                 source: ImageSource.gallery,
                 imageQuality: 85,
                 maxWidth: 1920,
               )
-            : await picker.pickVideo(
+            : picker.pickVideo(
                 source: ImageSource.gallery,
                 maxDuration: const Duration(seconds: 30),
-              );
+              ));
         if (file == null) return;
+        if (!mounted) return;
+        access.check();
+        final size = await file.length();
+        if (!mounted) return;
+        access.check();
+        if (size < 1 || size > 25 * 1024 * 1024) {
+          throw const FormatException('Files must be between 1 byte and 25 MB');
+        }
         final bytes = await file.readAsBytes();
-        if (bytes.length > 25 * 1024 * 1024) {
+        if (!mounted) return;
+        access.check();
+        if (bytes.isEmpty || bytes.length > 25 * 1024 * 1024) {
           throw const FormatException('Maximum 25 MB');
         }
         final ext = file.path.split('.').last.toLowerCase();
@@ -75,12 +93,16 @@ class _StatusScreenState extends ConsumerState<StatusScreen> {
               bytes,
               fileOptions: FileOptions(contentType: mime),
             );
+        if (!mounted) return;
+        access.check();
         final check = await client.functions.invoke(
           'validate-media',
           body: {'bucket': 'status-media', 'path': path},
         );
         if (check.status != 200) throw StateError('Media rejected');
       }
+      if (!mounted) return;
+      access.check();
       await client.rpc(
         'create_status',
         params: {'content': body, 'media_path': path, 'media_kind': kind},

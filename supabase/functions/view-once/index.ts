@@ -23,7 +23,9 @@ serve(async (req) => {
   const { data: blob, error: downloadError } = await admin.storage
     .from("chat-media").download(claim.object_path);
   if (
-    downloadError || !blob || blob.size !== claim.size_bytes ||
+    downloadError || !blob ||
+    Date.parse(claim.media_expires_at) <= Date.now() ||
+    blob.size !== claim.size_bytes ||
     blob.size > 26214400
   ) {
     throw new HttpError(410, "Media no longer available");

@@ -63,7 +63,7 @@ class PreviewSettingsScreen extends StatelessWidget {
           ),
           SwitchListTile(
             secondary: const Icon(Icons.fingerprint),
-            title: const Text('Biometric unlock'),
+            title: const Text('Require biometrics after PIN'),
             value: lock.biometricsEnabled,
             onChanged: (enabled) => act(context, () async {
               if (enabled) {

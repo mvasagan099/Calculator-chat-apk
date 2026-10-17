@@ -12,11 +12,12 @@ export function required(name: string): string {
   if (!value) throw new Error(`Server configuration missing: ${name}`);
   return value;
 }
-export function adminClient() {
+export function adminClient(fetcher?: typeof fetch) {
   return createClient(
     required("SUPABASE_URL"),
     required("SUPABASE_SERVICE_ROLE_KEY"),
-    { auth: { persistSession: false, autoRefreshToken: false } },
+    { auth: { persistSession: false, autoRefreshToken: false },
+      ...(fetcher ? { global: { fetch: fetcher } } : {}) },
   );
 }
 export async function authenticated(req: Request) {
