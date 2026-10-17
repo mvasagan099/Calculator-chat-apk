@@ -42,9 +42,9 @@ class AccountGateway {
     }
     final code = decoded is Map ? decoded['code'] : null;
     throw FormatException(switch (code) {
-      'user_id_unavailable' => 'This User ID is unavailable.',
-      'invalid_credentials' => 'User ID or password is incorrect.',
-      'invalid_recovery' => 'User ID or recovery code is invalid or already used.',
+      'user_id_unavailable' => 'This username is unavailable.',
+      'invalid_credentials' => 'Username or password is incorrect.',
+      'invalid_recovery' => 'Username or recovery code is invalid or already used.',
       'rate_limited' => 'Too many attempts. Try again later.',
       'account_created' => 'Account created. Sign in, then save recovery codes in Settings.',
       _ => 'Account operation unavailable. Check your connection and try again.',

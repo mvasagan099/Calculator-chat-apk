@@ -10,12 +10,35 @@ class AccountInput {
     return id;
   }
 
-  static String username(String value) {
+  static String username(String value) => userId(value);
+
+  static String displayName(String value) {
     final name = value.trim();
     if (name.isEmpty || name.runes.length > 80) {
-      throw const FormatException('Username must contain 1–80 characters.');
+      throw const FormatException('Display name must contain 1–80 characters.');
     }
     return name;
+  }
+
+  // Unverified: not yet usable for password reset without SMS ownership proof.
+  static String? recoveryPhone(String value) {
+    final phone = value.replaceAll(RegExp(r'[\\s()-]'), '');
+    if (phone.isEmpty) return null;
+    if (!RegExp(r'^\\+[1-9][0-9]{7,14}
+
+  static void password(String value, String confirmation) {
+    if (value.runes.length < 12 || value.length > 256) {
+      throw const FormatException('Use a password of 12–256 characters.');
+    }
+    if (value != confirmation) {
+      throw const FormatException('Passwords do not match.');
+    }
+  }
+}
+).hasMatch(phone)) {
+      throw const FormatException('Enter a mobile number with country code, e.g. +919876543210.');
+    }
+    return phone;
   }
 
   static void password(String value, String confirmation) {

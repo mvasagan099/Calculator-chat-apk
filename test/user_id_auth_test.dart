@@ -63,28 +63,34 @@ void main() {
 
   test('manual User ID and display name validation; matching strong passwords', () {
     expect(AccountInput.userId('chosen_id'), 'chosen_id');
-    expect(AccountInput.username(' Name '), 'Name');
+    expect(AccountInput.username('chosen_id'), 'chosen_id');
+    expect(AccountInput.displayName(' Name '), 'Name');
+    expect(AccountInput.recoveryPhone(''), isNull);
+    expect(AccountInput.recoveryPhone('+91 98765 43210'), '+919876543210');
+    expect(() => AccountInput.recoveryPhone('123'), throwsFormatException);
     for (final id in ['ab', 'Upper', 'name@domain.com', 'space name']) {
       expect(() => AccountInput.userId(id), throwsFormatException);
     }
     expect(() => AccountInput.password('short', 'short'), throwsFormatException);
     expect(() => AccountInput.password(password, 'different'), throwsFormatException);
-    expect(() => AccountInput.username(' '), throwsFormatException);
+    expect(() => AccountInput.displayName(' '), throwsFormatException);
   });
   test('mismatch and weak password never reach server', () async {
-    await expectLater(auth.signUp('chosen_id', 'Name', password, 'different'), throwsFormatException);
-    await expectLater(auth.signUp('chosen_id', 'Name', 'short', 'short'), throwsFormatException);
+    await expectLater(auth.signUp('chosen_id', 'Name', '', password, 'different'), throwsFormatException);
+    await expectLater(auth.signUp('chosen_id', 'Name', '', 'short', 'short'), throwsFormatException);
     expect(requests, isEmpty);
   });
   test('signup authenticates immediately but requires device/PIN and code acknowledgment', () async {
-    await auth.signUp('chosen_id', 'Chosen name', password, password);
+    await auth.signUp('chosen_id', 'Chosen name', '+91 9876543210', password, password');
     expect(auth.signedIn, isTrue);
     expect(auth.recentlyAuthenticated, isTrue);
     expect(lock.unlocked, isFalse);
     expect(auth.recoveryCodes.length, 8);
     expect(auth.nextSecurityRoute, '/recovery-codes');
-    expect(requests.single['user_id'], 'chosen_id');
-    expect(requests.single['username'], 'Chosen name');
+    expect(requests.single['username'], 'chosen_id');
+    expect(requests.single['display_name'], 'Chosen name');
+    expect(requests.single['recovery_phone'], '+919876543210');
+    expect(requests.single.containsKey('user_id'), isFalse);
     expect(requests.single.containsKey('email'), isFalse);
     auth.acknowledgeRecoveryCodes();
     expect(auth.nextSecurityRoute, '/pin');
@@ -96,11 +102,11 @@ void main() {
   });
   test('duplicate ID and invalid credentials become safe messages', () async {
     duplicate = true;
-    await expectLater(auth.signUp('chosen_id', 'Name', password, password),
-      throwsA(isA<FormatException>().having((e) => e.message, 'message', 'This User ID is unavailable.')));
+    await expectLater(auth.signUp('chosen_id', 'Name', '', password, password'),
+      throwsA(isA<FormatException>().having((e) => e.message, 'message', 'This username is unavailable.')));
     duplicate = false; badCredentials = true;
     await expectLater(auth.signIn('chosen_id', 'wrong'),
-      throwsA(isA<FormatException>().having((e) => e.message, 'message', 'User ID or password is incorrect.')));
+      throwsA(isA<FormatException>().having((e) => e.message, 'message', 'Username or password is incorrect.')));
     expect(auth.signedIn, isFalse);
   });
   test('logout/login retains owner-bound PIN, never silently unlocks it', () async {
@@ -120,11 +126,13 @@ void main() {
     await expectLater(auth.configurePin('462819', openMessenger: true), throwsStateError);
     expect(lock.unlocked, isFalse);
   });
-  testWidgets('registration exposes User ID, Username and confirmation; no email field', (tester) async {
+  testWidgets('registration shows Display Name, Username, optional Mobile and confirmation; no User ID', (tester) async {
     await tester.pumpWidget(MaterialApp(home: AuthScreen(auth: auth)));
     await tester.tap(find.text('Create an account'));
     await tester.pump();
-    expect(find.text('User ID'), findsOneWidget);
+    expect(find.text('User ID'), findsNothing);
+    expect(find.text('Display Name'), findsOneWidget);
+    expect(find.text('Mobile number (optional)'), findsOneWidget);
     expect(find.text('Username'), findsOneWidget);
     expect(find.text('Retype password'), findsOneWidget);
     expect(find.text('Email'), findsNothing);

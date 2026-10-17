@@ -12,9 +12,10 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final userId = TextEditingController(),
+  final username = TextEditingController(),
       password = TextEditingController(),
-      name = TextEditingController(),
+      displayName = TextEditingController(),
+      mobile = TextEditingController(),
       confirmPassword = TextEditingController();
   bool signup = false, busy = false;
   Future<void> submit() async {
@@ -22,11 +23,12 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => busy = true);
     await act(context, () async {
       if (signup) {
-        await widget.auth.signUp(userId.text, name.text, password.text, confirmPassword.text);
+        await widget.auth.signUp(username.text, displayName.text, mobile.text,
+            password.text, confirmPassword.text);
       } else if (widget.recoverPin && widget.auth.signedIn && widget.auth.deviceAuthorized) {
         await widget.auth.reauthenticate(password.text);
       } else {
-        await widget.auth.signIn(userId.text, password.text);
+        await widget.auth.signIn(username.text, password.text);
       }
       password.clear();
       confirmPassword.clear();
@@ -40,10 +42,11 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   void dispose() {
-    userId.dispose();
+    username.dispose();
     confirmPassword.dispose();
     password.dispose();
-    name.dispose();
+    displayName.dispose();
+    mobile.dispose();
     super.dispose();
   }
 
@@ -74,20 +77,31 @@ class _AuthScreenState extends State<AuthScreen> {
               const SelectableText(
                 'Backend not configured. Follow docs/DEPLOYMENT.md and build with SUPABASE_URL and SUPABASE_ANON_KEY. Calculator functions remain available.',
               ),
+            if (signup)
+              TextField(
+                controller: displayName,
+                decoration: const InputDecoration(labelText: 'Display Name'),
+              ),
             if (!(widget.recoverPin && widget.auth.signedIn && widget.auth.deviceAuthorized))
               TextField(
-                controller: userId,
+                controller: username,
                 autocorrect: false,
                 enableSuggestions: false,
                 autofillHints: const [AutofillHints.username],
                 decoration: const InputDecoration(
-                  labelText: 'User ID', helperText: '3–30 lowercase letters, numbers or underscores',
+                  labelText: 'Username',
+                  helperText: '3–30 lowercase letters, numbers or underscores. Used to sign in.',
                 ),
               ),
             if (signup)
               TextField(
-                controller: name,
-                decoration: const InputDecoration(labelText: 'Username'),
+                controller: mobile,
+                keyboardType: TextInputType.phone,
+                autofillHints: const [AutofillHints.telephoneNumber],
+                decoration: const InputDecoration(
+                  labelText: 'Mobile number (optional)',
+                  helperText: 'For future verified recovery; SMS recovery is not active. Use +91…',
+                ),
               ),
             TextField(
               controller: password,
@@ -226,7 +240,7 @@ class _PasswordResetScreenState extends State<PasswordResetScreen> {
     appBar: AppBar(title: const Text('Recover account')),
     body: ListView(padding: const EdgeInsets.all(24), children: [
       const Text('Use one unused recovery code. Recovery signs out old sessions and authorizes this device. There is no email or support bypass. If a reset is interrupted, use another unused code.'),
-      TextField(controller: userId, autocorrect: false, decoration: const InputDecoration(labelText: 'User ID')),
+      TextField(controller: userId, autocorrect: false, decoration: const InputDecoration(labelText: 'Username')),
       TextField(controller: code, obscureText: true, autocorrect: false, enableSuggestions: false,
         decoration: const InputDecoration(labelText: 'One-time recovery code')),
       TextField(controller: password, obscureText: true, autocorrect: false, enableSuggestions: false,

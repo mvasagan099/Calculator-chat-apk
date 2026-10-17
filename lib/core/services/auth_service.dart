@@ -191,9 +191,9 @@ class AuthService extends ChangeNotifier {
       // Only render adapter-authored, allowlisted codes; never raw provider errors.
       final code = details is Map ? details['code'] : null;
       throw FormatException(switch (code) {
-        'user_id_unavailable' => 'This User ID is unavailable.',
-        'invalid_credentials' => 'User ID or password is incorrect.',
-        'invalid_recovery' => 'User ID or recovery code is invalid or already used.',
+        'user_id_unavailable' => 'This username is unavailable.',
+        'invalid_credentials' => 'Username or password is incorrect.',
+        'invalid_recovery' => 'Username or recovery code is invalid or already used.',
         'rate_limited' => 'Too many attempts. Try again later.',
         'account_created' => 'Account created. Sign in, then save recovery codes in Settings.',
         _ => 'Account operation unavailable. Check your connection and try again.',
@@ -251,12 +251,14 @@ class AuthService extends ChangeNotifier {
     'action': 'login', 'user_id': AccountInput.userId(userId), 'password': password,
   });
 
-  Future<void> signUp(String userId, String username, String password, String confirmation) async {
+  Future<void> signUp(String username, String displayName, String mobile,
+      String password, String confirmation) async {
     AccountInput.password(password, confirmation);
     await _authenticateAccount({
-      'action': 'signup', 'user_id': AccountInput.userId(userId),
-      'username': AccountInput.username(username), 'password': password,
-      'confirm_password': confirmation,
+      'action': 'signup', 'username': AccountInput.username(username),
+      'display_name': AccountInput.displayName(displayName),
+      'recovery_phone': AccountInput.recoveryPhone(mobile),
+      'password': password, 'confirm_password': confirmation,
     });
   }
 
