@@ -191,7 +191,7 @@ Deno.test("rotation: password proof and approved device required; proof session 
 Deno.test("Supabase-only: absent/spoofed IP never changes durable limiter scopes", async () => {
   const f = fixture();
   const input = { action: "login", user_id: "chosen_id", password };
-  await f.request(input, {});
+  await f.request(input, {} as { "x-trusted-ip": string });
   await f.request(input, { "x-trusted-ip": "1.2.3.4", "x-forwarded-for": "8.8.8.8" } as unknown as { "x-trusted-ip": string });
   assert(f.calls.filter((call) => call.name === "account_auth_limit").length === 4);
   const scopes = f.calls.filter((call) => call.name === "account_auth_limit")
