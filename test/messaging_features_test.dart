@@ -89,6 +89,11 @@ class RecordingPollRepository extends MessengerRepository {
   Future<void> votePoll(String mid, int optionIndex) async {
     receivedVotes.add({'mid': mid, 'option_index': optionIndex});
   }
+
+  // This widget fixture deliberately never calls prepare() or opens storage,
+  // streams, or a Realtime connection. Test real repository disposal separately.
+  @override
+  Future<void> dispose() => Future<void>.value();
 }
 
 void main() {
