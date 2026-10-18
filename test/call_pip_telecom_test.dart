@@ -143,7 +143,7 @@ void main() {
   });
 
   tearDown(() async {
-    await controller.dispose();
+    controller.dispose();
     await backend.close();
   });
 

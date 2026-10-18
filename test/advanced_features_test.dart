@@ -5,7 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:calculator_messenger/core/security/vault_service.dart';
 import 'package:calculator_messenger/core/services/device_settings.dart';
-import 'package:calculator_messenger/features/media/media_service.dart';
+import 'package:calculator_messenger/core/security/lock_controller.dart';
+import 'lock_biometric_test.dart' show ImmediatePinVault;
 import 'package:calculator_messenger/features/notifications/app_update.dart';
 import 'package:calculator_messenger/models/message_edit.dart';
 
@@ -169,7 +170,9 @@ void main() {
     test('Default speed is 1.0x and persists across changes', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
-      final settings = DeviceSettings(prefs);
+      final lock = LockController(ImmediatePinVault());
+      addTearDown(lock.dispose);
+      final settings = DeviceSettings(prefs, lock);
 
       expect(settings.voicePlaybackSpeed, 1.0);
 
@@ -308,7 +311,9 @@ void main() {
     test('Media quality settings persist in DeviceSettings', () async {
       SharedPreferences.setMockInitialValues({});
       final prefs = await SharedPreferences.getInstance();
-      final settings = DeviceSettings(prefs);
+      final lock = LockController(ImmediatePinVault());
+      addTearDown(lock.dispose);
+      final settings = DeviceSettings(prefs, lock);
 
       expect(settings.mediaQuality, 'optimized');
 

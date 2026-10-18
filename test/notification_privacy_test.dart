@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,19 +28,15 @@ class RecordingNotifications implements FlutterLocalNotificationsPlugin {
   }
 
   @override
-  T? resolvePlatformSpecificImplementation<T extends Object>() {
-    if (T == AndroidFlutterLocalNotificationsPlugin) {
-      return FakeAndroidNotifications(channels) as T;
-    }
-    return null;
-  }
-
-  @override
   Future<void> cancelAll() async {}
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnsupportedError('Unexpected call: ${invocation.memberName}');
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #resolvePlatformSpecificImplementation) {
+      return FakeAndroidNotifications(channels);
+    }
+    throw UnsupportedError('Unexpected call: ${invocation.memberName}');
+  }
 }
 
 class FakeAndroidNotifications
@@ -56,8 +51,12 @@ class FakeAndroidNotifications
   }
 
   @override
-  dynamic noSuchMethod(Invocation invocation) =>
-      throw UnsupportedError('Unexpected call: ${invocation.memberName}');
+  dynamic noSuchMethod(Invocation invocation) {
+    if (invocation.memberName == #resolvePlatformSpecificImplementation) {
+      return FakeAndroidNotifications(channels);
+    }
+    throw UnsupportedError('Unexpected call: ${invocation.memberName}');
+  }
 }
 
 void main() {

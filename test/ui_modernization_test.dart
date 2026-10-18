@@ -22,12 +22,12 @@ void main() {
     });
 
     test('AMOLED mode generates true pitch black surfaces', () {
-      final regularDark = AppTheme.darkTheme(amoled: false);
-      final amoledDark = AppTheme.darkTheme(amoled: true);
+      final regularDark = AppTheme.build(Brightness.dark, amoled: false);
+      final amoledDark = AppTheme.build(Brightness.dark, amoled: true);
 
       expect(amoledDark.scaffoldBackgroundColor, Colors.black);
       expect(amoledDark.colorScheme.surface, Colors.black);
-      expect(amoledDark.cardColor, const Color(0xFF0D0D0D));
+      expect(amoledDark.cardTheme.color, const Color(0xFF0A0A0A));
       expect(regularDark.scaffoldBackgroundColor != Colors.black, isTrue);
     });
 
@@ -68,15 +68,10 @@ void main() {
       const testPath = 'avatars/user_123.jpg';
       const testUrl = 'https://example.com/storage/v1/object/sign/avatars/user_123.jpg?token=abc';
 
-      AvatarCache.cache[testPath] = (
-        url: testUrl,
-        expires: DateTime.now().add(const Duration(minutes: 9)),
-      );
-
-      final cached = AvatarCache.cache[testPath];
-      expect(cached, isNotNull);
-      expect(cached?.url, testUrl);
-      expect(cached?.expires.isAfter(DateTime.now()), isTrue);
+      AvatarCache.set(testPath, testUrl);
+      expect(AvatarCache.get(testPath), testUrl);
+      AvatarCache.clear();
+      expect(AvatarCache.get(testPath), isNull);
     });
   });
 }
