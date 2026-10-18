@@ -37,6 +37,9 @@ void main() {
     expect(messages.length, 2);
   });
   testWidgets('launcher preview reflects selection', (tester) async {
+    // TestWidgetsFlutterBinding asserts platform overrides are cleared before
+    // the widget test finishes, rather than after tearDown.
+    debugDefaultTargetPlatformOverride = null;
     await tester.pumpWidget(const Directionality(textDirection: TextDirection.ltr,
       child: CalculatorIconPreview(option: CalculatorLauncherIcon('midnight',
           'Midnight', 'Deep navy', Color(0xff152b47), Color(0xffdceafa)))));
