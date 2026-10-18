@@ -114,7 +114,7 @@ class VaultStorageStats {
 /// Encrypted with AES-GCM-256 and isolated in app-internal support directories.
 /// Contents are NEVER copied to public Android gallery folders or uploaded to cloud.
 class VaultService {
-  VaultService({this.customDir, SecretKey? customKey}) : _customKey = customKey;
+  VaultService({this.customDir, this._customKey});
 
   final Directory? customDir;
   final SecretKey? _customKey;
@@ -140,14 +140,15 @@ class VaultService {
       final base = await getApplicationSupportDirectory();
       _vaultDirectory = Directory('${base.path}/private-vault-v1');
     }
-    await _vaultDirectory.create(recursive: true);
-    return _vaultDirectory!;
+    final directory = _vaultDirectory!;
+    await directory.create(recursive: true);
+    return directory;
   }
 
   /// Production keys are stored in Android-backed secure storage rather
   /// than alongside ciphertext. Custom directories are test fixtures only.
   Future<SecretKey> _getKey() async {
-    if (_customKey != null) return _customKey!;
+    if (_customKey case final key?) return key;
     if (_key != null) return _key!;
     final dir = await _getDir();
     final legacyFile = File('${dir.path}/$_keyFile');

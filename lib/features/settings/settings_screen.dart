@@ -756,8 +756,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: const Text('Merge encrypted backup without overwriting pending unsent data'),
               onTap: () => act(context, () async {
                 final result = await FilePicker.pickFiles(type: FileType.any);
-                if (result == null || result.files.isEmpty || result.files.single.path == null) return;
-                final file = File(result.files.single.path!);
+                if (result.isEmpty || result.first.path == null) return;
+                final file = File(result.first.path!);
                 final backupJson = await file.readAsString();
                 final password = await askText(context, 'Enter backup password', secret: true);
                 if (password == null || password.trim().isEmpty) return;

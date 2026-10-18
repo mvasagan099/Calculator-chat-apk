@@ -105,10 +105,10 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
 
   Future<void> _importDocument() async {
     final result = await FilePicker.pickFiles(type: FileType.any);
-    if (result == null || result.files.isEmpty || result.files.single.path == null || !mounted) return;
+    if (result.isEmpty || result.first.path == null || !mounted) return;
 
     await act(context, () async {
-      final file = File(result.files.single.path!);
+      final file = File(result.first.path!);
       await _vault.importFile(
         file: file,
         folder: _selectedFolder == 'All' ? 'Root' : _selectedFolder,

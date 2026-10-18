@@ -433,7 +433,7 @@ void main() {
         apkSizeBytes: 34500000,
       );
 
-      expect(update.apkSizeBytes!, lessThan(maxApkSize));
+      expect(update.apkSizeBytes, lessThan(maxApkSize));
     });
   });
 }
