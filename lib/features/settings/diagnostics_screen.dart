@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import '../../core/config/app_config.dart';
-import '../../core/services/account_gateway.dart';
 import '../../providers/app_providers.dart';
 
 enum DiagnosticStatus {
@@ -214,13 +213,19 @@ class _ConnectionDiagnosticsScreenState
     await _probe(6, () async {
       final sw = Stopwatch()..start();
       try {
-        final uri = Uri.parse(AppConfig.accountGatewayUrl);
-        final res = await http.get(uri).timeout(const Duration(seconds: 4));
+        final configuredUrl = AppConfig.accountAuthGatewayUrl;
+        final uri = Uri.tryParse(configuredUrl);
+        if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) {
+          return (DiagnosticStatus.warning, null, 'Account gateway is not configured');
+        }
+        final response = await http.get(uri).timeout(const Duration(seconds: 4));
         sw.stop();
         return (
-          DiagnosticStatus.healthy,
+          response.statusCode == 405 ? DiagnosticStatus.healthy : DiagnosticStatus.warning,
           sw.elapsedMilliseconds,
-          'Gateway endpoint reachable',
+          response.statusCode == 405
+              ? 'Gateway reachable (POST-only)'
+              : 'Gateway returned HTTP ${response.statusCode}; account access not verified',
         );
       } catch (_) {
         return (DiagnosticStatus.warning, null, 'Gateway unavailable or private network');
@@ -234,11 +239,9 @@ class _ConnectionDiagnosticsScreenState
 
     // 9. LiveKit Calling Check
     await _probe(8, () async {
-      final url = AppConfig.liveKitUrl;
-      if (url.isEmpty) {
-        return (DiagnosticStatus.warning, null, 'LiveKit URL not configured in build');
-      }
-      return (DiagnosticStatus.healthy, null, 'Configured for WebRTC encrypted calls');
+      // LiveKit room endpoints are provisioned server-side; do not infer
+      // connectivity from a missing public Flutter build variable.
+      return (DiagnosticStatus.warning, null, 'LiveKit health requires a real authorized test call');
     });
 
     if (mounted) setState(() => _running = false);

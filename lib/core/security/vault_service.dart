@@ -117,7 +117,7 @@ class VaultService {
 
   final Directory? customDir;
   final SecretKey? _customKey;
-  final AesGcm _aes = AesGcm.with256Bits();
+  final AesGcm _aes = AesGcm.with256bits();
 
   static const _metaFile = 'vault_manifest.enc';
   static const _keyFile = 'vault_device.key';

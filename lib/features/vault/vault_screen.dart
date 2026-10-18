@@ -7,8 +7,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/security/vault_service.dart';
+import '../../core/security/private_media_files.dart';
+import 'package:local_auth/local_auth.dart';
 import '../../core/widgets/actions.dart';
-import '../../core/widgets/private_scaffold.dart';
 import '../../providers/app_providers.dart';
 import '../media/document_viewer.dart';
 import '../media/full_screen_image_viewer.dart';
@@ -42,9 +43,19 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     final device = ref.read(deviceSettingsProvider);
     if (device?.vaultBiometricsEnabled == true) {
       final lock = ref.read(lockProvider);
-      final ok = await lock.authenticateBiometrics();
-      if (!ok && mounted) {
-        Navigator.of(context).pop();
+      final epoch = lock.securityEpoch;
+      bool ok = false;
+      try {
+        ok = await LocalAuthentication().authenticate(
+          localizedReason: 'Verify private vault access',
+          biometricOnly: true,
+          persistAcrossBackgrounding: false,
+        );
+      } catch (_) {
+        // Missing or cancelled biometric authorization must fail closed.
+      }
+      if (!ok || !lock.privateActionValid(epoch)) {
+        if (mounted) Navigator.of(context).pop();
         return;
       }
     }
@@ -93,7 +104,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   }
 
   Future<void> _importDocument() async {
-    final result = await FilePicker.platform.pickFiles(type: FileType.any);
+    final result = await FilePicker.pickFiles(type: FileType.any);
     if (result == null || result.files.isEmpty || result.files.single.path == null || !mounted) return;
 
     await act(context, () async {
@@ -127,15 +138,20 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           ),
         );
       } else if (item.category == VaultCategory.videos) {
-        await Navigator.of(context).push(
-          MaterialPageRoute<void>(
-            builder: (_) => FullScreenVideoViewer(
-              bytes: bytes,
-              filename: item.filename,
-              sizeBytes: item.sizeBytes,
+        final privateFile = await PrivateMediaFiles().video(Uint8List.fromList(bytes));
+        try {
+          if (!mounted) return;
+          await Navigator.of(context).push(
+            MaterialPageRoute<void>(
+              builder: (_) => FullScreenVideoViewer(
+                file: privateFile,
+                filename: item.filename,
+              ),
             ),
-          ),
-        );
+          );
+        } finally {
+          if (await privateFile.exists()) await privateFile.delete();
+        }
       } else {
         // Plain text or generic document viewer
         final ext = item.filename.split('.').last.toLowerCase();
@@ -211,7 +227,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     final tempDir = await Directory.systemTemp.createTemp('vault-export-');
     final tempFile = File('${tempDir.path}/${item.filename}');
     await tempFile.writeAsBytes(bytes);
-    await SharePlus.shareXFiles([XFile(tempFile.path)], text: item.filename);
+    await SharePlus.instance.share(ShareParams(files: [XFile(tempFile.path)], text: item.filename));
     try {
       await tempFile.delete();
       await tempDir.delete(recursive: true);

@@ -1,4 +1,5 @@
 import '../../core/security/private_media_files.dart';
+import '../../core/services/private_media_access.dart';
 import '../../core/security/local_retention.dart';
 import '../../core/theme/app_theme.dart';
 import '../calls/call_initiator.dart';
@@ -479,8 +480,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
-  void openStickerGifPicker() {
-    showModalBottomSheet(
+  Future<void> openStickerGifPicker() async {
+    await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => StickerGifPicker(

@@ -133,6 +133,9 @@ class CallController extends ChangeNotifier {
     if (!_disposed) notifyListeners();
   }
 
+  /// Compatibility wrapper for UI and controller tests.
+  Future<void> watchCall(String id) => observe(id);
+
   Future<void> observe(String id) async {
     if (_disposed || (callId == id && !_ended)) return;
     if (callId != null) {

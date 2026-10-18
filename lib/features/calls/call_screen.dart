@@ -218,8 +218,7 @@ class _CallScreenState extends ConsumerState<CallScreen> {
               child: Center(
                 child: ParticipantGrid(
                   room: controller.room,
-                  sharing: controller.sharing,
-                  audioOnly: controller.audioOnly,
+                  names: names,
                 ),
               ),
             ),

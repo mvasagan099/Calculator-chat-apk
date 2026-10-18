@@ -26,7 +26,6 @@ import '../vault/vault_screen.dart';
 import 'storage_manager_screen.dart';
 import 'diagnostics_screen.dart';
 import '../notifications/app_update_dialog.dart';
-import '../notifications/app_update.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({
@@ -743,7 +742,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 final dateStr = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
                 final file = File('${dir.path}/chat_backup_$dateStr.enc');
                 await file.writeAsString(backupJson);
-                await SharePlus.shareXFiles([XFile(file.path)], text: 'Calculator Messenger encrypted backup');
+                await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: 'Calculator Messenger encrypted backup'));
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Encrypted chat backup created successfully')),
@@ -756,7 +755,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: const Text('Restore from backup'),
               subtitle: const Text('Merge encrypted backup without overwriting pending unsent data'),
               onTap: () => act(context, () async {
-                final result = await FilePicker.platform.pickFiles(type: FileType.any);
+                final result = await FilePicker.pickFiles(type: FileType.any);
                 if (result == null || result.files.isEmpty || result.files.single.path == null) return;
                 final file = File(result.files.single.path!);
                 final backupJson = await file.readAsString();
