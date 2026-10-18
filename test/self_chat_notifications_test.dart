@@ -176,7 +176,11 @@ void main() {
   }, timeout: const Timeout(Duration(minutes: 2)));
   testWidgets('chat list offers Message Yourself even with no conversations', (tester) async {
     final repository = EmptyConversationFixture(client);
-    await tester.pumpWidget(ProviderScope(overrides: [messengerProvider.overrideWithValue(repository)],
+    await tester.pumpWidget(ProviderScope(overrides: [
+      messengerProvider.overrideWithValue(repository),
+      lockProvider.overrideWithValue(lock),
+      supabaseProvider.overrideWithValue(client),
+    ],
       child: const MaterialApp(home: ChatListScreen())));
     await tester.pumpAndSettle();
     expect(find.text('Message Yourself'), findsOneWidget);

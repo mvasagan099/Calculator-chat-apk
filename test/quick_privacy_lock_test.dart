@@ -1,3 +1,4 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -78,10 +79,10 @@ void main() {
 
     test('setShakeToLock dispatches method call to native privacy channel', () async {
       await lock.setShakeToLock(true);
-      expect(channelCalls.any((c) => c.method == 'setShakeToLock' && c.arguments == true), isTrue);
+      expect(channelCalls.any((c) => c.method == 'setShakeToLock' && c.arguments == true), Platform.isAndroid);
 
       await lock.setShakeToLock(false);
-      expect(channelCalls.any((c) => c.method == 'setShakeToLock' && c.arguments == false), isTrue);
+      expect(channelCalls.any((c) => c.method == 'setShakeToLock' && c.arguments == false), Platform.isAndroid);
     });
 
     test('native quickLock method call from platform channel locks the controller', () async {

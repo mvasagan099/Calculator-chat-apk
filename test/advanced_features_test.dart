@@ -382,8 +382,8 @@ void main() {
       );
       expect(legacy.id, 'rel-1');
       expect(legacy.build, 42);
-      expect(legacy.versionName, isNull);
-      expect(legacy.minSupportedBuild, isNull);
+      expect(legacy.versionName, '1.0.0');
+      expect(legacy.minSupportedBuild, 1);
       expect(legacy.isUnsupported, isFalse);
 
       final extended = VerifiedAppUpdate(

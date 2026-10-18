@@ -222,20 +222,20 @@ void main() {
 
       expect(find.byIcon(Icons.play_circle_filled), findsOneWidget);
       expect(find.byType(Slider), findsOneWidget);
-      expect(find.text('1.0×'), findsOneWidget);
+      expect(find.text('1×'), findsOneWidget);
 
       // Speed button toggles 1.0x -> 1.5x -> 2.0x -> 1.0x
-      await tester.tap(find.text('1.0×'));
+      await tester.tap(find.text('1×'));
       await tester.pump();
       expect(find.text('1.5×'), findsOneWidget);
 
       await tester.tap(find.text('1.5×'));
       await tester.pump();
-      expect(find.text('2.0×'), findsOneWidget);
+      expect(find.text('2×'), findsOneWidget);
 
-      await tester.tap(find.text('2.0×'));
+      await tester.tap(find.text('2×'));
       await tester.pump();
-      expect(find.text('1.0×'), findsOneWidget);
+      expect(find.text('1×'), findsOneWidget);
 
       await tester.pumpWidget(const SizedBox.shrink());
       await pumpAsyncOperation(tester, client.dispose());

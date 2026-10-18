@@ -51,11 +51,11 @@ void main() {
   Future<void> saveButton(WidgetTester tester) async {
     tester.testTextInput.hide();
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('Save PIN and open calculator'),
-      150,
-      scrollable: find.byType(Scrollable).first,
-    );
+    final save = find.widgetWithText(FilledButton, 'Save PIN and open calculator');
+    // Scrolling until the text enters the ListView is insufficient if the
+    // keyboard has reduced the root viewport; bring the button itself onscreen.
+    await tester.ensureVisible(save);
+    await tester.pumpAndSettle();
   }
 
   Future<void> mount(
@@ -233,7 +233,7 @@ void main() {
       await unlock(tester);
       router.go('/chats');
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('Return to Calculator'));
+      await tester.tap(find.byTooltip('Quick Lock (Return to Calculator)'));
       await tester.pumpAndSettle();
       expect(find.text('Maya Chen'), findsNothing);
       expect(lock.unlocked, isFalse);

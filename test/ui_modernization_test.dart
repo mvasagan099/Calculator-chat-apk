@@ -8,6 +8,7 @@ import 'package:calculator_messenger/core/widgets/private_scaffold.dart';
 import 'lock_biometric_test.dart' show ImmediatePinVault;
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   group('UI Modernization & Design System Tests', () {
     test('All theme variants create valid themes for light and dark', () {
       for (final variant in MessengerTheme.values) {
