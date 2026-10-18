@@ -66,7 +66,7 @@ def compiled_launcher_alias(tree):
             stack.append((depth, node))
         else:
             # aapt2 emits expanded Android namespace URIs; older aapt uses android:.
-            attr = re.match(r'^\s*A:\s+(?:android:|http://schemas\.android\.com/apk/res/android:)([\w]+)(?:\([^)]*\))?=(.*)
+            attr = re.match(r'^\s*A:\s+(?:android:|http://schemas\.android\.com/apk/res/android:)([\w]+)(?:\([^)]*\))?=(.*)$', line)
             if attr and stack:
                 stack[-1][1]['attrs'][attr[1]] = attr[2]
     def string(node, name):
