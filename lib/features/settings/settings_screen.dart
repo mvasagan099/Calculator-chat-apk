@@ -1,5 +1,10 @@
+import 'dart:io';
 import '../../core/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../core/services/launcher_icon_service.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -16,6 +21,12 @@ import '../../core/widgets/private_scaffold.dart';
 import '../../providers/app_providers.dart';
 import '../calls/call_screen.dart';
 import '../notifications/notification_service.dart';
+import '../messaging/starred_messages_screen.dart';
+import '../vault/vault_screen.dart';
+import 'storage_manager_screen.dart';
+import 'diagnostics_screen.dart';
+import '../notifications/app_update_dialog.dart';
+import '../notifications/app_update.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({
@@ -185,6 +196,42 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
   }
 
+  Widget _buildSkeletonLoading(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final baseColor = isDark ? Colors.white12 : Colors.black12;
+
+    return ListView(
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      children: [
+        Container(
+          height: 140,
+          decoration: BoxDecoration(
+            color: baseColor,
+            borderRadius: BorderRadius.circular(20),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          height: 160,
+          decoration: BoxDecoration(
+            color: baseColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Container(
+          height: 200,
+          decoration: BoxDecoration(
+            color: baseColor,
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) => PrivateScaffold(
     title: 'Settings',
@@ -195,10 +242,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (s.hasError) {
           return LoadError(retry: () => setState(() => future = load()));
         }
-        if (!s.hasData) return const Center(child: CircularProgressIndicator());
+        if (!s.hasData) return _buildSkeletonLoading(context);
         final profile = s.data!['profile'], settings = s.data!['settings'];
         final device = widget.device, lock = device.lock;
         return ListView(
+          padding: const EdgeInsets.symmetric(vertical: 8),
           children: [
             ListenableBuilder(listenable: widget.notifications, builder: (context, _) {
               final release = widget.notifications.availableUpdate;
@@ -217,30 +265,86 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 }),
               );
             }),
-            ListTile(
-              leading: PersonAvatar(
-                name: profile['display_name'],
-                path: profile['avatar_path'],
-              ),
-              title: Text(profile['display_name']),
-              subtitle: Text('@${profile['username']}'),
-              trailing: IconButton(
-                tooltip: 'Change profile picture',
-                onPressed: () => act(context, avatar),
-                icon: const Icon(Icons.camera_alt_outlined),
+            Card(
+              margin: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              elevation: 0,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        PersonAvatar(
+                          name: profile['display_name'],
+                          path: profile['avatar_path'],
+                          radius: 30,
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                profile['display_name'] ?? 'User',
+                                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '@${profile['username']}',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'ID: ${profile['public_id']}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    fontFeatures: const [FontFeature.tabularFigures()],
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton.filledTonal(
+                          tooltip: 'Change profile picture',
+                          onPressed: () => act(context, avatar),
+                          icon: const Icon(Icons.camera_alt_outlined, size: 20),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Divider(height: 1),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Display name'),
+                      subtitle: Text(profile['display_name'] ?? ''),
+                      trailing: const Icon(Icons.edit_outlined, size: 18),
+                      onTap: () => act(context, () => edit('display_name', profile['display_name'])),
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Bio / About'),
+                      subtitle: Text(profile['about'] ?? 'Hey there! I am using Calculator Messenger'),
+                      trailing: const Icon(Icons.edit_outlined, size: 18),
+                      onTap: () => act(context, () => edit('about', profile['about'] ?? '')),
+                    ),
+                  ],
+                ),
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: SelectableText('Public ID: ${profile['public_id']}'),
-            ),
-            for (final key in ['display_name', 'about'])
-              ListTile(
-                title: Text(key.replaceAll('_', ' ')),
-                subtitle: Text(profile[key]),
-                onTap: () => act(context, () => edit(key, profile[key])),
-              ),
-            const Divider(),
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
               child: Text('Security & device', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
@@ -320,48 +424,88 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (mounted) setState(() {});
               }),
             ),
+            SwitchListTile(
+              title: const Text('Shake to lock'),
+              subtitle: const Text('Instantly return to calculator when shaken'),
+              value: device.shakeToLock,
+              onChanged: (v) => act(context, () async {
+                await device.setShakeToLock(v);
+                if (mounted) setState(() {});
+              }),
+            ),
+            SwitchListTile(
+              title: const Text('Quick lock shortcut'),
+              subtitle: const Text('Escape or Ctrl+Alt+L immediately returns to calculator'),
+              value: device.quickLockShortcut,
+              onChanged: (v) => act(context, () async {
+                await device.setQuickLockShortcut(v);
+                if (mounted) setState(() {});
+              }),
+            ),
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 16, 20, 4),
-              child: Text('Personalization', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              child: Text('Personalization & Themes', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
             ),
-            ListTile(
-              leading: const Icon(Icons.apps_rounded),
-              title: const Text('Calculator app icon'),
-              subtitle: const Text('Classic, Midnight, Graphite or Sunrise'),
-              trailing: FutureBuilder<String>(future: _launcherIcon, builder: (context, state) {
-                final selected = LauncherIconService.find(state.data ?? 'classic');
-                return CalculatorIconPreview(option: selected, size: 38);
-              }),
-              onTap: selectCalculatorIcon,
-            ),
-            ListTile(
-              title: const Text('Chat appearance'),
-              subtitle: const Text('Light and dark appearance'),
-              trailing: DropdownButton<ThemeMode>(
-                value: device.messengerAppearance,
-                items: [
-                  for (final mode in ThemeMode.values)
-                    DropdownMenuItem(value: mode, child: Text(mode.name)),
+            Card(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              elevation: 0,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: const Icon(Icons.apps_rounded),
+                    title: const Text('Calculator app icon'),
+                    subtitle: const Text('Classic, Midnight, Graphite or Sunrise'),
+                    trailing: FutureBuilder<String>(future: _launcherIcon, builder: (context, state) {
+                      final selected = LauncherIconService.find(state.data ?? 'classic');
+                      return CalculatorIconPreview(option: selected, size: 38);
+                    }),
+                    onTap: selectCalculatorIcon,
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.brightness_4_outlined),
+                    title: const Text('Chat appearance'),
+                    subtitle: const Text('Light, dark, or follow system theme'),
+                    trailing: DropdownButton<ThemeMode>(
+                      value: device.messengerAppearance,
+                      items: [
+                        for (final mode in ThemeMode.values)
+                          DropdownMenuItem(value: mode, child: Text(mode.name)),
+                      ],
+                      onChanged: (mode) => act(context, () async {
+                        if (mode != null) await device.setMessengerAppearance(mode);
+                        if (mounted) setState(() {});
+                      }),
+                    ),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.palette_outlined),
+                    title: const Text('Messenger style'),
+                    subtitle: Text(device.messengerTheme.label),
+                    trailing: DropdownButton<MessengerTheme>(
+                      value: device.messengerTheme,
+                      items: [for (final style in MessengerTheme.values)
+                        DropdownMenuItem(value: style, child: Text(style.label))],
+                      onChanged: (style) => act(context, () async {
+                        if (style != null) await device.setMessengerTheme(style);
+                        if (mounted) setState(() {});
+                      }),
+                    ),
+                  ),
+                  SwitchListTile(
+                    secondary: const Icon(Icons.dark_mode_outlined),
+                    title: const Text('AMOLED pure black'),
+                    subtitle: const Text('Pitch black surfaces for OLED screens and battery savings'),
+                    value: device.amoledMode,
+                    onChanged: (v) => act(context, () async {
+                      await device.setAmoledMode(v);
+                      if (mounted) setState(() {});
+                    }),
+                  ),
                 ],
-                onChanged: (mode) => act(context, () async {
-                  if (mode != null) await device.setMessengerAppearance(mode);
-                  if (mounted) setState(() {});
-                }),
               ),
             ),
-            ListTile(
-              title: const Text('Messenger style'),
-              trailing: DropdownButton<MessengerTheme>(
-                value: device.messengerTheme,
-                items: [for (final style in MessengerTheme.values)
-                  DropdownMenuItem(value: style, child: Text(style.label))],
-                onChanged: (style) => act(context, () async {
-                  if (style != null) await device.setMessengerTheme(style);
-                  if (mounted) setState(() {});
-                }),
-              ),
-            ),
-            const Divider(),
             ListTile(
               title: const Text('Devices and sessions'),
               leading: const Icon(Icons.devices),
@@ -443,6 +587,191 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       await preference('notifications', v);
                     }),
             ),
+            ListTile(
+              title: const Text('Notification privacy'),
+              subtitle: Text(device.notificationPrivacy.label),
+              trailing: DropdownButton<NotificationPrivacy>(
+                value: device.notificationPrivacy,
+                items: [
+                  for (final p in NotificationPrivacy.values)
+                    DropdownMenuItem(value: p, child: Text(p.label)),
+                ],
+                onChanged: (p) => act(context, () async {
+                  if (p != null) await device.setNotificationPrivacy(p);
+                  if (mounted) setState(() {});
+                }),
+              ),
+            ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Text('Messages & Folders', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.star_outline),
+              title: const Text('Starred messages'),
+              subtitle: const Text('View and manage all saved messages across chats'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const StarredMessagesScreen()),
+              ),
+            ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Text('Private File Vault', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.shield_outlined),
+              title: const Text('Private file vault'),
+              subtitle: const Text('Encrypted local storage for photos, videos, and documents'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const VaultScreen()),
+              ),
+            ),
+            SwitchListTile(
+              title: const Text('Biometric lock for vault'),
+              subtitle: const Text('Require fingerprint / face scan to open private vault'),
+              value: device.vaultBiometricsEnabled,
+              onChanged: (val) => act(context, () async {
+                await device.setVaultBiometrics(val);
+                if (mounted) setState(() {});
+              }),
+            ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Text('Storage & Media', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.pie_chart_outline),
+              title: const Text('Storage manager'),
+              subtitle: const Text('Review space breakdown, clean cache and large files'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const StorageManagerScreen()),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.high_quality_outlined),
+              title: const Text('Media upload compression'),
+              subtitle: Text(
+                device.mediaQuality == 'original'
+                    ? 'Original (no compression)'
+                    : device.mediaQuality == 'medium'
+                    ? 'Standard (720p / 65% quality)'
+                    : 'Optimized (1080p / 80% quality)',
+              ),
+              onTap: () async {
+                final chosen = await showDialog<String>(
+                  context: context,
+                  builder: (ctx) => SimpleDialog(
+                    title: const Text('Outgoing media quality'),
+                    children: [
+                      SimpleDialogOption(
+                        onPressed: () => Navigator.pop(ctx, 'optimized'),
+                        child: const Text('Optimized (1080p / 80% quality - Recommended)'),
+                      ),
+                      SimpleDialogOption(
+                        onPressed: () => Navigator.pop(ctx, 'medium'),
+                        child: const Text('Standard (720p / 65% quality - Faster)'),
+                      ),
+                      SimpleDialogOption(
+                        onPressed: () => Navigator.pop(ctx, 'original'),
+                        child: const Text('Original (No compression - Full file size)'),
+                      ),
+                    ],
+                  ),
+                );
+                if (chosen != null && mounted) {
+                  await device.setMediaQuality(chosen);
+                  setState(() {});
+                }
+              },
+            ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Text('Diagnostics & App Version', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.network_check),
+              title: const Text('Connection diagnostics'),
+              subtitle: const Text('Test connectivity to auth, database, realtime, and media storage'),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ConnectionDiagnosticsScreen()),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.system_update_outlined),
+              title: const Text('App version & updates'),
+              subtitle: const Text('Version 1.0.0 (Build 1) · Tap to check updates'),
+              onTap: () => act(context, () async {
+                final update = await widget.notifications.verifyAppUpdate();
+                if (!context.mounted) return;
+                if (update != null) {
+                  await showDialog<void>(
+                    context: context,
+                    barrierDismissible: !update.isUnsupported,
+                    builder: (_) => AppUpdateDialog(update: update),
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('You are on the latest verified release')),
+                  );
+                }
+              }),
+            ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+              child: Text('Chat backup & restore', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+            ),
+            ListTile(
+              leading: const Icon(Icons.backup_outlined),
+              title: const Text('Create encrypted backup'),
+              subtitle: const Text('Password-protected AES-256 backup of chat history'),
+              onTap: () => act(context, () async {
+                final password = await askText(context, 'Set backup password', secret: true);
+                if (password == null || password.trim().isEmpty) return;
+                final confirm = await askText(context, 'Confirm backup password', secret: true);
+                if (confirm != password) throw StateError('Passwords do not match');
+                final backupJson = await ref.read(messengerProvider).exportBackup(password);
+                final dir = await getTemporaryDirectory();
+                final dateStr = DateFormat('yyyyMMdd_HHmm').format(DateTime.now());
+                final file = File('${dir.path}/chat_backup_$dateStr.enc');
+                await file.writeAsString(backupJson);
+                await SharePlus.shareXFiles([XFile(file.path)], text: 'Calculator Messenger encrypted backup');
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Encrypted chat backup created successfully')),
+                  );
+                }
+              }),
+            ),
+            ListTile(
+              leading: const Icon(Icons.restore_outlined),
+              title: const Text('Restore from backup'),
+              subtitle: const Text('Merge encrypted backup without overwriting pending unsent data'),
+              onTap: () => act(context, () async {
+                final result = await FilePicker.platform.pickFiles(type: FileType.any);
+                if (result == null || result.files.isEmpty || result.files.single.path == null) return;
+                final file = File(result.files.single.path!);
+                final backupJson = await file.readAsString();
+                final password = await askText(context, 'Enter backup password', secret: true);
+                if (password == null || password.trim().isEmpty) return;
+                final restored = await ref.read(messengerProvider).importBackup(password, backupJson);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Restored ${restored.conversationCount} conversations and ${restored.messageCount} messages. Offline queue preserved.')),
+                  );
+                  setState(() => future = load());
+                }
+              }),
+            ),
+            const Divider(),
             const ListTile(title: Text('Blocked users')),
             for (final block in s.data!['blocks'])
               ListTile(

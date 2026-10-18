@@ -90,14 +90,16 @@ class AppRouter {
         ),
         GoRoute(
           path: '/chat/:id',
-          builder: (_, s) => guard(ChatScreen(id: s.pathParameters['id']!)),
+          pageBuilder: (_, s) => privatePage(s, ChatScreen(id: s.pathParameters['id']!), slideHorizontally: true),
         ),
         GoRoute(
           path: '/contacts',
-          builder: (_, s) => guard(
+          pageBuilder: (_, s) => privatePage(
+            s,
             ContactsScreen(
               selectOnly: s.uri.queryParameters['select'] == 'true',
             ),
+            slideHorizontally: true,
           ),
         ),
         GoRoute(
@@ -106,7 +108,7 @@ class AppRouter {
         ),
         GoRoute(
           path: '/call/:id',
-          builder: (_, s) => guard(CallScreen(id: s.pathParameters['id']!)),
+          pageBuilder: (_, s) => privatePage(s, CallScreen(id: s.pathParameters['id']!), slideHorizontally: true),
         ),
         GoRoute(
           path: '/groups',
@@ -114,8 +116,8 @@ class AppRouter {
         ),
         GoRoute(
           path: '/details/:id',
-          builder: (_, s) =>
-              guard(ConversationDetailsScreen(id: s.pathParameters['id']!)),
+          pageBuilder: (_, s) =>
+              privatePage(s, ConversationDetailsScreen(id: s.pathParameters['id']!), slideHorizontally: true),
         ),
         GoRoute(
           path: '/updates',
@@ -139,17 +141,27 @@ class AppRouter {
   late final GoRouter router;
   // Private pages transition only while unlocked; the public calculator is
   // never included in a private crossfade or a back-swipe screenshot.
-  Page<void> privatePage(GoRouterState state, Widget screen) => CustomTransitionPage<void>(
+  Page<void> privatePage(GoRouterState state, Widget screen, {bool slideHorizontally = false}) => CustomTransitionPage<void>(
     key: state.pageKey,
     child: guard(screen),
-    transitionDuration: const Duration(milliseconds: 190),
-    reverseTransitionDuration: const Duration(milliseconds: 130),
+    transitionDuration: const Duration(milliseconds: 210),
+    reverseTransitionDuration: const Duration(milliseconds: 160),
     transitionsBuilder: (context, animation, secondary, child) {
-      final easing = CurvedAnimation(parent: animation, curve: Curves.easeOutCubic);
+      if (MediaQuery.of(context).disableAnimations) {
+        return child;
+      }
+      final easing = CurvedAnimation(
+        parent: animation,
+        curve: Curves.easeOutCubic,
+        reverseCurve: Curves.easeInCubic,
+      );
+      final offsetTween = slideHorizontally
+          ? Tween<Offset>(begin: const Offset(0.06, 0), end: Offset.zero)
+          : Tween<Offset>(begin: const Offset(0, 0.03), end: Offset.zero);
       return FadeTransition(
-        opacity: easing,
+        opacity: Tween<double>(begin: 0.0, end: 1.0).animate(easing),
         child: SlideTransition(
-          position: Tween<Offset>(begin: const Offset(0, .025), end: Offset.zero).animate(easing),
+          position: offsetTween.animate(easing),
           child: child,
         ),
       );
@@ -160,7 +172,7 @@ class AppRouter {
       ThemeMode.light => Brightness.light,
       ThemeMode.dark => Brightness.dark,
       ThemeMode.system => MediaQuery.platformBrightnessOf(context),
-    }),
+    }, amoled: device.amoledMode),
     lock: auth.lock,
     authenticated: () =>
         auth.signedIn && auth.ownerMatches && auth.deviceAuthorized,

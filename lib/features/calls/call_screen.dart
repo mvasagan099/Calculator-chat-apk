@@ -14,7 +14,10 @@ final callProvider = Provider<CallController>((ref) {
   final controller = CallController(ref.watch(supabaseProvider));
   final lock = ref.watch(lockProvider);
   void locked() {
-    if (!lock.unlocked) controller.stopSharing().catchError((Object _) {});
+    if (!lock.unlocked) {
+      controller.stopSharing().catchError((Object _) {});
+      controller.handleRelock().catchError((Object _) {});
+    }
   }
 
   final auth = ref.watch(authServiceProvider);
@@ -208,6 +211,20 @@ class _CallScreenState extends ConsumerState<CallScreen> {
             call?['group_call'] == true &&
             call?['self_state'] == 'left' &&
             state == 'accepted';
+        if (controller.inPip) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            body: SafeArea(
+              child: Center(
+                child: ParticipantGrid(
+                  room: controller.room,
+                  sharing: controller.sharing,
+                  audioOnly: controller.audioOnly,
+                ),
+              ),
+            ),
+          );
+        }
         return Scaffold(
           appBar: AppBar(
             title: const Text('Private call'),
@@ -223,28 +240,70 @@ class _CallScreenState extends ConsumerState<CallScreen> {
             child: Column(
               children: [
                 CallWaitingPanel(current: widget.id, controller: controller),
-                Text(
-                  '${call?['group_call'] == true ? 'Group ' : ''}${call?['video'] == true ? 'Video call' : 'Voice call'}',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                Text(
-                  controller.reconnecting
-                      ? 'Reconnecting…'
-                      : controller.connecting
-                      ? 'Connecting…'
-                      : state == 'ringing'
-                      ? (incoming ? 'Incoming call' : 'Ringing…')
-                      : state,
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Column(
+                    children: [
+                      Text(
+                        '${call?['group_call'] == true ? 'Group ' : ''}${call?['video'] == true ? 'Video call' : 'Voice call'}',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: (active ? Colors.green : Theme.of(context).colorScheme.primaryContainer).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: active
+                                    ? Colors.green
+                                    : (controller.connecting || controller.reconnecting
+                                        ? Colors.amber
+                                        : Theme.of(context).colorScheme.primary),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              active
+                                  ? '${controller.duration.inMinutes.toString().padLeft(2, '0')}:${(controller.duration.inSeconds % 60).toString().padLeft(2, '0')}'
+                                  : (controller.reconnecting
+                                      ? 'Reconnecting…'
+                                      : controller.connecting
+                                      ? 'Connecting…'
+                                      : state == 'ringing'
+                                      ? (incoming ? 'Incoming call…' : 'Ringing…')
+                                      : state),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: const [FontFeature.tabularFigures()],
+                                color: active ? Colors.green : Theme.of(context).colorScheme.onSurface,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 if (active) CallNetworkPanel(room: controller.room),
                 if (controller.sharing)
-                  const Chip(
-                    avatar: Icon(Icons.screen_share),
-                    label: Text('Screen sharing is active'),
-                  ),
-                if (active)
-                  Text(
-                    '${controller.duration.inMinutes.toString().padLeft(2, '0')}:${(controller.duration.inSeconds % 60).toString().padLeft(2, '0')}',
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Chip(
+                      avatar: Icon(Icons.screen_share, size: 16),
+                      label: Text('Screen sharing is active'),
+                    ),
                   ),
                 if (controller.hasPendingEnd)
                   const Padding(
@@ -292,11 +351,23 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                     spacing: 24,
                     children: [
                       FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                        ),
                         onPressed: () => act(context, controller.accept),
                         icon: const Icon(Icons.call),
                         label: const Text('Answer'),
                       ),
                       FilledButton.tonalIcon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.errorContainer,
+                          foregroundColor: Theme.of(context).colorScheme.error,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                        ),
                         onPressed: () => act(context, controller.reject),
                         icon: const Icon(Icons.call_end),
                         label: const Text('Reject'),
@@ -304,128 +375,159 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                     ],
                   )
                 else if (active)
-                  Wrap(
-                    alignment: WrapAlignment.center,
-                    spacing: 12,
-                    children: [
-                      IconButton.filledTonal(
-                        tooltip: controller.mic ? 'Mute' : 'Unmute',
-                        onPressed: () => act(context, controller.toggleMic),
-                        icon: Icon(controller.mic ? Icons.mic : Icons.mic_off),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
+                      borderRadius: BorderRadius.circular(28),
+                      border: Border.all(
+                        color: Theme.of(context).colorScheme.outlineVariant.withValues(alpha: 0.3),
                       ),
-                      IconButton.filledTonal(
-                        tooltip: 'Speaker',
-                        onPressed: () => act(context, controller.toggleSpeaker),
-                        icon: Icon(
-                          controller.speaker ? Icons.volume_up : Icons.hearing,
-                        ),
-                      ),
-                      if (call?['video'] == true) ...[
+                    ),
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 12,
+                      runSpacing: 8,
+                      children: [
                         IconButton.filledTonal(
-                          tooltip: 'Camera',
-                          onPressed: () =>
-                              act(context, controller.toggleCamera),
+                          style: !controller.mic ? IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.errorContainer) : null,
+                          tooltip: controller.mic ? 'Mute' : 'Unmute',
+                          onPressed: () => act(context, controller.toggleMic),
                           icon: Icon(
-                            controller.camera
-                                ? Icons.videocam
-                                : Icons.videocam_off,
+                            controller.mic ? Icons.mic : Icons.mic_off,
+                            color: !controller.mic ? Theme.of(context).colorScheme.error : null,
                           ),
                         ),
                         IconButton.filledTonal(
-                          tooltip: 'Switch camera',
-                          onPressed: () =>
-                              act(context, controller.switchCamera),
-                          icon: const Icon(Icons.cameraswitch),
+                          tooltip: 'Speaker',
+                          onPressed: () => act(context, controller.toggleSpeaker),
+                          icon: Icon(
+                            controller.speaker ? Icons.volume_up : Icons.hearing,
+                          ),
                         ),
-                      ],
-                      if (call?['video'] == true) ...[
-                        IconButton.filledTonal(
-                          tooltip: controller.sharing
-                              ? 'Stop sharing'
-                              : 'Share screen',
-                          onPressed: () => act(
-                            context,
-                            () => controller.toggleSharing(
-                              ref.read(lockProvider).projectionConsent,
+                        if (call?['video'] == true) ...[
+                          IconButton.filledTonal(
+                            style: !controller.camera ? IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.errorContainer) : null,
+                            tooltip: 'Camera',
+                            onPressed: () =>
+                                act(context, controller.toggleCamera),
+                            icon: Icon(
+                              controller.camera
+                                  ? Icons.videocam
+                                  : Icons.videocam_off,
+                              color: !controller.camera ? Theme.of(context).colorScheme.error : null,
                             ),
                           ),
-                          icon: Icon(
-                            controller.sharing
-                                ? Icons.stop_screen_share
-                                : Icons.screen_share,
+                          IconButton.filledTonal(
+                            tooltip: 'Switch camera',
+                            onPressed: () =>
+                                act(context, controller.switchCamera),
+                            icon: const Icon(Icons.cameraswitch),
                           ),
-                        ),
+                        ],
+                        if (call?['video'] == true) ...[
+                          IconButton.filledTonal(
+                            tooltip: controller.sharing
+                                ? 'Stop sharing'
+                                : 'Share screen',
+                            onPressed: () => act(
+                              context,
+                              () => controller.toggleSharing(
+                                ref.read(lockProvider).projectionConsent,
+                              ),
+                            ),
+                            icon: Icon(
+                              controller.sharing
+                                  ? Icons.stop_screen_share
+                                  : Icons.screen_share,
+                            ),
+                          ),
+                          IconButton.filledTonal(
+                            tooltip: controller.audioOnly
+                                ? 'Receive video'
+                                : 'Audio-only fallback',
+                            onPressed: () =>
+                                act(context, controller.toggleAudioOnly),
+                            icon: Icon(
+                              controller.audioOnly
+                                  ? Icons.video_call
+                                  : Icons.headphones,
+                            ),
+                          ),
+                          if (active && call?['video'] == true)
+                            IconButton.filledTonal(
+                              tooltip: 'Picture-in-picture',
+                              onPressed: () => act(context, controller.enterPip),
+                              icon: const Icon(Icons.picture_in_picture_alt),
+                            ),
+                        ],
+                        if (call?['group_call'] == true)
+                          IconButton.filledTonal(
+                            tooltip: 'Participants and invitations',
+                            onPressed: () => act(
+                              context,
+                              () => showParticipants(controller, participants),
+                            ),
+                            icon: const Icon(Icons.group_add_outlined),
+                          ),
                         IconButton.filledTonal(
-                          tooltip: controller.audioOnly
-                              ? 'Receive video'
-                              : 'Audio-only fallback',
-                          onPressed: () =>
-                              act(context, controller.toggleAudioOnly),
-                          icon: Icon(
-                            controller.audioOnly
-                                ? Icons.video_call
-                                : Icons.headphones,
-                          ),
+                          tooltip: 'Audio output / Bluetooth',
+                          onPressed: () => act(context, () async {
+                            await AndroidCallDevice.bluetoothPermission();
+                            if (!context.mounted) return;
+                            final devices = await Hardware.instance
+                                .audioOutputs();
+                            if (!context.mounted) return;
+                            final selected =
+                                await showModalBottomSheet<MediaDevice>(
+                                  context: context,
+                                  builder: (c) => SafeArea(
+                                    child: ListView(
+                                      shrinkWrap: true,
+                                      children: [
+                                        for (final device in devices)
+                                          ListTile(
+                                            title: Text(device.label),
+                                            onTap: () => Navigator.pop(c, device),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                            if (selected != null) {
+                              await Hardware.instance.selectAudioOutput(selected);
+                            }
+                          }),
+                          icon: const Icon(Icons.bluetooth_audio),
                         ),
                       ],
-                      if (call?['group_call'] == true)
-                        IconButton.filledTonal(
-                          tooltip: 'Participants and invitations',
-                          onPressed: () => act(
-                            context,
-                            () => showParticipants(controller, participants),
-                          ),
-                          icon: const Icon(Icons.group_add_outlined),
-                        ),
-                      IconButton.filledTonal(
-                        tooltip: 'Audio output / Bluetooth',
-                        onPressed: () => act(context, () async {
-                          await AndroidCallDevice.bluetoothPermission();
-                          if (!context.mounted) return;
-                          final devices = await Hardware.instance
-                              .audioOutputs();
-                          if (!context.mounted) return;
-                          final selected =
-                              await showModalBottomSheet<MediaDevice>(
-                                context: context,
-                                builder: (c) => SafeArea(
-                                  child: ListView(
-                                    shrinkWrap: true,
-                                    children: [
-                                      for (final device in devices)
-                                        ListTile(
-                                          title: Text(device.label),
-                                          onTap: () => Navigator.pop(c, device),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                          if (selected != null) {
-                            await Hardware.instance.selectAudioOutput(selected);
-                          }
-                        }),
-                        icon: const Icon(Icons.bluetooth_audio),
-                      ),
-                    ],
+                    ),
                   ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 8),
                 if (!controller.finished &&
                     ['ringing', 'accepted'].contains(state) &&
                     !needsAnswer &&
                     !canRejoin)
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Theme.of(context).colorScheme.error,
-                    ),
-                    onPressed: () => act(context, controller.end),
-                    icon: const Icon(Icons.call_end),
-                    label: Text(
-                      call?['group_call'] == true
-                          ? 'Leave call'
-                          : state == 'ringing'
-                          ? 'Cancel call'
-                          : 'End call',
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.error,
+                        foregroundColor: Theme.of(context).colorScheme.onError,
+                        padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                      ),
+                      onPressed: () => act(context, controller.end),
+                      icon: const Icon(Icons.call_end),
+                      label: Text(
+                        call?['group_call'] == true
+                            ? 'Leave call'
+                            : state == 'ringing'
+                            ? 'Cancel call'
+                            : 'End call',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   )
                 else

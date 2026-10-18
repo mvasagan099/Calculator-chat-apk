@@ -170,7 +170,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     final colors = Theme.of(context).colorScheme;
     return Container(
       alignment: Alignment.bottomRight,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -180,19 +180,28 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               expression.isEmpty ? ' ' : expression,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 28, color: colors.onSurfaceVariant),
+              style: TextStyle(
+                fontSize: 30,
+                color: colors.onSurfaceVariant,
+                letterSpacing: 0.5,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           Flexible(
             child: FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(
-                result,
-                style: const TextStyle(
-                  fontSize: 64,
+              child: AnimatedDefaultTextStyle(
+                duration: const Duration(milliseconds: 140),
+                style: TextStyle(
+                  fontSize: 68,
                   fontWeight: FontWeight.w300,
+                  color: colors.onSurface,
+                  letterSpacing: -1,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
+                child: Text(result),
               ),
             ),
           ),
@@ -226,7 +235,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         '.',
         '=',
       ];
-      final padding = landscape ? 8.0 : 16.0, spacing = landscape ? 4.0 : 10.0;
+      final padding = landscape ? 8.0 : 16.0, spacing = landscape ? 4.0 : 12.0;
       final width = (size.maxWidth - 2 * padding - 3 * spacing) / 4;
       final height = (size.maxHeight - 2 * padding - 4 * spacing) / 5;
       return GridView.builder(
@@ -241,16 +250,24 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
         itemCount: keys.length,
         itemBuilder: (context, index) {
           final key = keys[index],
-              operator = ['÷', '×', '−', '+', '='].contains(keys[index]);
+              operator = ['÷', '×', '−', '+'].contains(key),
+              isEqual = key == '=';
           return _CalculatorKey(
             label: key,
             onPressed: () => press(key),
-            background: key == '='
+            background: isEqual
                 ? colors.primary
                 : operator
                 ? colors.primaryContainer
+                : ['AC', '⌫', '%'].contains(key)
+                ? colors.surfaceContainerHigh
                 : colors.surfaceContainerHighest,
-            foreground: key == '=' ? colors.onPrimary : colors.onSurface,
+            foreground: isEqual
+                ? colors.onPrimary
+                : operator
+                ? colors.onPrimaryContainer
+                : colors.onSurface,
+            isEqual: isEqual,
           );
         },
       );
@@ -264,44 +281,54 @@ class _CalculatorKey extends StatefulWidget {
     required this.onPressed,
     required this.background,
     required this.foreground,
+    this.isEqual = false,
   });
+
   final String label;
   final VoidCallback onPressed;
   final Color background, foreground;
+  final bool isEqual;
+
   @override
   State<_CalculatorKey> createState() => _CalculatorKeyState();
 }
 
 class _CalculatorKeyState extends State<_CalculatorKey> {
   bool pressed = false;
+
   @override
-  Widget build(BuildContext context) => AnimatedScale(
-    scale: pressed ? .93 : 1,
-    duration: const Duration(milliseconds: 110),
-    curve: Curves.easeOutCubic,
-    child: Material(
-      color: widget.background,
-      borderRadius: BorderRadius.circular(24),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: widget.onPressed,
-        onHighlightChanged: (value) => setState(() => pressed = value),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(4),
-            child: FittedBox(
-              child: Text(
-                widget.label,
-                style: TextStyle(
-                  fontSize: 27,
-                  color: widget.foreground,
-                  fontWeight: FontWeight.w500,
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: pressed ? 0.92 : 1.0,
+      duration: const Duration(milliseconds: 90),
+      curve: Curves.easeOutCubic,
+      child: Material(
+        color: widget.background,
+        borderRadius: BorderRadius.circular(26),
+        clipBehavior: Clip.antiAlias,
+        elevation: widget.isEqual ? 2 : 0,
+        child: InkWell(
+          onTap: widget.onPressed,
+          splashColor: widget.foreground.withValues(alpha: 0.12),
+          highlightColor: widget.foreground.withValues(alpha: 0.08),
+          onHighlightChanged: (value) => setState(() => pressed = value),
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(4),
+              child: FittedBox(
+                child: Text(
+                  widget.label,
+                  style: TextStyle(
+                    fontSize: widget.label == '⌫' ? 24 : 28,
+                    color: widget.foreground,
+                    fontWeight: widget.isEqual ? FontWeight.w600 : FontWeight.w500,
+                  ),
                 ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }

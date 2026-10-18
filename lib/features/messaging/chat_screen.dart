@@ -22,8 +22,12 @@ import 'conversation_presence.dart';
 import 'structured_content.dart';
 import 'chat_backdrop.dart';
 import 'expiration_banner.dart';
-import '../../core/services/private_media_access.dart';
 import '../media/view_once_viewer.dart';
+import 'poll_widget.dart';
+import 'sticker_gif_picker.dart';
+import 'scheduled_messages_sheet.dart';
+import 'starred_messages_screen.dart';
+import 'message_edit_history_sheet.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.id});
@@ -460,6 +464,63 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (mounted) setState(() => selected.clear());
   }
 
+  Future<void> createPoll() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (_) => const CreatePollDialog(),
+    );
+    if (result != null && mounted) {
+      await ref.read(messengerProvider).sendPoll(
+        widget.id,
+        result['question'] as String,
+        (result['options'] as List).cast<String>(),
+        multiple: result['multiple'] == true,
+      );
+    }
+  }
+
+  void openStickerGifPicker() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => StickerGifPicker(
+        onSelectSticker: (sticker) async {
+          await ref.read(messengerProvider).sendSticker(widget.id, sticker);
+        },
+        onSelectGif: (gif) async {
+          await ref.read(messengerProvider).sendGif(widget.id, gif);
+        },
+      ),
+    );
+  }
+
+  Future<void> scheduleSend() async {
+    final text = input.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Type a message to schedule first')),
+      );
+      return;
+    }
+    final scheduledTime = await showDialog<DateTime>(
+      context: context,
+      builder: (_) => const ScheduleMessageDialog(),
+    );
+    if (scheduledTime != null && mounted) {
+      await ref.read(messengerProvider).scheduleMessage(widget.id, text, scheduledTime);
+      input.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Message scheduled for ${DateFormat.yMMMd().add_jm().format(scheduledTime)}',
+            ),
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> actions(ChatMessage m) async {
     final own = m.senderId == ref.read(messengerProvider).uid;
     if (m.viewOnce) {
@@ -535,6 +596,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 act(context, () => forward([m]));
               },
             ),
+            ListTile(
+              leading: Icon(
+                ref.read(messengerProvider).isMessageStarred(m.id)
+                    ? Icons.star
+                    : Icons.star_border,
+                color: ref.read(messengerProvider).isMessageStarred(m.id)
+                    ? Colors.amber
+                    : null,
+              ),
+              title: Text(
+                ref.read(messengerProvider).isMessageStarred(m.id)
+                    ? 'Unstar message'
+                    : 'Star message',
+              ),
+              onTap: () {
+                Navigator.pop(c);
+                act(context, () async {
+                  final repo = ref.read(messengerProvider);
+                  if (repo.isMessageStarred(m.id)) {
+                    await repo.unstarMessage(m.id);
+                  } else {
+                    await repo.starMessage(m.id, widget.id);
+                  }
+                  if (mounted) setState(() {});
+                });
+              },
+            ),
             if (own &&
                 m.kind == 'text' &&
                 DateTime.now().difference(m.createdAt) <
@@ -558,6 +646,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           );
                     }
                   });
+                },
+              ),
+            if (m.edited)
+              ListTile(
+                leading: const Icon(Icons.history_rounded),
+                title: const Text('View edit history'),
+                onTap: () {
+                  Navigator.pop(c);
+                  showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => MessageEditHistorySheet(message: m),
+                  );
                 },
               ),
             ListTile(
@@ -635,13 +737,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               maxWidth: MediaQuery.sizeOf(context).width * .82,
             ),
             child: Container(
-              padding: EdgeInsets.all(style.compact ? 9 : 12),
+              padding: EdgeInsets.symmetric(
+                horizontal: style.compact ? 10 : 14,
+                vertical: style.compact ? 8 : 10,
+              ),
               decoration: BoxDecoration(
-                gradient: style.accent != null && own ? LinearGradient(colors: style.accent!.colors.map((color) => Color.alphaBlend(color.withValues(alpha: .18), colors.surface)).toList()) : null,
-                border: style.accent != null && own ? Border.all(color: colors.primary, width: 2) : null,
+                gradient: style.accent != null && own
+                    ? LinearGradient(
+                        colors: style.accent!.colors
+                            .map((color) => Color.alphaBlend(color.withValues(alpha: .18), colors.surface))
+                            .toList(),
+                      )
+                    : null,
                 color: own
                     ? colors.primaryContainer
                     : colors.surfaceContainerHighest,
+                border: Border.all(
+                  color: own
+                      ? colors.primary.withValues(alpha: 0.2)
+                      : colors.outlineVariant.withValues(alpha: 0.25),
+                  width: 0.8,
+                ),
                 borderRadius: BorderRadius.only(
                   topLeft: Radius.circular(style.radius),
                   topRight: Radius.circular(style.radius),
@@ -654,22 +770,43 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (!own && !direct)
-                    Text(
-                      m.senderName ?? 'Member',
-                      style: Theme.of(context).textTheme.labelMedium,
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Text(
+                        m.senderName ?? 'Member',
+                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: colors.primary,
+                        ),
+                      ),
                     ),
                   if (m.forwarded)
-                    Text(
-                      'Forwarded',
-                      style: Theme.of(context).textTheme.labelSmall,
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 2),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.shortcut_rounded, size: 12, color: colors.onSurfaceVariant),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Forwarded',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              fontStyle: FontStyle.italic,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   if (m.replyTo != null)
                     Container(
-                      padding: const EdgeInsets.all(8),
-                      margin: const EdgeInsets.only(bottom: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
+                        color: colors.surface.withValues(alpha: 0.45),
+                        borderRadius: BorderRadius.circular(10),
                         border: Border(
-                          left: BorderSide(color: colors.primary, width: 3),
+                          left: BorderSide(color: colors.primary, width: 3.5),
                         ),
                       ),
                       child: Column(
@@ -677,8 +814,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         children: [
                           Text(
                             quoted?.senderName ?? 'Reply',
-                            style: Theme.of(context).textTheme.labelMedium,
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                              color: colors.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
+                          const SizedBox(height: 2),
                           Text(
                             quoted == null
                                 ? 'Original message not loaded'
@@ -689,6 +830,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 : quoted.attachment?['filename'] ?? quoted.kind,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: colors.onSurfaceVariant,
+                            ),
                           ),
                         ],
                       ),
@@ -715,15 +860,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       if (m.kind == 'contact' || m.kind == 'location')
                         StructuredContent(message: m)
                       else
-                        Text(m.body),
+                        Text(m.body, style: const TextStyle(fontSize: 15)),
                   ],
                   const SizedBox(height: 4),
                   Row(
                     mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
+                      if (m.edited) ...[
+                        InkWell(
+                          onTap: () => showModalBottomSheet<void>(
+                            context: context,
+                            isScrollControlled: true,
+                            showDragHandle: true,
+                            builder: (_) => MessageEditHistorySheet(message: m),
+                          ),
+                          child: Text(
+                            'edited · ',
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              decoration: TextDecoration.underline,
+                              fontStyle: FontStyle.italic,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
                       Text(
-                        '${m.edited ? 'edited · ' : ''}${DateFormat.Hm().format(m.createdAt.toLocal())}',
-                        style: Theme.of(context).textTheme.labelSmall,
+                        DateFormat.Hm().format(m.createdAt.toLocal()),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: colors.onSurfaceVariant,
+                        ),
                       ),
                       if (own) ...[
                         const SizedBox(width: 4),
@@ -732,33 +899,52 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             onTap: () => ref
                                 .read(messengerProvider)
                                 .flush(includeTerminal: true),
-                            child: const Icon(Icons.refresh, size: 16),
+                            child: const Icon(Icons.refresh, size: 15, color: Colors.red),
                           )
                         else
                           Icon(
                             m.pending
-                                ? Icons.schedule
+                                ? Icons.schedule_rounded
                                 : delivered
-                                ? Icons.done_all
-                                : Icons.done,
-                            size: 16,
-                            color: read ? colors.primary : null,
+                                ? Icons.done_all_rounded
+                                : Icons.done_rounded,
+                            size: 15,
+                            color: read ? colors.primary : colors.onSurfaceVariant.withValues(alpha: 0.7),
                           ),
                       ],
+                      if (ref.watch(messengerProvider).isMessageStarred(m.id))
+                        const Padding(
+                          padding: EdgeInsets.only(left: 4),
+                          child: Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                        ),
                     ],
                   ),
                   if (m.reactions.isNotEmpty)
-                    Wrap(
-                      children: [
-                        for (final emoji
-                            in m.reactions.map((e) => e['emoji']).toSet())
-                          Padding(
-                            padding: const EdgeInsets.only(right: 4),
-                            child: Text(
-                              '$emoji ${m.reactions.where((e) => e['emoji'] == emoji).length}',
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        children: [
+                          for (final emoji
+                              in m.reactions.map((e) => e['emoji']).toSet())
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: colors.surfaceContainerLow,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: colors.outlineVariant.withValues(alpha: 0.35),
+                                  width: 0.8,
+                                ),
+                              ),
+                              child: Text(
+                                '$emoji ${m.reactions.where((e) => e['emoji'] == emoji).length}',
+                                style: const TextStyle(fontSize: 12),
+                              ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
                 ],
               ),
@@ -834,12 +1020,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           onSelected: (value) {
             if (value == 'wallpaper') {
               act(context, chooseWallpaper);
+            } else if (value == 'starred') {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => StarredMessagesScreen(conversationId: widget.id),
+                ),
+              );
+            } else if (value == 'scheduled') {
+              showModalBottomSheet(
+                context: context,
+                builder: (_) => ScheduledMessagesSheet(conversationId: widget.id),
+              );
             } else {
               context.push('/details/${widget.id}');
             }
           },
           itemBuilder: (_) => const [
             PopupMenuItem(value: 'details', child: Text('Details and members')),
+            PopupMenuItem(value: 'starred', child: Text('Starred messages')),
+            PopupMenuItem(value: 'scheduled', child: Text('Scheduled messages')),
             PopupMenuItem(value: 'wallpaper', child: Text('Chat wallpaper')),
           ],
         ),
@@ -1116,6 +1316,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ],
               ),
             ),
+          StreamBuilder<List<Map<String, dynamic>>>(
+            stream: ref.watch(messengerProvider).scheduledMessages(widget.id),
+            builder: (context, snap) {
+              final count = snap.data?.length ?? 0;
+              if (count == 0) return const SizedBox.shrink();
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+                child: Row(
+                  children: [
+                    const Icon(Icons.schedule, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '$count ${count == 1 ? 'message' : 'messages'} scheduled',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                      onPressed: () {
+                        showModalBottomSheet(
+                          context: context,
+                          builder: (_) => ScheduledMessagesSheet(conversationId: widget.id),
+                        );
+                      },
+                      child: const Text('View'),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
           SafeArea(
             top: false,
             child: Padding(
@@ -1134,6 +1367,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           ? mention()
                           : value == 'contact'
                           ? contact()
+                          : value == 'poll'
+                          ? createPoll()
+                          : value == 'sticker_gif'
+                          ? openStickerGifPicker()
+                          : value == 'schedule'
+                          ? scheduleSend()
                           : attach(value),
                     ),
                     itemBuilder: (_) => [
@@ -1146,10 +1385,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         'file': 'File or audio',
                         'contact': 'Contact card',
                         'location': 'Current location',
+                        'poll': 'Create poll',
+                        'sticker_gif': 'Stickers & GIFs',
+                        'schedule': 'Schedule message',
                         if (!selfChat) 'mention': 'Mention member',
                       }.entries)
                         PopupMenuItem(value: item.key, child: Text(item.value)),
                     ],
+                  ),
+                  IconButton(
+                    tooltip: 'Stickers & GIFs',
+                    icon: const Icon(Icons.sticky_note_2_outlined),
+                    onPressed: openStickerGifPicker,
                   ),
                   Expanded(
                     child: TextField(
@@ -1161,6 +1408,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         hintText: 'Message',
                         counterText: '',
                         filled: true,
+                        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
                           borderSide: BorderSide.none,
@@ -1172,17 +1421,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       },
                     ),
                   ),
-                  IconButton.filledTonal(
-                    tooltip: recording
-                        ? 'Send recording'
-                        : 'Record voice message',
-                    onPressed: uploading ? null : () => act(context, voice),
-                    icon: Icon(recording ? Icons.stop : Icons.mic_none),
-                  ),
-                  IconButton.filled(
-                    tooltip: 'Send message',
-                    onPressed: sending ? null : () => act(context, send),
-                    icon: const Icon(Icons.arrow_upward),
+                  const SizedBox(width: 6),
+                  ValueListenableBuilder<TextEditingValue>(
+                    valueListenable: input,
+                    builder: (context, val, _) {
+                      final hasText = val.text.trim().isNotEmpty;
+                      return AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 180),
+                        transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+                        child: recording
+                            ? IconButton.filled(
+                                key: const ValueKey('recording_btn'),
+                                style: IconButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+                                tooltip: 'Send recording',
+                                onPressed: uploading ? null : () => act(context, voice),
+                                icon: const Icon(Icons.stop),
+                              )
+                            : hasText
+                                ? GestureDetector(
+                                    key: const ValueKey('send_btn'),
+                                    onLongPress: sending ? null : () => act(context, scheduleSend),
+                                    child: IconButton.filled(
+                                      tooltip: 'Send message (long press to schedule)',
+                                      onPressed: sending ? null : () => act(context, send),
+                                      icon: const Icon(Icons.arrow_upward),
+                                    ),
+                                  )
+                                : IconButton.filledTonal(
+                                    key: const ValueKey('voice_btn'),
+                                    tooltip: 'Record voice message',
+                                    onPressed: uploading ? null : () => act(context, voice),
+                                    icon: const Icon(Icons.mic_none),
+                                  ),
+                      );
+                    },
                   ),
                 ],
               ),

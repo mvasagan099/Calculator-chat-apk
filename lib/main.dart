@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
@@ -23,6 +24,13 @@ import 'providers/app_providers.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarDividerColor: Colors.transparent,
+    ),
+  );
   const store = DeviceSecretStore();
   final lock = LockController(
     PinVault(
@@ -79,7 +87,7 @@ Future<void> main() async {
   }
   final auth = AuthService(client, lock, store);
   await auth.initialize();
-  final notifications = NotificationService();
+  final notifications = NotificationService(settings: device);
   if (client != null) notifications.bindClient(client);
   await notifications.initialize();
   runApp(
@@ -87,6 +95,7 @@ Future<void> main() async {
       overrides: [
         lockProvider.overrideWithValue(lock),
         authServiceProvider.overrideWithValue(auth),
+        deviceSettingsProvider.overrideWithValue(device),
         if (client != null) supabaseProvider.overrideWithValue(client),
       ],
       child: MessengerApp(
@@ -135,7 +144,7 @@ class _MessengerAppState extends State<MessengerApp> {
       title: 'Calculator',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.build(Brightness.light),
-      darkTheme: AppTheme.build(Brightness.dark),
+      darkTheme: AppTheme.build(Brightness.dark, amoled: widget.device.amoledMode),
       themeMode: widget.device.theme,
       routerConfig: routing.router,
       builder: (context, child) {
@@ -186,7 +195,7 @@ class _MessengerAppState extends State<MessengerApp> {
                   ThemeMode.light => Brightness.light,
                   ThemeMode.dark => Brightness.dark,
                   ThemeMode.system => MediaQuery.platformBrightnessOf(context),
-                }, widget.device.messengerTheme),
+                }, widget.device.messengerTheme, amoled: widget.device.amoledMode),
                 child: child ?? const SizedBox.shrink(),
               ),
             );
