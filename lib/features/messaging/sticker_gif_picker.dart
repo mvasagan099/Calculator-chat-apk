@@ -366,3 +366,15 @@ class _StickerGifPickerState extends State<StickerGifPicker>
     );
   }
 }
+
+/// Curated sticker packs shared with the picker and regression tests.
+class StickerPacks {
+  static final Map<String, List<Map<String, String>>> packs = {
+    for (final category in _StickerGifPickerState.stickerCategories)
+      category: [
+        for (final sticker in _StickerGifPickerState.stickers)
+          if (sticker.category == category)
+            {'emoji': sticker.emoji, 'name': sticker.title, 'id': sticker.id},
+      ],
+  };
+}

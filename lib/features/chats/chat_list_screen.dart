@@ -4,7 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/security/local_retention.dart';
-import '../../core/services/device_settings.dart';
 import '../../core/widgets/actions.dart';
 import '../../core/widgets/private_scaffold.dart';
 import '../../providers/app_providers.dart';

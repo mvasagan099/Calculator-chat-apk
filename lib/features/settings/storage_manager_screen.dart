@@ -2,7 +2,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../core/security/vault_service.dart';
 import '../../core/widgets/actions.dart';
 import '../../providers/app_providers.dart';
 import '../vault/vault_screen.dart';

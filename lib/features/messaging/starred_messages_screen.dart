@@ -6,7 +6,6 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import '../../core/widgets/actions.dart';
 import '../../core/widgets/private_scaffold.dart';
-import '../../models/message.dart';
 import '../../providers/app_providers.dart';
 
 class StarredMessagesScreen extends ConsumerStatefulWidget {
