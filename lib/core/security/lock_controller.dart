@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
@@ -242,11 +243,16 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> setShakeToLock(bool enabled) async {
+    // Android-only sensor integration. Flutter widget tests run on the host
+    // platform and cannot wait for an Android platform-channel response.
+    if (!Platform.isAndroid) return;
     try {
       await _channel.invokeMethod<void>('setShakeToLock', enabled);
     } on MissingPluginException {
-      /* Desktop/widget tests have no Android window. */
-    } catch (_) {}
+      /* Not every Android build exposes this optional integration. */
+    } catch (_) {
+      // Optional quick-lock setting must never block calculator startup.
+    }
   }
 
   // Cancels a disposed calculator's in-flight result without notifying widgets
