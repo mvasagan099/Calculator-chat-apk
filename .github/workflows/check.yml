@@ -24,3 +24,13 @@ jobs:
           distribution: temurin
           java-version: '21'
       - run: python3 scripts/test-signal-prototype.py
+
+  release-tooling:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Compile Python helpers and test APK release verification
+        run: |
+          set -euo pipefail
+          python3 -m compileall -q scripts
+          python3 -m unittest discover -s scripts/tests -p '*_test.py'
