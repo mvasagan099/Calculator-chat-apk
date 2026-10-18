@@ -77,8 +77,8 @@ Future<void> authenticateClient(
 
 /// Widget-only repository fixture: RPC serialization is tested separately.
 class RecordingPollRepository extends MessengerRepository {
-  RecordingPollRepository(SupabaseClient client, this.receivedVotes)
-      : super(client, connectivity: const Stream.empty());
+  RecordingPollRepository(super.client, this.receivedVotes)
+      : super(connectivity: const Stream.empty());
 
   final List<Map<String, dynamic>> receivedVotes;
 
