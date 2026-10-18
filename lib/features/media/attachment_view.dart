@@ -501,7 +501,7 @@ class _AttachmentViewState extends ConsumerState<AttachmentView> {
               padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
               decoration: BoxDecoration(
                 border: Border.all(
-                  color: Theme.of(context).dividerColor.withOpacity(0.3),
+                  color: Theme.of(context).dividerColor.withValues(alpha: 0.3),
                 ),
                 borderRadius: BorderRadius.circular(8),
               ),

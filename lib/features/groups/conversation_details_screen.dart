@@ -167,7 +167,7 @@ class _ConversationDetailsScreenState
                         ],
                       ),
                     );
-                    if (selected != null && mounted) {
+                    if (selected != null && mounted && context.mounted) {
                       await act(context, () => manage('slow_mode', value: selected.toString()));
                     }
                   },

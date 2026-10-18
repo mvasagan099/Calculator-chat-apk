@@ -131,7 +131,10 @@ class AndroidCallDevice implements CallDevice {
     try {
       await channel.invokeMethod<void>('closePip');
     } on MissingPluginException {
-    } catch (_) {}
+      // Optional Android service is unavailable on non-Android hosts.
+    } catch (_) {
+      // Best-effort OS integration; do not interrupt private calling.
+    }
   }
 
   @override
@@ -143,7 +146,10 @@ class AndroidCallDevice implements CallDevice {
         'video': isVideo,
       });
     } on MissingPluginException {
-    } catch (_) {}
+      // Optional Android service is unavailable on non-Android hosts.
+    } catch (_) {
+      // Best-effort OS integration; do not interrupt private calling.
+    }
   }
 
   @override
@@ -151,7 +157,10 @@ class AndroidCallDevice implements CallDevice {
     try {
       await channel.invokeMethod<void>('endTelecomCall', {'id': id});
     } on MissingPluginException {
-    } catch (_) {}
+      // Optional Android service is unavailable on non-Android hosts.
+    } catch (_) {
+      // Best-effort OS integration; do not interrupt private calling.
+    }
   }
 }
 

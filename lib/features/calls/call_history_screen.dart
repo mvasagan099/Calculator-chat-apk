@@ -33,8 +33,8 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: 8,
-      separatorBuilder: (_, __) => const SizedBox(height: 6),
-      itemBuilder: (_, __) => Padding(
+      separatorBuilder: (_, _) => const SizedBox(height: 6),
+      itemBuilder: (_, _) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [

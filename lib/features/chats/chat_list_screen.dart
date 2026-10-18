@@ -170,7 +170,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     return ListView.separated(
       itemCount: 8,
       separatorBuilder: (_, _) => const Divider(indent: 76, height: 1),
-      itemBuilder: (_, __) => Padding(
+      itemBuilder: (_, _) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         child: Row(
           children: [
