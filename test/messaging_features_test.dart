@@ -797,13 +797,11 @@ void main() {
       expect(votesReceived.single['mid'], 'msg-poll-live');
       expect(votesReceived.single['option_index'], 0);
 
-      // Keep the widget render test independent of asynchronous network/cache
-      // lifecycle. The real repository's vote_poll RPC is verified separately.
+      // This fixture never initializes the Supabase client, authenticates, or
+      // makes a request. Its uninitialized SDK dispose() blocks in widget tests;
+      // the real RPC client's lifecycle is verified in the separate RPC test.
       await tester.pumpWidget(const SizedBox.shrink());
-      await tester.runAsync(() async {
-        await repo.dispose().timeout(const Duration(seconds: 10));
-        await client.dispose().timeout(const Duration(seconds: 10));
-      });
+      await repo.dispose();
     }, timeout: const Timeout(Duration(minutes: 1)));
 
     testWidgets('StructuredContent renders sticker and gif content properly', (tester) async {
