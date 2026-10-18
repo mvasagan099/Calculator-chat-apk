@@ -93,7 +93,7 @@ jobs:
           set -o pipefail
           python3 -m unittest discover -s scripts/tests -p '*_test.py' 2>&1 | tee build-evidence/config-tests.txt
           flutter analyze --no-pub 2>&1 | tee build-evidence/analyze.txt
-          flutter test --no-pub --reporter expanded 2>&1 | tee build-evidence/flutter-tests.txt
+          flutter test --no-pub --reporter expanded --timeout 2m 2>&1 | tee build-evidence/flutter-tests.txt
       - name: Build signed debug APK
         run: |
           set -o pipefail
