@@ -182,7 +182,7 @@ jobs:
           flutter pub get --enforce-lockfile 2>&1 | tee build-evidence/pub-get.txt
           python3 -m unittest discover -s scripts/tests -p '*_test.py' 2>&1 | tee build-evidence/tooling-tests.txt
           flutter analyze --no-pub 2>&1 | tee build-evidence/analyze.txt
-          flutter test --no-pub --reporter expanded 2>&1 | tee build-evidence/flutter-tests.txt
+          flutter test --no-pub --reporter expanded --timeout 2m 2>&1 | tee build-evidence/flutter-tests.txt
       - name: Regenerate release plugin registration after tests
         env:
           TARGET_PLATFORM: ${{ matrix.platform }}
