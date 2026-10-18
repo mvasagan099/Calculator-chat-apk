@@ -37,9 +37,12 @@ class LauncherAliasVerification(unittest.TestCase):
 
     def test_aapt2_expanded_namespace_launcher_alias(self):
         # aapt2 build-tools 36 emits expanded resource namespace attribute names.
-        xml = tree().replace(
+        expanded = tree().replace(
             "A: android:", "A: http://schemas.android.com/apk/res/android:"
         )
+        # AAPT2 places the document elements beneath a namespace declaration.
+        xml = ("N: android=http://schemas.android.com/apk/res/android (line=1)\n"
+               + "\n".join("  " + line for line in expanded.splitlines()) + "\n")
         self.assertEqual(verify.compiled_launcher_alias(xml), P+'.LauncherClassic')
         self.assertEqual(verify.metadata(PREFIX, 36, xml)['target_sdk'], 36)
         for invalid in (xml.replace('0xffffffff', '0x00000000', 1),
