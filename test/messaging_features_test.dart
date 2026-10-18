@@ -75,6 +75,22 @@ Future<void> authenticateClient(
   );
 }
 
+/// Widget-only repository fixture: RPC serialization is tested separately.
+class RecordingPollRepository extends MessengerRepository {
+  RecordingPollRepository(SupabaseClient client, this.receivedVotes)
+      : super(client, connectivity: const Stream.empty());
+
+  final List<Map<String, dynamic>> receivedVotes;
+
+  @override
+  String get uid => 'owner';
+
+  @override
+  Future<void> votePoll(String mid, int optionIndex) async {
+    receivedVotes.add({'mid': mid, 'option_index': optionIndex});
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -732,24 +748,8 @@ void main() {
         'https://example.invalid',
         'unit-test-public-key',
         authOptions: const AuthClientOptions(autoRefreshToken: false),
-        httpClient: MockClient((request) async {
-          if (request.url.path.contains('/rpc/vote_poll')) {
-            votesReceived.add(jsonDecode(request.body) as Map<String, dynamic>);
-            return http.Response('null', 200, headers: {'content-type': 'application/json'});
-          }
-          return http.Response('[]', 200, headers: {'content-type': 'application/json'});
-        }),
       );
-      await authenticateClient(client);
-
-      final cache = FakeLocalCache();
-      final repo = MessengerRepository(
-        client,
-        cacheFactory: (_) => cache,
-        connectivity: const Stream.empty(),
-      );
-      await repo.prepare();
-
+      final repo = RecordingPollRepository(client, votesReceived);
       final pollPayload = {
         'question': 'Team lunch spot?',
         'options': ['Pizza', 'Tacos', 'Sushi'],
@@ -760,7 +760,6 @@ void main() {
           'owner': [1],
         },
       };
-
       final pollMessage = ChatMessage(
         id: 'msg-poll-live',
         conversationId: 'chat-lunch',
@@ -770,22 +769,15 @@ void main() {
         createdAt: DateTime.now(),
       );
 
-      debugPrint('[poll-widget-test] creating widget');
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            messengerProvider.overrideWithValue(repo),
-          ],
+          overrides: [messengerProvider.overrideWithValue(repo)],
           child: MaterialApp(
-            home: Scaffold(
-              body: PollWidget(message: pollMessage),
-            ),
+            home: Scaffold(body: PollWidget(message: pollMessage)),
           ),
         ),
       );
-      debugPrint('[poll-widget-test] widget pumped');
-      await tester.pumpAndSettle(const Duration(milliseconds: 50));
-      debugPrint('[poll-widget-test] first settlement complete');
+      await tester.pumpAndSettle();
 
       expect(find.text('Team lunch spot?'), findsOneWidget);
       expect(find.text('Pizza'), findsOneWidget);
@@ -793,25 +785,20 @@ void main() {
       expect(find.text('Sushi'), findsOneWidget);
       expect(find.text('3 votes · Single choice'), findsOneWidget);
 
-      // Tap 'Pizza' (index 0) to change vote
-      debugPrint('[poll-widget-test] tapping vote');
       await tester.tap(find.text('Pizza'));
-      debugPrint('[poll-widget-test] vote tapped');
-      await tester.pumpAndSettle(const Duration(milliseconds: 50));
-      debugPrint('[poll-widget-test] vote pump settled');
+      await tester.pumpAndSettle();
 
       expect(votesReceived, hasLength(1));
-      expect(votesReceived.first['mid'], 'msg-poll-live');
-      expect(votesReceived.first['option_index'], 0);
+      expect(votesReceived.single['mid'], 'msg-poll-live');
+      expect(votesReceived.single['option_index'], 0);
 
-      // Dispose the widget tree before closing the repository it reads.
-      debugPrint('[poll-widget-test] unmounting widget');
+      // Keep the widget render test independent of asynchronous network/cache
+      // lifecycle. The real repository's vote_poll RPC is verified separately.
       await tester.pumpWidget(const SizedBox.shrink());
-      debugPrint('[poll-widget-test] unmounted, disposing repo');
-      await repo.dispose().timeout(const Duration(seconds: 10));
-      debugPrint('[poll-widget-test] repo disposed, disposing Supabase');
-      await client.dispose().timeout(const Duration(seconds: 10));
-      debugPrint('[poll-widget-test] disposal complete');
+      await tester.runAsync(() async {
+        await repo.dispose().timeout(const Duration(seconds: 10));
+        await client.dispose().timeout(const Duration(seconds: 10));
+      });
     }, timeout: const Timeout(Duration(minutes: 1)));
 
     testWidgets('StructuredContent renders sticker and gif content properly', (tester) async {
