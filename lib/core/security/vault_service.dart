@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:cryptography/cryptography.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
@@ -143,21 +144,65 @@ class VaultService {
     return _vaultDirectory!;
   }
 
+  /// Production keys are stored in Android-backed secure storage rather
+  /// than alongside ciphertext. Custom directories are test fixtures only.
   Future<SecretKey> _getKey() async {
     if (_customKey != null) return _customKey!;
     if (_key != null) return _key!;
     final dir = await _getDir();
-    final keyFile = File('${dir.path}/$_keyFile');
-    if (await keyFile.exists()) {
-      final bytes = await keyFile.readAsBytes();
-      _key = SecretKey(bytes);
-      return _key!;
+    final legacyFile = File('${dir.path}/$_keyFile');
+
+    if (customDir != null) {
+      // Isolated test fixtures do not depend on the Android Keystore plugin.
+      if (await legacyFile.exists()) {
+        final bytes = await legacyFile.readAsBytes();
+        if (bytes.length != 32) throw StateError('Invalid test vault key');
+        return _key = SecretKey(bytes);
+      }
+      final key = await _aes.newSecretKey();
+      await legacyFile.writeAsBytes(await key.extractBytes(), flush: true);
+      return _key = key;
     }
-    final newKey = await _aes.newSecretKey();
-    final exported = await newKey.extractBytes();
-    await keyFile.writeAsBytes(exported, flush: true);
-    _key = newKey;
-    return _key!;
+
+    const storageKey = 'calculator.private_vault_v1.aes_key';
+    const storage = FlutterSecureStorage();
+    String? encoded = await storage.read(key: storageKey);
+    if (encoded != null) {
+      final decoded = base64Decode(encoded);
+      if (decoded.length != 32) throw StateError('Invalid protected vault key');
+      if (await legacyFile.exists()) {
+        // Never discard an older key if it differs from the protected copy.
+        final legacy = await legacyFile.readAsBytes();
+        if (base64Encode(legacy) != encoded) {
+          throw StateError('Vault keys differ; preserve existing files');
+        }
+        await legacyFile.delete();
+      }
+      return _key = SecretKey(decoded);
+    }
+
+    if (await legacyFile.exists()) {
+      final bytes = await legacyFile.readAsBytes();
+      if (bytes.length != 32) throw StateError('Invalid legacy vault key');
+      encoded = base64Encode(bytes);
+      await storage.write(key: storageKey, value: encoded);
+      if (await storage.read(key: storageKey) != encoded) {
+        throw StateError('Unable to migrate vault key securely');
+      }
+      await legacyFile.delete();
+      return _key = SecretKey(bytes);
+    }
+    if (await File('${dir.path}/$_metaFile').exists()) {
+      throw StateError('Vault key missing; encrypted files preserved');
+    }
+
+    final generated = await _aes.newSecretKey();
+    encoded = base64Encode(await generated.extractBytes());
+    await storage.write(key: storageKey, value: encoded);
+    if (await storage.read(key: storageKey) != encoded) {
+      throw StateError('Unable to protect the new vault key');
+    }
+    return _key = generated;
   }
 
   Future<void> initialize() async {
@@ -168,7 +213,10 @@ class VaultService {
     if (await manifestFile.exists()) {
       try {
         final encryptedBytes = await manifestFile.readAsBytes();
-        if (encryptedBytes.length > 28) {
+        if (encryptedBytes.length <= 28) {
+          throw const FormatException('Invalid encrypted vault manifest');
+        }
+        {
           final nonce = encryptedBytes.sublist(0, 12);
           final mac = Mac(encryptedBytes.sublist(encryptedBytes.length - 16));
           final cipherText = encryptedBytes.sublist(12, encryptedBytes.length - 16);
@@ -187,7 +235,9 @@ class VaultService {
           _folders.addAll(rawFolders);
         }
       } catch (_) {
-        // Corrupted manifest recovery: rebuild from readable vault files
+        // Never reset metadata or overwrite existing ciphertext after a
+        // decrypt/key/migration failure. Recovery must be explicit.
+        throw StateError('Vault cannot be decrypted; preserve encrypted files');
       }
     }
     _initialized = true;
