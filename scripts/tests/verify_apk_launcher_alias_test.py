@@ -35,6 +35,19 @@ class LauncherAliasVerification(unittest.TestCase):
         self.assertEqual(verify.compiled_launcher_alias(tree()), P+'.LauncherClassic')
         self.assertEqual(verify.metadata(PREFIX, 36, tree())['min_sdk'], 29)
 
+    def test_aapt2_expanded_namespace_launcher_alias(self):
+        # aapt2 build-tools 36 emits expanded resource namespace attribute names.
+        xml = tree().replace(
+            "A: android:", "A: http://schemas.android.com/apk/res/android:"
+        )
+        self.assertEqual(verify.compiled_launcher_alias(xml), P+'.LauncherClassic')
+        self.assertEqual(verify.metadata(PREFIX, 36, xml)['target_sdk'], 36)
+        for invalid in (xml.replace('0xffffffff', '0x00000000', 1),
+                        xml.replace('android.intent.action.MAIN', 'android.intent.action.VIEW')):
+            with self.subTest(invalid=invalid[-160:]):
+                with self.assertRaises(ValueError):
+                    verify.metadata(PREFIX, 36, invalid)
+
     def test_normal_launcher_in_badging_still_works(self):
         self.assertEqual(verify.metadata(PREFIX+"launchable-activity: name='.MainActivity'\n",36)['package'], P)
 
