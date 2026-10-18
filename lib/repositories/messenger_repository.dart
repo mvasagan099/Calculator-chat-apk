@@ -7,7 +7,9 @@ import '../core/security/local_cache.dart';
 import '../core/security/sqlite_cache.dart';
 import '../core/security/pin_vault.dart';
 import '../models/message.dart';
+import '../models/message_edit.dart';
 import '../core/security/local_retention.dart';
+import '../core/security/backup_service.dart';
 
 typedef _CacheScope = ({LocalCache cache, String owner, int epoch});
 
@@ -202,6 +204,26 @@ class MessengerRepository {
     );
   }
 
+  Future<void> sync() async {
+    await prepare();
+    final scope = _captureCache();
+    final rows = (await client.rpc('conversation_list') as List)
+        .cast<Map<String, dynamic>>();
+    _requireCache(scope);
+    scope.cache.data['conversations'] = rows;
+    await scope.cache.save();
+    if (!_changes.isClosed) _changes.add(null);
+    unawaited(flush().catchError((Object _) {}));
+    unawaited(dispatchDueScheduledMessages().catchError((Object _) {}));
+  }
+
+  Future<void> markConversationRead(String cid) async {
+    try {
+      await client.rpc('ack_messages', params: {'cid': cid, 'mark_read': true});
+      await sync();
+    } catch (_) {}
+  }
+
   Stream<T> watch<T>(
     List<String> tables,
     Future<T> Function() fetch, {
@@ -313,6 +335,35 @@ class MessengerRepository {
     await prepare();
     _cache!.data['wallpaper.$cid'] = value;
     await _cache!.save();
+  }
+
+  Future<String> exportBackup(String password, {BackupService? service}) async {
+    await prepare();
+    final scope = _captureCache();
+    if (_onlineOnly) {
+      throw StateError('Cannot create backup in online-only fallback mode');
+    }
+    final backupService = service ?? BackupService();
+    return await backupService.createBackup(
+      password: password,
+      userId: scope.owner,
+      cache: scope.cache,
+    );
+  }
+
+  Future<BackupRestoreResult> importBackup(String password, String backupJson, {BackupService? service}) async {
+    await prepare();
+    final scope = _captureCache();
+    final backupService = service ?? BackupService();
+    final result = await backupService.restoreBackup(
+      password: password,
+      backupJson: backupJson,
+      currentUserId: scope.owner,
+      cache: scope.cache,
+    );
+    _hiddenIds.clear();
+    if (!_changes.isClosed) _changes.add(null);
+    return result;
   }
 
   Future<void> purgeExpiredLocal() async {
@@ -696,6 +747,271 @@ class MessengerRepository {
     }
     await scope.cache.save();
     if (!_changes.isClosed) _changes.add(null);
+  }
+
+  // --- Starred / Saved Messages ---
+  Future<void> starMessage(String mid, String cid) async {
+    await prepare();
+    final scope = _captureCache();
+    final starred = (scope.cache.data['starred_messages'] as List? ?? []).cast<String>().toSet();
+    starred.add(mid);
+    scope.cache.data['starred_messages'] = starred.toList();
+    await scope.cache.save();
+    try {
+      await client.rpc('star_message', params: {'mid': mid, 'cid': cid});
+    } catch (_) {}
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
+  Future<void> unstarMessage(String mid) async {
+    await prepare();
+    final scope = _captureCache();
+    final starred = (scope.cache.data['starred_messages'] as List? ?? []).cast<String>().toSet();
+    starred.remove(mid);
+    scope.cache.data['starred_messages'] = starred.toList();
+    await scope.cache.save();
+    try {
+      await client.rpc('unstar_message', params: {'mid': mid});
+    } catch (_) {}
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
+  bool isMessageStarred(String mid) {
+    if (_cache == null) return false;
+    final starred = (_cache!.data['starred_messages'] as List? ?? []).cast<String>();
+    return starred.contains(mid);
+  }
+
+  Stream<Set<String>> watchStarred(String cid) async* {
+    await prepare();
+    final scope = _captureCache();
+    final initial = (scope.cache.data['starred_messages'] as List? ?? []).cast<String>().toSet();
+    yield initial;
+    yield* watch(['starred_messages'], () async {
+      try {
+        final rows = await client
+            .from('starred_messages')
+            .select('message_id')
+            .eq('conversation_id', cid)
+            .eq('user_id', scope.owner);
+        final ids = (rows as List).map((r) => r['message_id'] as String).toSet();
+        scope.cache.data['starred_messages'] = ids.toList();
+        await scope.cache.save();
+        return ids;
+      } catch (_) {
+        return (scope.cache.data['starred_messages'] as List? ?? []).cast<String>().toSet();
+      }
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getStarredMessages({String? conversationId}) async {
+    await prepare();
+    final scope = _captureCache();
+    try {
+      var query = client
+          .from('starred_messages')
+          .select('message_id, conversation_id, created_at, messages(*, profiles:sender_id(display_name))')
+          .eq('user_id', scope.owner);
+      if (conversationId != null) {
+        query = query.eq('conversation_id', conversationId);
+      }
+      final rows = await query.order('created_at', ascending: false);
+      return (rows as List).cast<Map<String, dynamic>>();
+    } catch (_) {
+      // Fallback to local cache
+      final starredIds = (scope.cache.data['starred_messages'] as List? ?? []).cast<String>().toSet();
+      final allMessages = <Map<String, dynamic>>[];
+      for (final key in scope.cache.data.keys.where((k) => k.startsWith('messages.'))) {
+        if (conversationId != null && key != 'messages.$conversationId') continue;
+        final list = (scope.cache.data[key] as List? ?? []).cast<Map<String, dynamic>>();
+        for (final m in list) {
+          if (starredIds.contains(m['id'])) {
+            allMessages.add(m);
+          }
+        }
+      }
+      return allMessages;
+    }
+  }
+
+  // --- Scheduled Messages ---
+  Future<String> scheduleMessage(
+    String cid,
+    String body,
+    DateTime scheduledFor, {
+    String kind = 'text',
+  }) async {
+    final owner = client.auth.currentUser?.id;
+    if (owner == null) throw StateError('Not authenticated');
+    final id = const Uuid().v4();
+    await prepare();
+    final scope = _captureCache();
+    final localList = (scope.cache.data['scheduled_messages'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    final entry = {
+      'id': id,
+      'conversation_id': cid,
+      'sender_id': owner,
+      'body': body,
+      'kind': kind,
+      'scheduled_for': scheduledFor.toUtc().toIso8601String(),
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    };
+    localList.add(entry);
+    scope.cache.data['scheduled_messages'] = localList;
+    await scope.cache.save();
+
+    try {
+      await client.from('scheduled_messages').insert(entry);
+    } catch (_) {}
+    if (!_changes.isClosed) _changes.add(null);
+    return id;
+  }
+
+  Future<void> cancelScheduledMessage(String id) async {
+    await prepare();
+    final scope = _captureCache();
+    final localList = (scope.cache.data['scheduled_messages'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .where((e) => e['id'] != id)
+        .toList();
+    scope.cache.data['scheduled_messages'] = localList;
+    await scope.cache.save();
+
+    try {
+      await client.from('scheduled_messages').delete().eq('id', id);
+    } catch (_) {}
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
+  Stream<List<Map<String, dynamic>>> scheduledMessages(String cid) async* {
+    await prepare();
+    final scope = _captureCache();
+    final initial = (scope.cache.data['scheduled_messages'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .where((e) => e['conversation_id'] == cid)
+        .toList();
+    yield initial;
+
+    yield* watch(['scheduled_messages'], () async {
+      try {
+        final rows = await client
+            .from('scheduled_messages')
+            .select()
+            .eq('conversation_id', cid)
+            .order('scheduled_for');
+        final items = (rows as List).cast<Map<String, dynamic>>();
+        scope.cache.data['scheduled_messages'] = items;
+        await scope.cache.save();
+        return items;
+      } catch (_) {
+        return (scope.cache.data['scheduled_messages'] as List? ?? [])
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .where((e) => e['conversation_id'] == cid)
+            .toList();
+      }
+    });
+  }
+
+  Future<void> dispatchDueScheduledMessages() async {
+    await prepare();
+    final scope = _captureCache();
+    final now = DateTime.now();
+    final localList = (scope.cache.data['scheduled_messages'] as List? ?? [])
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
+    final due = <Map<String, dynamic>>[];
+    final remaining = <Map<String, dynamic>>[];
+
+    for (final item in localList) {
+      final scheduledTime = DateTime.tryParse(item['scheduled_for'] ?? '');
+      if (scheduledTime != null && !scheduledTime.isAfter(now)) {
+        due.add(item);
+      } else {
+        remaining.add(item);
+      }
+    }
+
+    if (due.isEmpty) return;
+
+    scope.cache.data['scheduled_messages'] = remaining;
+    await scope.cache.save();
+
+    for (final item in due) {
+      try {
+        await send(
+          item['conversation_id'] as String,
+          item['body'] as String,
+          kind: item['kind'] as String? ?? 'text',
+        );
+        await client.from('scheduled_messages').delete().eq('id', item['id']);
+      } catch (_) {
+        // Re-queue if delivery failed
+        remaining.add(item);
+      }
+    }
+    scope.cache.data['scheduled_messages'] = remaining;
+    await scope.cache.save();
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
+  // --- Group Polls ---
+  Future<String> sendPoll(
+    String cid,
+    String question,
+    List<String> options, {
+    bool multiple = false,
+  }) async {
+    final trimmedOptions = options.map((o) => o.trim()).where((o) => o.isNotEmpty).toList();
+    if (trimmedOptions.length < 2) {
+      throw ArgumentError('Poll must have at least 2 options');
+    }
+    final pollData = {
+      'question': question.trim(),
+      'options': trimmedOptions,
+      'multiple': multiple,
+      'votes': <String, dynamic>{},
+    };
+    return send(cid, jsonEncode(pollData), kind: 'poll');
+  }
+
+  Future<void> votePoll(String mid, int optionIndex) async {
+    await prepare();
+    try {
+      await client.rpc('vote_poll', params: {
+        'mid': mid,
+        'option_index': optionIndex,
+      });
+    } catch (_) {}
+    if (!_changes.isClosed) _changes.add(null);
+  }
+
+  // --- Stickers & GIFs ---
+  Future<String> sendSticker(String cid, Map<String, dynamic> stickerData) {
+    return send(cid, jsonEncode(stickerData), kind: 'sticker');
+  }
+
+  Future<String> sendGif(String cid, Map<String, dynamic> gifData) {
+    return send(cid, jsonEncode(gifData), kind: 'gif');
+  }
+
+  // --- Message Edit History ---
+  Future<List<MessageEditRevision>> getEditHistory(String mid) async {
+    await prepare();
+    try {
+      final rows = await client
+          .from('message_edits')
+          .select()
+          .eq('message_id', mid)
+          .order('edited_at', ascending: false);
+      return (rows as List)
+          .cast<Map<String, dynamic>>()
+          .map(MessageEditRevision.fromJson)
+          .toList();
+    } catch (_) {
+      return const [];
+    }
   }
 
   Future<void> suspend() {

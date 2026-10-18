@@ -1,4 +1,5 @@
 import '../../core/security/local_retention.dart';
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -71,6 +72,7 @@ class MediaService {
     bool preserveBytes = false,
     bool groupIcon = false,
     String? displayFilename,
+    String quality = 'optimized',
   }) async {
     access?.check();
     final size = await file.length();
@@ -85,19 +87,27 @@ class MediaService {
     access?.check();
     var name = displayFilename ?? file.uri.pathSegments.last;
     var outputMime = mime;
-    if (!preserveBytes && ['jpg', 'jpeg', 'png', 'webp'].contains(ext)) {
-      final compressed = await FlutterImageCompress.compressWithList(
-        bytes,
-        minWidth: 1920,
-        minHeight: 1920,
-        quality: 85,
-        format: CompressFormat.jpeg,
-      );
-      access?.check();
-      if (compressed.length < bytes.length) {
-        bytes = compressed;
-        outputMime = 'image/jpeg';
-        name = '${name.split('.').first}.jpg';
+    final isOriginal = preserveBytes || quality == 'original';
+    if (!isOriginal && ['jpg', 'jpeg', 'png', 'webp'].contains(ext)) {
+      final targetQuality = quality == 'medium' ? 65 : 80;
+      final targetDimension = quality == 'medium' ? 1280 : 1920;
+      try {
+        final compressed = await FlutterImageCompress.compressWithList(
+          bytes,
+          minWidth: targetDimension,
+          minHeight: targetDimension,
+          quality: targetQuality,
+          format: CompressFormat.jpeg,
+          keepExif: false,
+        );
+        access?.check();
+        if (compressed.length < bytes.length) {
+          bytes = compressed;
+          outputMime = 'image/jpeg';
+          name = '${name.split('.').first}.jpg';
+        }
+      } catch (_) {
+        // Fall back gracefully to original bytes if compression fails
       }
     }
     final path =
@@ -156,6 +166,7 @@ class MediaService {
   Future<Uint8List> download(
     Map<String, dynamic> attachment, {
     void Function(double)? onProgress,
+    int maxRetries = 2,
   }) async {
     final expected = attachment['size_bytes'];
     if (expected is! int || expected < 1 || expected > maxBytes) {
@@ -174,22 +185,34 @@ class MediaService {
         attachment['media_expires_at'] = trustedExpiry.toUtc().toIso8601String();
       }
       if (session == null) throw StateError('Media unavailable');
-      final transport = http.Client();
+
       late final Uint8List bytes;
-      try {
-        // The private Edge gateway authorizes the approved device and enforces
-        // current chat membership/expiry before privileged Storage reading.
-        bytes = await downloadAuthenticatedVisualBytes(
-          transport: transport,
-          projectUrl: AppConfig.supabaseUrl,
-          anonKey: AppConfig.supabaseKey,
-          accessToken: session,
-          path: attachment['object_path'] as String,
-          expected: expected,
-          onProgress: onProgress,
-        );
-      } finally {
-        transport.close();
+      int attempts = 0;
+      while (true) {
+        attempts++;
+        final transport = http.Client();
+        try {
+          // The private Edge gateway authorizes the approved device and enforces
+          // current chat membership/expiry before privileged Storage reading.
+          bytes = await downloadAuthenticatedVisualBytes(
+            transport: transport,
+            projectUrl: AppConfig.supabaseUrl,
+            anonKey: AppConfig.supabaseKey,
+            accessToken: session,
+            path: attachment['object_path'] as String,
+            expected: expected,
+            onProgress: onProgress,
+          );
+          break;
+        } catch (error) {
+          if (attempts <= maxRetries && _isTransientNetworkFailure(error)) {
+            await Future<void>.delayed(Duration(milliseconds: 300 * attempts));
+            continue;
+          }
+          rethrow;
+        } finally {
+          transport.close();
+        }
       }
       if (owner == null || owner != client.auth.currentUser?.id || session != client.auth.currentSession?.accessToken ||
           visualAttachmentExpired(attachment, DateTime.now()) || bytes.length != expected) {
@@ -199,25 +222,51 @@ class MediaService {
       onProgress?.call(1);
       return bytes;
     }
-    final url = await signedUrl(attachment);
-    final transport = http.Client();
-    try {
-      final response = await transport
-          .send(http.Request('GET', Uri.parse(url)))
-          .timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200) throw StateError('Download unavailable');
-      if (response.contentLength != null &&
-          response.contentLength != expected) {
-        throw StateError('Attachment size changed');
+
+    int attempts = 0;
+    while (true) {
+      attempts++;
+      final url = await signedUrl(attachment);
+      final transport = http.Client();
+      try {
+        final response = await transport
+            .send(http.Request('GET', Uri.parse(url)))
+            .timeout(const Duration(seconds: 30));
+        if (response.statusCode != 200) throw StateError('Download unavailable');
+        if (response.contentLength != null &&
+            response.contentLength != expected) {
+          throw StateError('Attachment size changed');
+        }
+        return await readAttachmentBytes(
+          response.stream.timeout(const Duration(seconds: 30)),
+          expected: expected,
+          onProgress: onProgress,
+        );
+      } catch (error) {
+        if (attempts <= maxRetries && _isTransientNetworkFailure(error)) {
+          await Future<void>.delayed(Duration(milliseconds: 300 * attempts));
+          continue;
+        }
+        rethrow;
+      } finally {
+        transport.close();
       }
-      return await readAttachmentBytes(
-        response.stream.timeout(const Duration(seconds: 30)),
-        expected: expected,
-        onProgress: onProgress,
-      );
-    } finally {
-      transport.close();
     }
+  }
+
+  static bool _isTransientNetworkFailure(Object error) {
+    if (error is FormatException || error is StateError) return false;
+    if (error is TimeoutException ||
+        error is SocketException ||
+        error is http.ClientException ||
+        error is HandshakeException) {
+      return true;
+    }
+    final message = error.toString().toLowerCase();
+    return message.contains('network') ||
+        message.contains('connection') ||
+        message.contains('timeout') ||
+        message.contains('socket');
   }
 
   Future<String> signedUrl(Map<String, dynamic> attachment) {

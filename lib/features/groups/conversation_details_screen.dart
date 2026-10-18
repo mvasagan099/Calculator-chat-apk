@@ -8,6 +8,7 @@ import '../../models/message.dart';
 import '../media/attachment_view.dart';
 import '../media/media_service.dart';
 import '../../core/services/private_media_access.dart';
+import 'group_audit_log_sheet.dart';
 
 class ConversationDetailsScreen extends ConsumerStatefulWidget {
   const ConversationDetailsScreen({super.key, required this.id});
@@ -77,7 +78,9 @@ class _ConversationDetailsScreenState
             group = data['group'] as Map<String, dynamic>?,
             members = (data['members'] as List).cast<Map<String, dynamic>>();
         final uid = ref.read(messengerProvider).uid;
-        final admin = members.any(
+        final isOwner = group != null && (group['owner_id'] == uid ||
+            members.any((m) => m['user_id'] == uid && m['role'] == 'owner'));
+        final admin = isOwner || members.any(
           (m) => m['user_id'] == uid && m['role'] == 'admin',
         );
         return ListView(
@@ -88,10 +91,11 @@ class _ConversationDetailsScreenState
                   group['name'],
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
-                subtitle: Text(group['description']),
+                subtitle: Text(group['description'] ?? ''),
               ),
               if (admin) ...[
                 ListTile(
+                  leading: const Icon(Icons.photo_camera_outlined),
                   title: const Text('Change group picture'),
                   onTap: () => act(context, () async {
                     final access = PrivateMediaAccess(ref.read(lockProvider),
@@ -110,6 +114,7 @@ class _ConversationDetailsScreenState
                   }),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.edit_outlined),
                   title: const Text('Edit group name'),
                   onTap: () => act(context, () async {
                     final v = await askText(
@@ -121,6 +126,7 @@ class _ConversationDetailsScreenState
                   }),
                 ),
                 ListTile(
+                  leading: const Icon(Icons.description_outlined),
                   title: const Text('Edit description'),
                   onTap: () => act(context, () async {
                     final v = await askText(
@@ -133,10 +139,48 @@ class _ConversationDetailsScreenState
                 ),
                 SwitchListTile(
                   title: const Text('Only admins can send messages'),
-                  value: group['admin_only'],
+                  value: group['members_can_send'] == false || group['admin_only'] == true,
                   onChanged: (v) => act(
                     context,
                     () => manage('admin_only', value: v.toString()),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.timer_outlined),
+                  title: const Text('Slow mode'),
+                  subtitle: Text(
+                    (group['slow_mode_seconds'] as num? ?? 0) == 0
+                        ? 'Off'
+                        : '${group['slow_mode_seconds']}s message cooldown',
+                  ),
+                  onTap: () async {
+                    final selected = await showDialog<int>(
+                      context: context,
+                      builder: (ctx) => SimpleDialog(
+                        title: const Text('Set message slow mode'),
+                        children: [
+                          for (final seconds in [0, 10, 30, 60, 300, 900])
+                            SimpleDialogOption(
+                              onPressed: () => Navigator.pop(ctx, seconds),
+                              child: Text(seconds == 0 ? 'Off' : '${seconds}s'),
+                            ),
+                        ],
+                      ),
+                    );
+                    if (selected != null && mounted) {
+                      await act(context, () => manage('slow_mode', value: selected.toString()));
+                    }
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.admin_panel_settings_outlined),
+                  title: const Text('Admin action history'),
+                  subtitle: const Text('Audit log of group modifications'),
+                  onTap: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: true,
+                    builder: (_) => GroupAuditLogSheet(conversationId: widget.id),
                   ),
                 ),
                 ListTile(
@@ -151,7 +195,8 @@ class _ConversationDetailsScreenState
                 ),
               ],
             ],
-            const ListTile(title: Text('Members')),
+            const Divider(),
+            const ListTile(title: Text('Members', style: TextStyle(fontWeight: FontWeight.bold))),
             for (final m in members)
               ListTile(
                 leading: PersonAvatar(
@@ -159,21 +204,60 @@ class _ConversationDetailsScreenState
                   path: m['profiles']['avatar_path'],
                 ),
                 title: Text(m['profiles']['display_name']),
-                subtitle: Text('@${m['profiles']['username']} · ${m['role']}'),
+                subtitle: Text(
+                  '@${m['profiles']['username']} · ${m['role']}'
+                  '${m['muted_until'] != null && DateTime.tryParse(m['muted_until'])?.isAfter(DateTime.now()) == true ? ' (muted)' : ''}',
+                ),
                 trailing: admin && m['user_id'] != uid
                     ? PopupMenuButton<String>(
                         onSelected: (action) => act(
                           context,
-                          () => manage(action, target: m['user_id']),
+                          () async {
+                            if (action == 'mute_1h') {
+                              await manage('mute', target: m['user_id'], value: '60');
+                            } else if (action == 'mute_24h') {
+                              await manage('mute', target: m['user_id'], value: '1440');
+                            } else if (action == 'unmute') {
+                              await manage('unmute', target: m['user_id']);
+                            } else {
+                              await manage(action, target: m['user_id']);
+                            }
+                          },
                         ),
                         itemBuilder: (_) => [
-                          const PopupMenuItem(
-                            value: 'promote',
-                            child: Text('Make admin'),
-                          ),
+                          if (m['role'] != 'admin' && m['role'] != 'owner')
+                            const PopupMenuItem(
+                              value: 'promote',
+                              child: Text('Make admin'),
+                            ),
+                          if (isOwner && m['role'] == 'admin')
+                            const PopupMenuItem(
+                              value: 'demote',
+                              child: Text('Dismiss as admin'),
+                            ),
+                          if (isOwner && m['user_id'] != uid)
+                            const PopupMenuItem(
+                              value: 'transfer_ownership',
+                              child: Text('Transfer ownership'),
+                            ),
+                          if (m['muted_until'] != null && DateTime.tryParse(m['muted_until'])?.isAfter(DateTime.now()) == true)
+                            const PopupMenuItem(
+                              value: 'unmute',
+                              child: Text('Unmute member'),
+                            )
+                          else ...[
+                            const PopupMenuItem(
+                              value: 'mute_1h',
+                              child: Text('Mute for 1 hour'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'mute_24h',
+                              child: Text('Mute for 24 hours'),
+                            ),
+                          ],
                           const PopupMenuItem(
                             value: 'remove',
-                            child: Text('Remove member'),
+                            child: Text('Remove from group'),
                           ),
                         ],
                       )
