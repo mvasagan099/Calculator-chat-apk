@@ -198,12 +198,77 @@ class _ViewOnceViewerState extends ConsumerState<ViewOnceViewer>
           : failed
           ? const Text('Opening failed. It may already have been consumed.')
           : player != null && player!.value.isInitialized
-          ? AspectRatio(
-              aspectRatio: player!.value.aspectRatio,
-              child: VideoPlayer(player!),
+          ? ListenableBuilder(
+              listenable: player!,
+              builder: (context, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AspectRatio(
+                    aspectRatio: player!.value.aspectRatio > 0
+                        ? player!.value.aspectRatio
+                        : 16 / 9,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        VideoPlayer(player!),
+                        if (!player!.value.isPlaying)
+                          Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.black45,
+                              shape: BoxShape.circle,
+                            ),
+                            child: IconButton(
+                              iconSize: 48,
+                              icon: const Icon(
+                                Icons.play_arrow,
+                                color: Colors.white,
+                              ),
+                              onPressed: () => player!.play(),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  VideoProgressIndicator(player!, allowScrubbing: true),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        tooltip: player!.value.isPlaying ? 'Pause' : 'Play',
+                        onPressed: () {
+                          player!.value.isPlaying
+                              ? player!.pause()
+                              : player!.play();
+                        },
+                        icon: Icon(
+                          player!.value.isPlaying
+                              ? Icons.pause
+                              : Icons.play_arrow,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: player!.value.volume == 0 ? 'Unmute' : 'Mute',
+                        icon: Icon(
+                          player!.value.volume == 0
+                              ? Icons.volume_off
+                              : Icons.volume_up,
+                        ),
+                        onPressed: () {
+                          player!.setVolume(
+                            player!.value.volume == 0 ? 1.0 : 0.0,
+                          );
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             )
           : widget.message.kind == 'image' && bytes != null
           ? InteractiveViewer(
+              minScale: 0.8,
+              maxScale: 4.0,
               child: Image.memory(
                 bytes!,
                 cacheWidth: 2160,

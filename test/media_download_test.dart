@@ -115,4 +115,23 @@ void main() {
       await stream.close();
     },
   );
+
+  test('non-transient errors like invalid size or expired media fail immediately', () async {
+    final client = SupabaseClient('https://project.supabase.co', 'fixture-anon');
+    final service = MediaService(client);
+    await expectLater(
+      () => service.download({'size_bytes': -1, 'mime_type': 'image/jpeg'}),
+      throwsFormatException,
+    );
+    await expectLater(
+      () => service.download({
+        'size_bytes': 100,
+        'mime_type': 'image/jpeg',
+        'media_expires_at': DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String(),
+      }),
+      throwsStateError,
+    );
+    await client.dispose();
+  });
 }
+
