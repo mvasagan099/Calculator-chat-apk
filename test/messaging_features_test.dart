@@ -784,7 +784,7 @@ void main() {
         ),
       );
       debugPrint('[poll-widget-test] widget pumped');
-      await tester.pumpAndSettle(const Duration(milliseconds: 50), timeout: const Duration(seconds: 5));
+      await tester.pumpAndSettle(const Duration(milliseconds: 50));
       debugPrint('[poll-widget-test] first settlement complete');
 
       expect(find.text('Team lunch spot?'), findsOneWidget);
@@ -797,7 +797,7 @@ void main() {
       debugPrint('[poll-widget-test] tapping vote');
       await tester.tap(find.text('Pizza'));
       debugPrint('[poll-widget-test] vote tapped');
-      await tester.pumpAndSettle(const Duration(milliseconds: 50), timeout: const Duration(seconds: 5));
+      await tester.pumpAndSettle(const Duration(milliseconds: 50));
       debugPrint('[poll-widget-test] vote pump settled');
 
       expect(votesReceived, hasLength(1));
