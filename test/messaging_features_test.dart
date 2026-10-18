@@ -770,6 +770,7 @@ void main() {
         createdAt: DateTime.now(),
       );
 
+      debugPrint('[poll-widget-test] creating widget');
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -782,7 +783,9 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      debugPrint('[poll-widget-test] widget pumped');
+      await tester.pumpAndSettle(const Duration(milliseconds: 50), timeout: const Duration(seconds: 5));
+      debugPrint('[poll-widget-test] first settlement complete');
 
       expect(find.text('Team lunch spot?'), findsOneWidget);
       expect(find.text('Pizza'), findsOneWidget);
@@ -791,17 +794,24 @@ void main() {
       expect(find.text('3 votes · Single choice'), findsOneWidget);
 
       // Tap 'Pizza' (index 0) to change vote
+      debugPrint('[poll-widget-test] tapping vote');
       await tester.tap(find.text('Pizza'));
-      await tester.pumpAndSettle();
+      debugPrint('[poll-widget-test] vote tapped');
+      await tester.pumpAndSettle(const Duration(milliseconds: 50), timeout: const Duration(seconds: 5));
+      debugPrint('[poll-widget-test] vote pump settled');
 
       expect(votesReceived, hasLength(1));
       expect(votesReceived.first['mid'], 'msg-poll-live');
       expect(votesReceived.first['option_index'], 0);
 
       // Dispose the widget tree before closing the repository it reads.
+      debugPrint('[poll-widget-test] unmounting widget');
       await tester.pumpWidget(const SizedBox.shrink());
-      await repo.dispose().timeout(const Duration(seconds: 20));
-      await client.dispose().timeout(const Duration(seconds: 20));
+      debugPrint('[poll-widget-test] unmounted, disposing repo');
+      await repo.dispose().timeout(const Duration(seconds: 10));
+      debugPrint('[poll-widget-test] repo disposed, disposing Supabase');
+      await client.dispose().timeout(const Duration(seconds: 10));
+      debugPrint('[poll-widget-test] disposal complete');
     }, timeout: const Timeout(Duration(minutes: 1)));
 
     testWidgets('StructuredContent renders sticker and gif content properly', (tester) async {
