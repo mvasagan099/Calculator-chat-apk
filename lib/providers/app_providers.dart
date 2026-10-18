@@ -5,7 +5,10 @@ import '../core/security/lock_controller.dart';
 import '../repositories/messenger_repository.dart';
 import '../core/services/auth_service.dart';
 
+import '../core/services/device_settings.dart';
+
 final authServiceProvider = Provider<AuthService?>((ref) => null);
+final deviceSettingsProvider = Provider<DeviceSettings?>((ref) => null);
 
 final lockProvider = Provider<LockController>(
   (ref) => throw StateError('Lock must be injected at startup'),
