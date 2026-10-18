@@ -107,7 +107,7 @@ class _FullScreenVideoViewerState extends ConsumerState<FullScreenVideoViewer> {
         backgroundColor: Colors.black,
         appBar: _showControls
             ? AppBar(
-                backgroundColor: Colors.black.withOpacity(0.7),
+                backgroundColor: Colors.black.withValues(alpha: 0.7),
                 iconTheme: const IconThemeData(color: Colors.white),
                 title: Text(
                   widget.filename ?? 'Video',
@@ -191,7 +191,7 @@ class _FullScreenVideoViewerState extends ConsumerState<FullScreenVideoViewer> {
                           right: 0,
                           bottom: 0,
                           child: Container(
-                            color: Colors.black.withOpacity(0.7),
+                            color: Colors.black.withValues(alpha: 0.7),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 8,
@@ -286,7 +286,7 @@ class _FullScreenVideoViewerState extends ConsumerState<FullScreenVideoViewer> {
                                               _resetHideTimer();
                                             },
                                             child: Text(
-                                              '${_speed}×',
+                                              '$_speed×',
                                               style: const TextStyle(
                                                 color: Colors.white,
                                                 fontSize: 13,

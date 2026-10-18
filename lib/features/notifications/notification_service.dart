@@ -157,6 +157,7 @@ Future<void> showMissedCall(
 }
 
 class NotificationService extends ChangeNotifier {
+  // ignore: prefer_initializing_formals -- preserve external named 'settings' API
   NotificationService({FlutterLocalNotificationsPlugin? local, DeviceSettings? settings})
       : local = local ?? FlutterLocalNotificationsPlugin(),
         _settings = settings;

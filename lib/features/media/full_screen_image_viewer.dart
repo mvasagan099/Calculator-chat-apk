@@ -57,7 +57,7 @@ class _FullScreenImageViewerState extends ConsumerState<FullScreenImageViewer> {
     if (_isZoomed) {
       _transformController.value = Matrix4.identity();
     } else {
-      _transformController.value = Matrix4.identity()..scale(2.5, 2.5);
+      _transformController.value = Matrix4.identity()..scaleByDouble(2.5, 2.5, 1.0, 1.0);
     }
   }
 
@@ -105,7 +105,7 @@ class _FullScreenImageViewerState extends ConsumerState<FullScreenImageViewer> {
       builder: (context) => Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
-          backgroundColor: Colors.black.withOpacity(0.7),
+          backgroundColor: Colors.black.withValues(alpha: 0.7),
           iconTheme: const IconThemeData(color: Colors.white),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -121,7 +121,7 @@ class _FullScreenImageViewerState extends ConsumerState<FullScreenImageViewer> {
                 Text(
                   sizeStr,
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                     fontSize: 12,
                   ),
                 ),
@@ -163,7 +163,7 @@ class _FullScreenImageViewerState extends ConsumerState<FullScreenImageViewer> {
                 _imageBytes,
                 fit: BoxFit.contain,
                 cacheWidth: 2160,
-                errorBuilder: (_, __, ___) => const Center(
+                errorBuilder: (_, _, _) => const Center(
                   child: Text(
                     'Media unavailable',
                     style: TextStyle(color: Colors.white70),

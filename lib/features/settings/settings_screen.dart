@@ -735,6 +735,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onTap: () => act(context, () async {
                 final password = await askText(context, 'Set backup password', secret: true);
                 if (password == null || password.trim().isEmpty) return;
+                if (!context.mounted) return;
                 final confirm = await askText(context, 'Confirm backup password', secret: true);
                 if (confirm != password) throw StateError('Passwords do not match');
                 final backupJson = await ref.read(messengerProvider).exportBackup(password);
@@ -759,6 +760,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 if (result.isEmpty || result.first.path == null) return;
                 final file = File(result.first.path!);
                 final backupJson = await file.readAsString();
+                if (!context.mounted) return;
                 final password = await askText(context, 'Enter backup password', secret: true);
                 if (password == null || password.trim().isEmpty) return;
                 final restored = await ref.read(messengerProvider).importBackup(password, backupJson);
