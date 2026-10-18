@@ -205,7 +205,7 @@ class MainActivity : FlutterFragmentActivity(), SensorEventListener {
         else result?.error("permission", if (requestCode == 502) "Nearby devices permission is required for Bluetooth routing" else "Microphone and requested camera permission are required", null)
     }
 
-    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration?) {
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
         callsChannel?.invokeMethod("pipChanged", isInPictureInPictureMode)
     }
