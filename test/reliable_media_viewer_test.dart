@@ -9,7 +9,6 @@ import 'package:calculator_messenger/features/media/attachment_view.dart';
 import 'package:calculator_messenger/features/media/document_viewer.dart';
 import 'package:calculator_messenger/features/media/expiring_attachment_view.dart';
 import 'package:calculator_messenger/features/media/full_screen_image_viewer.dart';
-import 'package:calculator_messenger/features/media/full_screen_video_viewer.dart';
 import 'package:calculator_messenger/providers/app_providers.dart';
 import 'async_widget_helpers.dart';
 import 'lock_biometric_test.dart' show ImmediatePinVault;

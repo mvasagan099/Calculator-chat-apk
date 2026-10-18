@@ -140,7 +140,7 @@ class VaultService {
       final base = await getApplicationSupportDirectory();
       _vaultDirectory = Directory('${base.path}/private-vault-v1');
     }
-    await _vaultDirectory!.create(recursive: true);
+    await _vaultDirectory.create(recursive: true);
     return _vaultDirectory!;
   }
 
