@@ -10,6 +10,7 @@ import '../../core/config/app_config.dart';
 import 'notification_activity.dart';
 import 'app_update.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/device_settings.dart';
 
 Future<void> initializeFirebase() async {
   if (Firebase.apps.isEmpty) {
@@ -41,34 +42,49 @@ Future<void> backgroundActivity(RemoteMessage message) async {
 Future<void> showIncomingCall(
   FlutterLocalNotificationsPlugin local,
   Map<String, dynamic> activity,
-  dynamic expires,
-) async {
+  dynamic expires, {
+  NotificationPrivacy privacy = NotificationPrivacy.generic,
+  String? callerName,
+}) async {
   final deadline = DateTime.tryParse(expires is String ? expires : '');
   // Missing/stale TTL is not permission to ring a delayed invitation.
   if (deadline == null || !deadline.isAfter(DateTime.now())) return;
+  final silent = privacy == NotificationPrivacy.silent;
+  final detailed = privacy == NotificationPrivacy.detailed;
+
   await local
       .resolvePlatformSpecificImplementation<
         AndroidFlutterLocalNotificationsPlugin
       >()
       ?.createNotificationChannel(
-        const AndroidNotificationChannel(
-          'incoming_calls',
-          'Incoming calls',
-          importance: Importance.max,
+        AndroidNotificationChannel(
+          silent ? 'silent_calls' : 'incoming_calls',
+          silent ? 'Silent calls' : 'Incoming calls',
+          importance: silent ? Importance.low : Importance.max,
+          playSound: !silent,
+          enableVibration: !silent,
         ),
       );
+
+  final title = 'Calculator';
+  final body = detailed && callerName != null
+      ? 'Incoming call from $callerName'
+      : (detailed ? 'Incoming call' : 'New activity');
+
   await local.show(
     id: activity['resource_id'].hashCode & 0x7fffffff,
-    title: 'Calculator',
-    body: 'New activity',
+    title: title,
+    body: body,
     notificationDetails: NotificationDetails(
       android: AndroidNotificationDetails(
-        'incoming_calls',
-        'Incoming calls',
-        importance: Importance.max,
-        priority: Priority.high,
+        silent ? 'silent_calls' : 'incoming_calls',
+        silent ? 'Silent calls' : 'Incoming calls',
+        importance: silent ? Importance.low : Importance.max,
+        priority: silent ? Priority.low : Priority.high,
         visibility: NotificationVisibility.private,
         category: AndroidNotificationCategory.call,
+        playSound: !silent,
+        enableVibration: !silent,
         timeoutAfter: deadline
             .difference(DateTime.now())
             .inMilliseconds
@@ -93,11 +109,62 @@ Future<void> showIncomingCall(
   );
 }
 
+Future<void> showMissedCall(
+  FlutterLocalNotificationsPlugin local,
+  Map<String, dynamic> activity, {
+  NotificationPrivacy privacy = NotificationPrivacy.generic,
+  String? callerName,
+}) async {
+  final silent = privacy == NotificationPrivacy.silent;
+  final detailed = privacy == NotificationPrivacy.detailed;
+
+  await local
+      .resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin
+      >()
+      ?.createNotificationChannel(
+        AndroidNotificationChannel(
+          silent ? 'silent_activity' : 'missed_calls',
+          silent ? 'Silent updates' : 'Missed calls',
+          importance: silent ? Importance.low : Importance.high,
+          playSound: !silent,
+          enableVibration: !silent,
+        ),
+      );
+
+  final body = detailed && callerName != null
+      ? 'Missed call from $callerName'
+      : (detailed ? 'Missed call' : 'New activity');
+
+  await local.show(
+    id: ('missed:${activity['resource_id']}').hashCode & 0x7fffffff,
+    title: 'Calculator',
+    body: body,
+    notificationDetails: NotificationDetails(
+      android: AndroidNotificationDetails(
+        silent ? 'silent_activity' : 'missed_calls',
+        silent ? 'Silent updates' : 'Missed calls',
+        importance: silent ? Importance.low : Importance.high,
+        priority: silent ? Priority.low : Priority.high,
+        visibility: NotificationVisibility.private,
+        category: AndroidNotificationCategory.missedCall,
+        playSound: !silent,
+        enableVibration: !silent,
+      ),
+    ),
+    payload: jsonEncode(activity),
+  );
+}
+
 class NotificationService extends ChangeNotifier {
-  NotificationService({FlutterLocalNotificationsPlugin? local})
-      : local = local ?? FlutterLocalNotificationsPlugin();
+  NotificationService({FlutterLocalNotificationsPlugin? local, DeviceSettings? settings})
+      : local = local ?? FlutterLocalNotificationsPlugin(),
+        _settings = settings;
   final FlutterLocalNotificationsPlugin local;
   SupabaseClient? _client;
+  DeviceSettings? _settings;
+  NotificationPrivacy get privacy => _settings?.notificationPrivacy ?? NotificationPrivacy.generic;
+  void bindSettings(DeviceSettings settings) => _settings = settings;
   StreamSubscription<AuthState>? _accountChanges;
   String? _boundOwner;
   final _shown = <String>{}, _showing = <String>{};
@@ -137,7 +204,11 @@ class NotificationService extends ChangeNotifier {
     if (_disposed || activity == null || activity['kind'] == 'app_update') return;
     if (activity['recipient_id'] != null && activity['recipient_id'] != _client?.auth.currentUser?.id) return;
     if (activity['kind'] == 'call') {
-      await showIncomingCall(local, activity, message.data['expires_at']);
+      await showIncomingCall(local, activity, message.data['expires_at'], privacy: privacy);
+      return;
+    }
+    if (activity['kind'] == 'missed_call') {
+      await showMissedCall(local, activity, privacy: privacy);
       return;
     }
     final client = _client;
@@ -150,8 +221,9 @@ class NotificationService extends ChangeNotifier {
     final key = '$owner:${NotificationActivity.tag(activity)}';
     if (_shown.contains(key) || _showing.length >= 64 || !_showing.add(key)) return;
     try {
+      dynamic target;
       if (activity['kind'] == 'message') {
-        final target = await client.rpc('notification_message_target', params: {'mid': activity['resource_id']})
+        target = await client.rpc('notification_message_target', params: {'mid': activity['resource_id']})
             .timeout(const Duration(seconds: 10));
         if (target == null) return;
       } else {
@@ -162,13 +234,29 @@ class NotificationService extends ChangeNotifier {
           AuthService.tokenSession(client.auth.currentSession) != session || client.auth.currentSession?.isExpired != false) {
         return;
       }
+      final silent = privacy == NotificationPrivacy.silent;
+      final detailed = privacy == NotificationPrivacy.detailed;
+      String body = NotificationActivity.body(activity);
+      if (detailed && target != null && target is Map && target['sender_id'] != null) {
+        try {
+          final profile = await client.from('profiles').select('display_name').eq('id', target['sender_id']).maybeSingle();
+          if (profile?['display_name'] != null) {
+            body = '${profile!['display_name']}: New message';
+          }
+        } catch (_) {}
+      }
       await local.show(
-        id: 0, title: 'Calculator', body: NotificationActivity.body(activity),
+        id: 0, title: 'Calculator', body: body,
         notificationDetails: NotificationDetails(android: AndroidNotificationDetails(
-          'activity', 'Calculator updates', icon: 'ic_notification',
+          silent ? 'silent_activity' : 'activity',
+          silent ? 'Silent updates' : 'Calculator updates',
+          icon: 'ic_notification',
           tag: NotificationActivity.tag(activity), onlyAlertOnce: true,
-          importance: Importance.high, priority: Priority.high,
+          importance: silent ? Importance.min : Importance.high,
+          priority: silent ? Priority.min : Priority.high,
           visibility: NotificationVisibility.private,
+          playSound: !silent,
+          enableVibration: !silent,
         )), payload: jsonEncode({...activity, 'recipient_id': owner}),
       );
       _shown.add(key);

@@ -34,11 +34,17 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
     _mediaPicker.onInvalidated = (token) {
       if (_pickerToken == token) lock();
     };
+    _channel.setMethodCallHandler((call) async {
+      if (call.method == 'quickLock') {
+        quickLock();
+      }
+    });
     WidgetsBinding.instance.addObserver(this);
   }
   final PinVault vault;
   final BiometricAuthenticator _biometrics;
   final MediaPickerPlatform _mediaPicker;
+  VoidCallback? onRelock;
   String? _pickerToken;
   bool _pickerArmed = false;
   Completer<void>? _pickerResumed;
@@ -223,7 +229,24 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
     if (_disposed) return;
     unlocked = false;
     _timer?.cancel();
+    try {
+      onRelock?.call();
+    } catch (_) {}
     notifyListeners();
+  }
+
+  void quickLock() {
+    if (unlocked) {
+      lock();
+    }
+  }
+
+  Future<void> setShakeToLock(bool enabled) async {
+    try {
+      await _channel.invokeMethod<void>('setShakeToLock', enabled);
+    } on MissingPluginException {
+      /* Desktop/widget tests have no Android window. */
+    } catch (_) {}
   }
 
   // Cancels a disposed calculator's in-flight result without notifying widgets

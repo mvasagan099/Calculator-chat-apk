@@ -85,6 +85,10 @@ abstract interface class CallDevice {
   Future<void> stop(String id);
   Future<bool> projectionConsent();
   Future<void> projection(String session, bool enabled);
+  Future<bool> enterPip();
+  Future<void> closePip();
+  Future<void> startTelecomCall(String id, String callerName, bool isVideo);
+  Future<void> endTelecomCall(String id);
 }
 
 class AndroidCallDevice implements CallDevice {
@@ -109,6 +113,46 @@ class AndroidCallDevice implements CallDevice {
   @override
   Future<void> stop(String id) =>
       channel.invokeMethod<void>('stopCall', {'id': id});
+
+  @override
+  Future<bool> enterPip() async {
+    try {
+      final res = await channel.invokeMethod<bool>('enterPip');
+      return res == true;
+    } on MissingPluginException {
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<void> closePip() async {
+    try {
+      await channel.invokeMethod<void>('closePip');
+    } on MissingPluginException {
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> startTelecomCall(String id, String callerName, bool isVideo) async {
+    try {
+      await channel.invokeMethod<void>('startTelecomCall', {
+        'id': id,
+        'name': callerName,
+        'video': isVideo,
+      });
+    } on MissingPluginException {
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> endTelecomCall(String id) async {
+    try {
+      await channel.invokeMethod<void>('endTelecomCall', {'id': id});
+    } on MissingPluginException {
+    } catch (_) {}
+  }
 }
 
 abstract class CallTransport extends ChangeNotifier {

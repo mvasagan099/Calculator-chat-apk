@@ -42,7 +42,12 @@ class AuthService extends ChangeNotifier {
         _freshUser = null;
         lock.lock();
       }
-      if (nextUser != null) unawaited(refreshDeviceAccess());
+      if (nextUser != null) {
+        _subscribeDeviceRealtime(nextUser);
+        unawaited(refreshDeviceAccess());
+      } else {
+        _unsubscribeDeviceRealtime();
+      }
       if (!_disposed) notifyListeners();
     });
   }
@@ -50,8 +55,41 @@ class AuthService extends ChangeNotifier {
   final LockController lock;
   final SecretStore store;
   StreamSubscription<AuthState>? _subscription;
+  RealtimeChannel? _deviceChannel;
   String? _freshUser;
   String? _sessionUser;
+
+  void _subscribeDeviceRealtime(String uid) {
+    _unsubscribeDeviceRealtime();
+    final c = client;
+    if (c == null) return;
+    try {
+      final ch = c.channel('devices-$uid-${const Uuid().v4()}');
+      _deviceChannel = ch;
+      ch.onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'account_devices',
+        filter: PostgresChangeFilter(
+          type: PostgresChangeFilterType.eq,
+          column: 'user_id',
+          value: uid,
+        ),
+        callback: (_) {
+          if (!_disposed) unawaited(refreshDeviceAccess());
+        },
+      ).subscribe();
+    } catch (_) {}
+  }
+
+  void _unsubscribeDeviceRealtime() {
+    final ch = _deviceChannel;
+    _deviceChannel = null;
+    if (ch != null && client != null) {
+      unawaited(client!.removeChannel(ch));
+    }
+  }
+
   Future<void> _refreshOwner(String? uid) async {
     final owner = await store.read('pin.owner');
     if (_sessionUser == uid) {
@@ -363,6 +401,7 @@ class AuthService extends ChangeNotifier {
     _expiry?.cancel();
     ++_accessGeneration;
     _subscription?.cancel();
+    _unsubscribeDeviceRealtime();
     _accountGateway?.close();
     super.dispose();
   }

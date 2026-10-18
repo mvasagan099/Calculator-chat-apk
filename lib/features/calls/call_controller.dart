@@ -26,11 +26,23 @@ class CallController extends ChangeNotifier {
   ) {
     AndroidCallDevice.channel.setMethodCallHandler((call) async {
       if (call.method == 'endCall' && call.arguments == callId) await end();
+      if (call.method == 'pipChanged') {
+        inPip = call.arguments == true;
+        _notify();
+      }
+      if (call.method == 'telecomAnswer' && call.arguments == callId) {
+        await accept();
+      }
+      if (call.method == 'telecomReject' && call.arguments == callId) {
+        await reject();
+      }
     });
   }
   final CallBackend backend;
   final CallDevice device;
   final CallTransport Function() createTransport;
+  bool inPip = false;
+  void Function(Map<String, dynamic> metadata)? onMissedCall;
   Room? get room => _attempt?.transport?.room;
   bool get finished => _ended;
   bool get joined =>
@@ -42,6 +54,33 @@ class CallController extends ChangeNotifier {
   int _sharingEpoch = 0;
   bool get reconnecting => _attempt?.transport?.reconnecting ?? false;
   String? callId;
+
+  Future<bool> enterPip() async {
+    if (_disposed || _ended || !joined) return false;
+    final res = await device.enterPip();
+    if (res) {
+      inPip = true;
+      _notify();
+    }
+    return res;
+  }
+
+  Future<void> closePip() async {
+    inPip = false;
+    await device.closePip();
+    _notify();
+  }
+
+  Future<void> handleRelock() async {
+    if (inPip) {
+      await closePip();
+    }
+    if (camera) {
+      camera = false;
+      await _attempt?.transport?.camera(false);
+    }
+    _notify();
+  }
   Map<String, dynamic>? metadata;
   StreamSubscription<List<Map<String, dynamic>>>? _subscription;
   Timer? _ticker, _endRetry;
@@ -123,8 +162,32 @@ class CallController extends ChangeNotifier {
               _notify();
               return;
             }
+            final previousState = metadata?['state'];
+            final previousSelf = metadata?['self_state'];
             metadata = rows.first;
             final state = metadata!['state'];
+            final selfState = metadata?['self_state'];
+            if (previousState != 'ringing' &&
+                state == 'ringing' &&
+                metadata?['caller_id'] != backend.userId) {
+              unawaited(
+                device
+                    .startTelecomCall(
+                      id,
+                      metadata?['caller_name'] as String? ?? 'Caller',
+                      metadata?['video'] == true,
+                    )
+                    .catchError((Object _) {}),
+              );
+            }
+            if (previousState == 'ringing' &&
+                (state == 'cancelled' || state == 'timeout' || state == 'missed' || selfState == 'missed') &&
+                previousSelf == 'invited' &&
+                metadata?['caller_id'] != backend.userId) {
+              try {
+                onMissedCall?.call(metadata!);
+              } catch (_) {}
+            }
             if (!['ringing', 'accepted'].contains(state) ||
                 [
                   'removed',
@@ -483,8 +546,12 @@ class CallController extends ChangeNotifier {
 
   Future<void> disconnect() async {
     ++_sharingEpoch;
+    if (inPip) await closePip();
     final previous = _attempt;
     final id = callId;
+    if (id != null) {
+      unawaited(device.endTelecomCall(id).catchError((Object _) {}));
+    }
     _attempt = null;
     connecting = false;
     if (previous != null && id != null) await _close(previous);

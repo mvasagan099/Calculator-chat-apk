@@ -76,4 +76,24 @@ class DeviceAccessService {
       throw StateError('Device security update failed');
     }
   }
+
+  Future<void> renameDevice(String targetId, String newName) async {
+    await client.rpc(
+      'rename_account_device',
+      params: {'target': targetId, 'new_name': newName.trim()},
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> fetchDevices() async {
+    final uid = client.auth.currentUser?.id;
+    if (uid == null) return [];
+    final rows = await client
+        .from('account_devices')
+        .select(
+          'id,session_id,device_id,name,last_seen_at,approved_at,revoked_at,request_expires_at,requested_at',
+        )
+        .eq('user_id', uid)
+        .order('requested_at', ascending: false);
+    return List<Map<String, dynamic>>.from(rows);
+  }
 }

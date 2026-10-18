@@ -90,6 +90,31 @@ class TestDevice implements CallDevice {
     stopped.add(id);
     if (active == id) active = null;
   }
+
+  bool pipActive = false;
+  final telecomStarted = <String>[];
+  final telecomEnded = <String>[];
+
+  @override
+  Future<bool> enterPip() async {
+    pipActive = true;
+    return true;
+  }
+
+  @override
+  Future<void> closePip() async {
+    pipActive = false;
+  }
+
+  @override
+  Future<void> startTelecomCall(String id, String callerName, bool isVideo) async {
+    telecomStarted.add('$id:$callerName:$isVideo');
+  }
+
+  @override
+  Future<void> endTelecomCall(String id) async {
+    telecomEnded.add(id);
+  }
 }
 
 class TestTransport extends CallTransport {
