@@ -82,7 +82,7 @@ class StructuredContent extends ConsumerWidget {
                     children: [
                       Icon(Icons.broken_image),
                       SizedBox(width: 8),
-                      Text('GIF unavailable'),
+                      Flexible(child: Text('GIF unavailable', overflow: TextOverflow.ellipsis)),
                     ],
                   ),
                 ),

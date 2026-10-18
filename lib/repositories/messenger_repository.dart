@@ -945,10 +945,17 @@ class MessengerRepository {
           item['body'] as String,
           kind: item['kind'] as String? ?? 'text',
         );
+      } catch (_) {
+        // Re-queue only if local outbox persistence actually failed.
+        remaining.add(item);
+        continue;
+      }
+      // A remote cleanup error must not re-queue a message already committed
+      // to the encrypted outbox, where it would otherwise be sent twice.
+      try {
         await client.from('scheduled_messages').delete().eq('id', item['id']);
       } catch (_) {
-        // Re-queue if delivery failed
-        remaining.add(item);
+        // Retry remote cleanup independently; local send remains committed.
       }
     }
     scope.cache.data['scheduled_messages'] = remaining;

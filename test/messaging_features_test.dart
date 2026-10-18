@@ -798,9 +798,11 @@ void main() {
       expect(votesReceived.first['mid'], 'msg-poll-live');
       expect(votesReceived.first['option_index'], 0);
 
-      await repo.dispose();
-      await client.dispose();
-    });
+      // Dispose the widget tree before closing the repository it reads.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await repo.dispose().timeout(const Duration(seconds: 20));
+      await client.dispose().timeout(const Duration(seconds: 20));
+    }, timeout: const Timeout(Duration(minutes: 1)));
 
     testWidgets('StructuredContent renders sticker and gif content properly', (tester) async {
       final stickerMessage = ChatMessage(
