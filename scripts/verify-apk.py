@@ -115,8 +115,12 @@ def metadata(badging, target, manifest_tree=None):
         raise ValueError('Target SDK is missing from aapt2 badging output')
     if int(target_api[1]) != target:
         raise ValueError(f'Target SDK mismatch: expected {target}, found {target_api[1]}')
+    # An enabled activity-alias can be a valid launcher even when aapt2 badging
+    # does not emit a launchable-activity line. Validate the compiled manifest
+    # rather than accepting the source XML or bypassing launcher verification.
     if not re.search(r'^launchable-activity:', badging, re.MULTILINE):
-        raise ValueError('No launchable activity in aapt2 badging output')
+        if not manifest_tree or not compiled_launcher_alias(manifest_tree):
+            raise ValueError('No launchable activity in aapt2 badging output or valid launcher alias in compiled manifest')
     return {'package': package[1], 'min_sdk': int(minimum[1]), 'target_sdk': int(target_api[1])}
 
 
@@ -150,8 +154,13 @@ def main():
         signature = subprocess.run([str(tools / 'apksigner'), 'verify', '--verbose', '--print-certs', str(args.apk)], check=True, capture_output=True, text=True, timeout=60).stdout
         stage = 'aapt2 badging extraction'
         badging = subprocess.run([str(tools / 'aapt2'), 'dump', 'badging', str(args.apk)], check=True, capture_output=True, text=True, timeout=60).stdout
-        stage = 'package and SDK metadata'
-        result = metadata(badging, args.target_sdk)
+        stage = 'compiled AndroidManifest.xml extraction'
+        manifest_tree = subprocess.run(
+            [str(tools / 'aapt2'), 'dump', 'xmltree', str(args.apk), '--file', 'AndroidManifest.xml'],
+            check=True, capture_output=True, text=True, timeout=60,
+        ).stdout
+        stage = 'package, SDK and launcher metadata'
+        result = metadata(badging, args.target_sdk, manifest_tree)
         stage = 'signing certificate digest'
         result['certificate_sha256'] = certificate(signature, args.variant, args.expected_cert_sha256)
         stage = 'private credential and archive safety scan'
