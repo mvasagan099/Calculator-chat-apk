@@ -249,8 +249,9 @@ class VaultService {
           version: 1,
           singleInstance: false,
           onConfigure: (database) async {
-            await database.rawQuery('PRAGMA journal_mode=WAL');
-            await database.execute('PRAGMA synchronous=FULL');
+            // journal_mode is configured by sqflite on Android; changing it
+            // from inside onConfigure can fail while the open transaction is
+            // active, preventing an otherwise healthy local vault from opening.
             await database.execute('PRAGMA secure_delete=ON');
           },
           onCreate: (database, _) async {
