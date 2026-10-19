@@ -652,6 +652,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 MaterialPageRoute(builder: (_) => const StorageManagerScreen()),
               ),
             ),
+            // Keep recovery details off the chat list. Never discard the
+            // encrypted database or promise offline sends in online-only mode.
+            if (ref.read(messengerProvider).onlineOnly)
+              ListTile(
+                leading: const Icon(Icons.storage_outlined),
+                title: const Text('Local storage recovery'),
+                subtitle: const Text(
+                  'Encrypted drafts preserved · Offline messaging unavailable',
+                ),
+                onTap: () => showDialog<void>(
+                  context: context,
+                  builder: (dialogContext) => AlertDialog(
+                    title: const Text('Local storage needs recovery'),
+                    content: Text(
+                      'Recovery stage: ${ref.read(messengerProvider).cacheRecoveryStage ?? 'unknown'}. '
+                      'The encrypted cache could not be opened. Your existing '
+                      'encrypted drafts have been preserved. Chats can use '
+                      'server data, but new sends need a working connection. '
+                      'Do not clear app data or uninstall if you need to '
+                      'recover unsent messages.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        child: const Text('Close'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ListTile(
               leading: const Icon(Icons.high_quality_outlined),
               title: const Text('Media upload compression'),

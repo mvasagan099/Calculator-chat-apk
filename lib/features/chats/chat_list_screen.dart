@@ -474,15 +474,6 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       ),
       body: Column(
         children: [
-          if (ref.read(messengerProvider).onlineOnly)
-            ListTile(
-              dense: true,
-              leading: const Icon(Icons.lock_outline),
-              title: const Text('Encrypted cache needs recovery'),
-              subtitle: Text(
-                'Stage: ${ref.read(messengerProvider).cacheRecoveryStage ?? 'unknown'}. Chats use server data; existing encrypted drafts are preserved. New sends need a connection.',
-              ),
-            ),
           const MessageYourselfTile(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
