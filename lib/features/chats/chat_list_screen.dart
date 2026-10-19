@@ -8,7 +8,6 @@ import '../../core/widgets/actions.dart';
 import '../../core/widgets/private_scaffold.dart';
 import '../../providers/app_providers.dart';
 import '../messaging/starred_messages_screen.dart';
-import 'message_yourself_tile.dart';
 
 class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
@@ -474,7 +473,6 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
       ),
       body: Column(
         children: [
-          const MessageYourselfTile(),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
             child: SearchBar(
