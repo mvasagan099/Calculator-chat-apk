@@ -1005,6 +1005,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             }
           }),
         ),
+        ExpirationBanner(cid: widget.id, canChange: direct || admin),
         if (detailsLoaded && !selfChat) for (final video in [false, true])
           IconButton(
             tooltip: video ? 'Video call' : 'Voice call',
@@ -1050,14 +1051,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       style: wallpaper,
       child: Column(
         children: [
-          if (ref.read(messengerProvider).onlineOnly)
-            ListTile(
-              dense: true,
-              leading: const Icon(Icons.lock_outline),
-              title: const Text('Online-only recovery mode'),
-              subtitle: Text('Stage: ${ref.read(messengerProvider).cacheRecoveryStage ?? 'unknown'}. Encrypted drafts are untouched. New attachments require server confirmation.'),
-            ),
-          ExpirationBanner(cid: widget.id, canChange: direct || admin),
           if (uploading) LinearProgressIndicator(value: uploadProgress),
           if (searchResults != null)
             ListTile(

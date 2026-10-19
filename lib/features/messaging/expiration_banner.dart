@@ -42,41 +42,57 @@ class _ExpirationBannerState extends ConsumerState<ExpirationBanner> {
     builder: (context, snapshot) {
       final seconds = snapshot.data?['disappearing_seconds'] as int?;
       if (seconds != null) {
+        // Preserve the local expiry policy used by offline messages.
         ref.read(messengerProvider).rememberExpiration(widget.cid, seconds);
       }
-      return ListTile(
-        dense: true,
-        leading: const Icon(Icons.timer_outlined, size: 20),
-        title: Text(
-          seconds == null
-              ? 'Message expiration unavailable'
-              : 'Disappearing messages · ${expirationLabel(seconds)}',
+      final status = seconds == null ? 'Unavailable' : expirationLabel(seconds);
+      return PopupMenuButton<int>(
+        tooltip: 'Disappearing messages: $status',
+        icon: Icon(
+          Icons.timer_outlined,
+          color: seconds != null && seconds > 0
+              ? Theme.of(context).colorScheme.primary
+              : null,
         ),
-        subtitle: seconds != null && seconds > 0
-            ? const Text(
-                'Applies to new messages. Copies outside this app may remain.',
-              )
-            : null,
-        trailing: widget.canChange
-            ? PopupMenuButton<int>(
-                tooltip: 'Set message expiration',
-                itemBuilder: (_) => [
-                  for (final value in [0, 86400, 604800, 2592000])
-                    PopupMenuItem(
-                      value: value,
-                      child: Text(expirationLabel(value)),
-                    ),
+        itemBuilder: (_) => [
+          PopupMenuItem<int>(
+            enabled: false,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Disappearing messages',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 4),
+                Text('Current: $status'),
+                const SizedBox(height: 4),
+                const Text('Applies to new messages. Copies outside this app may remain.'),
+                if (!widget.canChange)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text('Only permitted participants can change this setting.'),
+                  ),
+              ],
+            ),
+          ),
+          const PopupMenuDivider(),
+          for (final value in [0, 86400, 604800, 2592000])
+            PopupMenuItem<int>(
+              value: value,
+              enabled: widget.canChange && seconds != null,
+              child: Row(
+                children: [
+                  Expanded(child: Text(expirationLabel(value))),
+                  if (seconds == value) const Icon(Icons.check, size: 18),
                 ],
-                onSelected: (value) => act(context, () async {
-                  await ref
-                      .read(supabaseProvider)
-                      .rpc(
-                        'set_disappearing_policy',
-                        params: {'cid': widget.cid, 'seconds': value},
-                      );
-                }),
-              )
-            : null,
+              ),
+            ),
+        ],
+        onSelected: (value) => act(context, () async {
+          await ref.read(supabaseProvider).rpc(
+            'set_disappearing_policy',
+            params: {'cid': widget.cid, 'seconds': value},
+          );
+        }),
       );
     },
   );
