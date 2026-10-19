@@ -189,6 +189,15 @@ class EncryptedMediaCache {
       if (entry is! File) continue;
       try {
         final size = await entry.length();
+        // Concurrent downloads may be writing encrypted .tmp payloads.
+        // Never delete live writers' files during eviction.
+        if (entry.path.endsWith('.tmp')) {
+          if ((await entry.lastModified()).isBefore(
+              clock().subtract(const Duration(hours: 1)))) {
+            await entry.delete();
+          }
+          continue;
+        }
         if (!entry.path.endsWith('.bin') || size < 36 ||
             size > 25 * 1024 * 1024 + 36) {
           await entry.delete();

@@ -322,6 +322,10 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
       expiresAt: _attachmentExpiry,
     );
     try {
+      if (!_canUsePrivateMedia ||
+          (_attachmentExpiry != null && !_attachmentExpiry!.isAfter(DateTime.now()))) {
+        return;
+      }
       await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     } finally {
       bytes.fillRange(0, bytes.length, 0);
@@ -362,6 +366,10 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
       expiresAt: _attachmentExpiry,
     );
     try {
+      if (!_canUsePrivateMedia ||
+          (_attachmentExpiry != null && !_attachmentExpiry!.isAfter(DateTime.now()))) {
+        return;
+      }
       await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
     } finally {
       bytes.fillRange(0, bytes.length, 0);

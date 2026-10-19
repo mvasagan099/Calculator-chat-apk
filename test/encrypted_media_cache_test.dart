@@ -106,6 +106,24 @@ void main() {
     } finally { await root.delete(recursive: true); }
   });
 
+  test('parallel writes preserve both encrypted cache entries', () async {
+    final folder = await Directory.systemTemp.createTemp('encrypted-media-parallel');
+    try {
+      final cache = EncryptedMediaCache(directory: folder, secretStore: MemoryKeyStore());
+      final expires = DateTime.now().add(const Duration(hours: 1));
+      final first = attachment(expires, objectPath: 'chat/one');
+      final second = attachment(expires, objectPath: 'chat/two');
+      await Future.wait([
+        cache.write(owner: 'alice', attachment: first, bytes: Uint8List(5)),
+        cache.write(owner: 'alice', attachment: second, bytes: Uint8List(5)),
+      ]);
+      expect(await cache.read(owner: 'alice', attachment: first), isNotNull);
+      expect(await cache.read(owner: 'alice', attachment: second), isNotNull);
+    } finally {
+      await folder.delete(recursive: true);
+    }
+  });
+
   test('audio is eligible; missing visual deadline and view-once are excluded', () {
     expect(EncryptedMediaCache.eligible(attachment(null)), isFalse);
     expect(EncryptedMediaCache.eligible(attachment(null, mime: 'audio/mp4')), isTrue);
