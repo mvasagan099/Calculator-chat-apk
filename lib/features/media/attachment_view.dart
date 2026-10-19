@@ -39,14 +39,24 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
     with WidgetsBindingObserver {
   late final lock = ref.read(lockProvider);
   File? _audioTemp;
+  Timer? _audioExpiry;
+
+  DateTime? get _attachmentExpiry {
+    final media = attachmentDeadline(attachment);
+    final message = DateTime.tryParse(attachment['expires_at']?.toString() ?? '');
+    if (media == null) return message;
+    return message != null && message.isBefore(media) ? message : media;
+  }
+
+  bool get _canUsePrivateMedia =>
+      mounted &&
+      lock.unlocked &&
+      ref.read(authServiceProvider)?.signedIn == true &&
+      ref.read(authServiceProvider)?.deviceAuthorized == true;
 
   MediaService _media() => MediaService(
     widget.client,
-    canUseLocalCache: () =>
-        mounted &&
-        lock.unlocked &&
-        ref.read(authServiceProvider)?.signedIn == true &&
-        ref.read(authServiceProvider)?.deviceAuthorized == true,
+    canUseLocalCache: () => _canUsePrivateMedia,
   );
 
   void _locked() {
@@ -59,6 +69,8 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
   }
 
   Future<void> _releaseAudio() async {
+    _audioExpiry?.cancel();
+    _audioExpiry = null;
     final current = player;
     player = null;
     final temp = _audioTemp;
@@ -132,6 +144,10 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
 
   Future<void> play() async {
     if (preparingAudio) return;
+    final expiry = _attachmentExpiry;
+    if (expiry != null && !expiry.isAfter(DateTime.now())) {
+      throw StateError('Audio expired');
+    }
     AudioPlayer? current = player;
     if (current == null) {
       setState(() {
@@ -156,8 +172,8 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
       });
       try {
         final data = await _media().download(attachment);
-        if (!mounted || !lock.unlocked ||
-            ref.read(authServiceProvider)?.deviceAuthorized != true) {
+        if (!_canUsePrivateMedia ||
+            (expiry != null && !expiry.isAfter(DateTime.now()))) {
           data.fillRange(0, data.length, 0);
           throw StateError('Private audio is locked');
         }
@@ -166,16 +182,25 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
         final file = await PrivateMediaFiles().save(
           data,
           extension: extension,
-          expiresAt: attachmentDeadline(attachment),
+          expiresAt: expiry,
         );
         data.fillRange(0, data.length, 0);
-        if (!mounted || !lock.unlocked) {
+        if (!_canUsePrivateMedia ||
+            (expiry != null && !expiry.isAfter(DateTime.now()))) {
           await file.delete();
           throw StateError('Private audio is locked');
         }
         _audioTemp = file;
         await current.setFilePath(file.path);
-        if (!mounted || !lock.unlocked) throw StateError('Audio closed');
+        if (!_canUsePrivateMedia) throw StateError('Audio closed');
+        if (expiry != null) {
+          final remaining = expiry.difference(DateTime.now());
+          if (!remaining.isNegative) {
+            _audioExpiry = Timer(remaining, () => unawaited(_releaseAudio()));
+          } else {
+            throw StateError('Audio expired');
+          }
+        }
         await current.setSpeed(speed);
       } catch (_) {
         if (mounted) {
@@ -242,7 +267,11 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
       } finally {
         if (mounted) setState(() => downloading = false);
       }
-      if (!mounted) return;
+      if (!_canUsePrivateMedia ||
+          (_attachmentExpiry != null && !_attachmentExpiry!.isAfter(DateTime.now()))) {
+        bytes.fillRange(0, bytes.length, 0);
+        return;
+      }
       final text = utf8.decode(bytes, allowMalformed: true);
       bytes.fillRange(0, bytes.length, 0);
       Navigator.of(context).push(
@@ -250,7 +279,7 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
           builder: (_) => TextDocumentViewer(
             filename: filename,
             content: text,
-            expiresAt: attachmentDeadline(a),
+            expiresAt: _attachmentExpiry,
           ),
         ),
       );
@@ -279,14 +308,15 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
     } finally {
       if (mounted) setState(() => downloading = false);
     }
-    if (!mounted || visualAttachmentExpired(a, DateTime.now())) {
+    if (!_canUsePrivateMedia ||
+        (_attachmentExpiry != null && !_attachmentExpiry!.isAfter(DateTime.now()))) {
       bytes.fillRange(0, bytes.length, 0);
       return;
     }
     final file = await PrivateMediaFiles().save(
       bytes,
       extension: ext,
-      expiresAt: attachmentDeadline(a),
+      expiresAt: _attachmentExpiry,
     );
     try {
       await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
