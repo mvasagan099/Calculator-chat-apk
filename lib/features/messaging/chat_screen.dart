@@ -29,6 +29,7 @@ import 'sticker_gif_picker.dart';
 import 'scheduled_messages_sheet.dart';
 import 'starred_messages_screen.dart';
 import 'message_edit_history_sheet.dart';
+import '../vault/save_to_vault_action.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key, required this.id});
@@ -90,6 +91,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           }
         },
       );
+    }
+  }
+
+  final _autoDownloadedPaths = <String>{};
+
+  void _triggerAutoDownloads(List<ChatMessage> list) {
+    final settings = ref.read(deviceSettingsProvider);
+    if (settings == null) return;
+    final lock = ref.read(lockProvider);
+    if (!lock.unlocked) return;
+
+    for (final m in list) {
+      if (m.attachment == null || m.viewOnce || m.expired) continue;
+      final path = m.attachment!['object_path'] as String?;
+      if (path == null || _autoDownloadedPaths.contains(path)) continue;
+
+      final mime = (m.attachment!['mime_type'] as String?)?.toLowerCase() ?? '';
+      String type = 'document';
+      if (mime.startsWith('image/')) {
+        type = 'image';
+      } else if (mime.startsWith('video/')) {
+        type = 'video';
+      } else if (mime.startsWith('audio/')) {
+        type = 'audio';
+      }
+
+      unawaited(() async {
+        if (await settings.checkAutoDownload(type)) {
+          _autoDownloadedPaths.add(path);
+          try {
+            final media = MediaService(
+              ref.read(supabaseProvider),
+              canUseLocalCache: () => mounted && ref.read(lockProvider).unlocked,
+            );
+            await media.download(m.attachment!);
+          } catch (_) {}
+        }
+      }());
     }
   }
 
@@ -624,6 +663,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 });
               },
             ),
+            if (m.attachment != null)
+              ListTile(
+                leading: const Icon(Icons.lock_outline),
+                title: const Text('Save to Private Vault'),
+                onTap: () {
+                  Navigator.pop(c);
+                  act(context, () => saveChatAttachmentToVault(
+                    context: context,
+                    ref: ref,
+                    client: ref.read(supabaseProvider),
+                    attachment: m.attachment!,
+                  ));
+                },
+              ),
             if (own &&
                 m.kind == 'text' &&
                 DateTime.now().difference(m.createdAt) <
@@ -1069,6 +1122,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   for (final m in s.data ?? <ChatMessage>[]) m.id: m,
                 };
                 scheduleRetention(merged.values.toList());
+                _triggerAutoDownloads(merged.values.toList());
                 final rows =
                     searchResults?.where((m) => !m.expired).toList() ??
                     (merged.values

@@ -1,5 +1,6 @@
 import '../../core/security/local_retention.dart';
 import '../../core/security/encrypted_media_cache.dart';
+import '../../core/security/media_cache_service.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
@@ -25,12 +26,18 @@ class MediaService {
     this.access,
     this.canUseLocalCache,
     EncryptedMediaCache? cache,
+    this.mediaCacheService,
   }) : cache = cache ?? _sharedCache;
 
   /// Only an unlocked and approved private UI may use encrypted local media.
   final bool Function()? canUseLocalCache;
   final EncryptedMediaCache cache;
+  final MediaCacheService? mediaCacheService;
   static final EncryptedMediaCache _sharedCache = EncryptedMediaCache();
+  static MediaCacheService? _sharedMediaCacheService;
+
+  MediaCacheService get mediaCache =>
+      mediaCacheService ?? (_sharedMediaCacheService ??= MediaCacheService());
 
   final PrivateMediaAccess? access;
   final void Function(double)? onProgress;
@@ -38,10 +45,7 @@ class MediaService {
 
   bool _cacheAuthorized(String? owner, String? token) =>
       owner != null &&
-      token != null &&
-      client.auth.currentUser?.id == owner &&
-      client.auth.currentSession?.accessToken == token &&
-      client.auth.currentSession?.isExpired == false &&
+      (client.auth.currentUser?.id == null || client.auth.currentUser?.id == owner) &&
       (canUseLocalCache?.call() ?? false);
 
   Future<Uint8List?> _cached(
@@ -50,25 +54,62 @@ class MediaService {
     Map<String, dynamic> attachment,
     void Function(double)? progress,
   ) async {
-    if (!_cacheAuthorized(owner, token) ||
-        !EncryptedMediaCache.eligible(attachment)) {
-      return null;
-    }
-    Uint8List? result;
+    if (!_cacheAuthorized(owner, token)) return null;
+    final path = attachment['object_path'] as String?;
+    if (path == null || path.isEmpty) return null;
+
+    // Check centralized persistent MediaCacheService first
     try {
-      result = await cache.read(owner: owner!, attachment: attachment);
-    } catch (_) {
-      // Cache/key errors never break the authenticated server fallback.
-      return null;
+      final cachedBytes = await mediaCache.getCachedBytes(
+        accountId: owner!,
+        objectPath: path,
+      );
+      if (cachedBytes != null) {
+        progress?.call(1);
+        return cachedBytes;
+      }
+    } catch (_) {}
+
+    // Fall back to legacy EncryptedMediaCache if eligible
+    if (EncryptedMediaCache.eligible(attachment)) {
+      Uint8List? result;
+      try {
+        result = await cache.read(owner: owner!, attachment: attachment);
+      } catch (_) {
+        return null;
+      }
+      if (result != null) {
+        if (!_cacheAuthorized(owner, token) ||
+            !cache.expiration(attachment).isAfter(DateTime.now())) {
+          result.fillRange(0, result.length, 0);
+          throw StateError('Media unavailable');
+        }
+        final mime = attachment['mime_type']?.toString() ?? 'application/octet-stream';
+        final mediaType = mime.startsWith('image/')
+            ? 'image'
+            : mime.startsWith('video/')
+            ? 'video'
+            : mime.startsWith('audio/')
+            ? 'audio'
+            : 'document';
+        final nonNullBytes = result;
+        unawaited(() async {
+          try {
+            await mediaCache.storeMedia(
+              accountId: owner,
+              mediaType: mediaType,
+              objectPath: path,
+              mimeType: mime,
+              bytes: nonNullBytes,
+              expiresAt: attachmentDeadline(attachment),
+            );
+          } catch (_) {}
+        }());
+        progress?.call(1);
+        return result;
+      }
     }
-    if (result == null) return null;
-    if (!_cacheAuthorized(owner, token) ||
-        !cache.expiration(attachment).isAfter(DateTime.now())) {
-      result.fillRange(0, result.length, 0);
-      throw StateError('Media unavailable');
-    }
-    progress?.call(1);
-    return result;
+    return null;
   }
 
   Future<void> _remember(
@@ -77,14 +118,34 @@ class MediaService {
     Map<String, dynamic> attachment,
     Uint8List bytes,
   ) async {
-    if (!_cacheAuthorized(owner, token) ||
-        !EncryptedMediaCache.eligible(attachment)) {
-      return;
-    }
+    if (!_cacheAuthorized(owner, token)) return;
+    final path = attachment['object_path'] as String?;
+    if (path == null || path.isEmpty) return;
+
+    final mime = attachment['mime_type']?.toString() ?? 'application/octet-stream';
+    final mediaType = mime.startsWith('image/')
+        ? 'image'
+        : mime.startsWith('video/')
+        ? 'video'
+        : mime.startsWith('audio/')
+        ? 'audio'
+        : 'document';
+
     try {
-      await cache.write(owner: owner!, attachment: attachment, bytes: bytes);
-    } catch (_) {
-      // Downloads still work when local secure storage is unavailable.
+      await mediaCache.storeMedia(
+        accountId: owner!,
+        mediaType: mediaType,
+        objectPath: path,
+        mimeType: mime,
+        bytes: bytes,
+        expiresAt: attachmentDeadline(attachment),
+      );
+    } catch (_) {}
+
+    if (EncryptedMediaCache.eligible(attachment)) {
+      try {
+        await cache.write(owner: owner!, attachment: attachment, bytes: bytes);
+      } catch (_) {}
     }
   }
   static const maxBytes = 25 * 1024 * 1024;
@@ -207,15 +268,20 @@ class MediaService {
     if (check.status != 200) {
       throw StateError('Media validation failed');
     }
+    final uploadData = {
+      'object_path': path,
+      if (check.data is Map && check.data['media_expires_at'] != null)
+        'media_expires_at': check.data['media_expires_at'],
+      'filename': name,
+      'mime_type': outputMime,
+      'size_bytes': bytes.length,
+    };
+    final owner = client.auth.currentUser?.id;
+    if (owner != null) {
+      unawaited(_remember(owner, token, uploadData, bytes));
+    }
     return MediaUpload(
-      {
-        'object_path': path,
-        if (check.data is Map && check.data['media_expires_at'] != null)
-          'media_expires_at': check.data['media_expires_at'],
-        'filename': name,
-        'mime_type': outputMime,
-        'size_bytes': bytes.length,
-      },
+      uploadData,
       forcedKind ??
           (mime.startsWith('image/')
               ? 'image'
@@ -243,22 +309,32 @@ class MediaService {
     }
     final owner = client.auth.currentUser?.id;
     final token = client.auth.currentSession?.accessToken;
+
+    // 1. Check local encrypted cache first for ALL media types!
+    final cached = await _cached(owner, token, attachment, onProgress);
+    if (cached != null) return cached;
+
     if (mime.startsWith('image/') || mime.startsWith('video/')) {
       if (visualAttachmentExpired(attachment, DateTime.now())) throw StateError('Media expired');
       final session = token;
-      // The server remains authoritative for visual media on every open.
-      final trusted = await client.rpc('chat_media_deadline', params: {'path': attachment['object_path']});
-      final trustedExpiry = trusted is Map ? DateTime.tryParse(trusted['expires_at']?.toString() ?? '') : null;
-      if (trustedExpiry == null) throw StateError('Media unavailable');
-      final previous = attachmentDeadline(attachment);
-      if (previous == null || trustedExpiry.isBefore(previous)) {
-        attachment['media_expires_at'] = trustedExpiry.toUtc().toIso8601String();
+      try {
+        final trusted = await client.rpc('chat_media_deadline', params: {'path': attachment['object_path']});
+        final trustedExpiry = trusted is Map ? DateTime.tryParse(trusted['expires_at']?.toString() ?? '') : null;
+        if (trustedExpiry != null) {
+          final previous = attachmentDeadline(attachment);
+          if (previous == null || trustedExpiry.isBefore(previous)) {
+            attachment['media_expires_at'] = trustedExpiry.toUtc().toIso8601String();
+          }
+        }
+      } catch (e) {
+        // If offline and uncached, report unavailable offline
+        if (_isTransientNetworkFailure(e)) {
+          throw StateError('Media unavailable offline: connect to download');
+        }
       }
       if (session == null || visualAttachmentExpired(attachment, DateTime.now())) {
         throw StateError('Media unavailable');
       }
-      final cached = await _cached(owner, session, attachment, onProgress);
-      if (cached != null) return cached;
 
       late final Uint8List bytes;
       int attempts = 0;
@@ -297,11 +373,6 @@ class MediaService {
       onProgress?.call(1);
       return bytes;
     }
-
-    // Nonvisual attachments are reusable offline after local PIN and
-    // account/device authorization. A cache miss uses a fresh signed URL.
-    final cached = await _cached(owner, token, attachment, onProgress);
-    if (cached != null) return cached;
 
     int attempts = 0;
     while (true) {

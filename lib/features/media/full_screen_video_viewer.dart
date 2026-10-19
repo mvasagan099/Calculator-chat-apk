@@ -3,8 +3,10 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:video_player/video_player.dart';
 import '../../core/widgets/actions.dart';
+import '../vault/save_to_vault_action.dart';
 import 'private_media_guard.dart';
 
 class FullScreenVideoViewer extends ConsumerStatefulWidget {
@@ -14,12 +16,16 @@ class FullScreenVideoViewer extends ConsumerStatefulWidget {
     this.expiresAt,
     this.filename,
     this.initialPosition,
+    this.attachment,
+    this.client,
   });
 
   final File file;
   final DateTime? expiresAt;
   final String? filename;
   final Duration? initialPosition;
+  final Map<String, dynamic>? attachment;
+  final SupabaseClient? client;
 
   @override
   ConsumerState<FullScreenVideoViewer> createState() =>
@@ -116,6 +122,26 @@ class _FullScreenVideoViewerState extends ConsumerState<FullScreenVideoViewer> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 actions: [
+                  IconButton(
+                    tooltip: 'Save to Vault',
+                    icon: const Icon(Icons.lock_outline, color: Colors.white),
+                    onPressed: () => act(context, () async {
+                      final client = widget.client ?? Supabase.instance.client;
+                      final bytes = await widget.file.readAsBytes();
+                      if (!context.mounted) return;
+                      await saveChatAttachmentToVault(
+                        context: context,
+                        ref: ref,
+                        client: client,
+                        attachment: widget.attachment ?? {
+                          'filename': widget.filename ?? 'video.mp4',
+                          'mime_type': 'video/mp4',
+                          'size_bytes': bytes.length,
+                        },
+                        preloadedBytes: bytes,
+                      );
+                    }),
+                  ),
                   IconButton(
                     tooltip: 'Share',
                     icon: _sharing

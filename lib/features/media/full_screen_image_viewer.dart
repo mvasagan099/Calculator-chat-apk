@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/security/private_media_files.dart';
 import '../../core/widgets/actions.dart';
+import '../vault/save_to_vault_action.dart';
 import 'private_media_guard.dart';
 
 class FullScreenImageViewer extends ConsumerStatefulWidget {
@@ -136,6 +137,24 @@ class _FullScreenImageViewerState extends ConsumerState<FullScreenImageViewer> {
                   _transformController.value = Matrix4.identity();
                 },
               ),
+            IconButton(
+              tooltip: 'Save to Vault',
+              icon: const Icon(Icons.lock_outline, color: Colors.white),
+              onPressed: () => act(context, () async {
+                final client = widget.client ?? Supabase.instance.client;
+                await saveChatAttachmentToVault(
+                  context: context,
+                  ref: ref,
+                  client: client,
+                  attachment: widget.attachment ?? {
+                    'filename': widget.filename ?? 'image.jpg',
+                    'mime_type': 'image/jpeg',
+                    'size_bytes': widget.sizeBytes ?? _imageBytes.length,
+                  },
+                  preloadedBytes: _imageBytes,
+                );
+              }),
+            ),
             IconButton(
               tooltip: 'Share',
               icon: _sharing

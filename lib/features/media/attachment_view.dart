@@ -14,6 +14,7 @@ import '../../providers/app_providers.dart';
 import 'document_viewer.dart';
 import 'expiring_attachment_view.dart';
 import 'media_service.dart';
+import '../vault/save_to_vault_action.dart';
 
 class AttachmentView extends ConsumerStatefulWidget {
   const AttachmentView({
@@ -37,7 +38,6 @@ class AttachmentView extends ConsumerStatefulWidget {
 
 class _AttachmentViewState extends ConsumerState<AttachmentView>
     with WidgetsBindingObserver {
-  late final lock = ref.read(lockProvider);
   File? _audioTemp;
   Timer? _audioExpiry;
 
@@ -48,11 +48,18 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
     return message != null && message.isBefore(media) ? message : media;
   }
 
-  bool get _canUsePrivateMedia =>
-      mounted &&
-      lock.unlocked &&
-      ref.read(authServiceProvider)?.signedIn == true &&
-      ref.read(authServiceProvider)?.deviceAuthorized == true;
+  bool get _canUsePrivateMedia {
+    if (!mounted) return false;
+    try {
+      final lock = ref.read(lockProvider);
+      final auth = ref.read(authServiceProvider);
+      return lock.unlocked &&
+          auth?.signedIn == true &&
+          auth?.deviceAuthorized == true;
+    } catch (_) {
+      return false;
+    }
+  }
 
   MediaService _media() => MediaService(
     widget.client,
@@ -60,7 +67,9 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
   );
 
   void _locked() {
-    if (!lock.unlocked) unawaited(_releaseAudio());
+    try {
+      if (!ref.read(lockProvider).unlocked) unawaited(_releaseAudio());
+    } catch (_) {}
   }
 
   @override
@@ -116,7 +125,9 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
   @override
   void initState() {
     super.initState();
-    lock.addListener(_locked);
+    try {
+      ref.read(lockProvider).addListener(_locked);
+    } catch (_) {}
     WidgetsBinding.instance.addObserver(this);
     speed = widget.preferredSpeed ?? 1.0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -133,7 +144,9 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    lock.removeListener(_locked);
+    try {
+      ref.read(lockProvider).removeListener(_locked);
+    } catch (_) {}
     unawaited(_releaseAudio());
     super.dispose();
   }
@@ -643,6 +656,16 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
                 style: Theme.of(context).textTheme.labelSmall,
               ),
             ],
+            IconButton(
+              tooltip: 'Save to Private Vault',
+              icon: const Icon(Icons.lock_outline, size: 18),
+              onPressed: () => act(context, () => saveChatAttachmentToVault(
+                context: context,
+                ref: ref,
+                client: widget.client,
+                attachment: attachment,
+              )),
+            ),
             IconButton(
               tooltip: 'Download and share',
               icon: const Icon(Icons.ios_share, size: 18),

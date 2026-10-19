@@ -40,8 +40,28 @@ class EncryptedMediaCache {
   Future<File> _file(String owner, String path, String mime, int size) async =>
       File('${(await _ownerFolder(owner)).path}/${await _hash('$owner|$path|$mime|$size')}.bin');
 
+  final Map<String, Future<SecretKey?>> _pendingKeys = {};
+
   Future<SecretKey?> _key(String owner, {required bool create}) async {
     final identifier = 'chat.media.cache.key.v1.${await _hash(owner)}';
+    if (_pendingKeys.containsKey(identifier)) {
+      return await _pendingKeys[identifier]!;
+    }
+    final future = _loadOrCreateKey(identifier, create: create);
+    _pendingKeys[identifier] = future;
+    try {
+      final key = await future;
+      if (key == null && !create) {
+        _pendingKeys.remove(identifier);
+      }
+      return key;
+    } catch (_) {
+      _pendingKeys.remove(identifier);
+      rethrow;
+    }
+  }
+
+  Future<SecretKey?> _loadOrCreateKey(String identifier, {required bool create}) async {
     var encoded = await store.read(identifier);
     if (encoded == null && create) {
       final random = await cipher.newSecretKey();
@@ -97,12 +117,15 @@ class EncryptedMediaCache {
   }) async {
     if (owner.isEmpty || !eligible(attachment)) return null;
     final current = clock();
-    if (!expiration(attachment).isAfter(current)) return null;
     final path = attachment['object_path'] as String;
     final mime = attachment['mime_type'] as String;
     final size = attachment['size_bytes'] as int;
     final file = await _file(owner, path, mime, size);
     if (!await file.exists()) return null;
+    if (!expiration(attachment).isAfter(current)) {
+      try { await file.delete(); } catch (_) {}
+      return null;
+    }
     try {
       final raw = await file.readAsBytes();
       if (raw.length != 36 + size) throw const FormatException('Invalid media cache entry');
@@ -233,6 +256,7 @@ class EncryptedMediaCache {
   }
 
   Future<int> diskBytes(String owner) async {
+    await prune(owner);
     final folder = await _ownerFolder(owner);
     if (!await folder.exists()) return 0;
     var bytes = 0;

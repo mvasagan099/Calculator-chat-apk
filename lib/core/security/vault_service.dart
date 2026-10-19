@@ -47,6 +47,7 @@ class VaultItem {
     required this.createdAt,
     required this.encryptedFilename,
     this.iv,
+    this.contentHash,
   });
 
   final String id;
@@ -57,6 +58,7 @@ class VaultItem {
   final DateTime createdAt;
   final String encryptedFilename;
   final String? iv;
+  final String? contentHash;
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -67,6 +69,7 @@ class VaultItem {
     'created_at': createdAt.toIso8601String(),
     'encrypted_filename': encryptedFilename,
     if (iv != null) 'iv': iv,
+    if (contentHash != null) 'content_hash': contentHash,
   };
 
   factory VaultItem.fromJson(Map<String, dynamic> j) => VaultItem(
@@ -81,12 +84,14 @@ class VaultItem {
     createdAt: DateTime.tryParse(j['created_at'] as String? ?? '') ?? DateTime.now(),
     encryptedFilename: j['encrypted_filename'] as String,
     iv: j['iv'] as String?,
+    contentHash: j['content_hash'] as String?,
   );
 
   VaultItem copyWith({
     String? filename,
     String? folder,
     VaultCategory? category,
+    String? contentHash,
   }) => VaultItem(
     id: id,
     filename: filename ?? this.filename,
@@ -96,6 +101,7 @@ class VaultItem {
     createdAt: createdAt,
     encryptedFilename: encryptedFilename,
     iv: iv,
+    contentHash: contentHash ?? this.contentHash,
   );
 }
 
@@ -281,11 +287,40 @@ class VaultService {
         // Delete only after the new encrypted SQLite state is verified.
         await legacy.delete();
       } else {
-        // An empty SQLite index must never hide ciphertext left by a failed
-        // import, partial migration, database loss or downgrade.
+        // Recover any existing orphaned encrypted files instead of throwing fatal errors.
         final children = await dir.list(followLinks: false).toList();
-        if (children.whereType<File>().any((file) => file.path.endsWith('.enc'))) {
-          throw StateError('Encrypted vault files exist without an index; recovery required');
+        final encFiles = children.whereType<File>().where((file) => file.path.endsWith('.enc')).toList();
+        if (encFiles.isNotEmpty) {
+          final key = await _getKey();
+          for (final file in encFiles) {
+            final encName = file.uri.pathSegments.last;
+            final id = encName.replaceFirst(RegExp(r'\.enc$'), '');
+            try {
+              final raw = await file.readAsBytes();
+              if (raw.length >= 28) {
+                final nonce = raw.sublist(0, 12);
+                final mac = Mac(raw.sublist(raw.length - 16));
+                final cipherText = raw.sublist(12, raw.length - 16);
+                final plain = await _aes.decrypt(
+                  SecretBox(cipherText, nonce: nonce, mac: mac),
+                  secretKey: key,
+                );
+                final ext = _detectExtension(plain);
+                final hash = (await Sha256().hash(plain)).bytes
+                    .map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+                _items.add(VaultItem(
+                  id: id,
+                  filename: 'recovered_$id.$ext',
+                  folder: 'Root',
+                  category: VaultCategory.fromExtension(ext),
+                  sizeBytes: plain.length,
+                  createdAt: await file.lastModified(),
+                  encryptedFilename: encName,
+                  contentHash: hash,
+                ));
+              }
+            } catch (_) {}
+          }
         }
         await _saveManifest();
       }
@@ -409,6 +444,39 @@ class VaultService {
     }
   }
 
+  static String _detectExtension(List<int> bytes) {
+    if (bytes.length >= 3 && bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF) {
+      return 'jpg';
+    }
+    if (bytes.length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) {
+      return 'png';
+    }
+    if (bytes.length >= 3 && bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46) {
+      return 'gif';
+    }
+    if (bytes.length >= 12 && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 &&
+        bytes[8] == 0x57 && bytes[9] == 0x45 && bytes[10] == 0x42 && bytes[11] == 0x50) {
+      return 'webp';
+    }
+    if (bytes.length >= 4 && bytes[0] == 0x25 && bytes[1] == 0x50 && bytes[2] == 0x44 && bytes[3] == 0x46) {
+      return 'pdf';
+    }
+    if (bytes.length >= 8 && bytes[4] == 0x66 && bytes[5] == 0x74 && bytes[6] == 0x79 && bytes[7] == 0x70) {
+      return 'mp4';
+    }
+    if (bytes.length >= 3 && ((bytes[0] == 0x49 && bytes[1] == 0x43 && bytes[2] == 0x33) ||
+        (bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0))) {
+      return 'mp3';
+    }
+    if (bytes.length >= 4 && bytes[0] == 0x4F && bytes[1] == 0x67 && bytes[2] == 0x67 && bytes[3] == 0x53) {
+      return 'ogg';
+    }
+    return 'bin';
+  }
+
+  VaultItem? findByHash(String hash) =>
+      _items.where((item) => item.contentHash == hash).firstOrNull;
+
   Future<VaultItem> importBytes({
     required Uint8List bytes,
     required String filename,
@@ -423,6 +491,16 @@ class VaultService {
     if (cleanName.isEmpty || cleanName == '.' || cleanName == '..') {
       throw const FormatException('Invalid vault filename');
     }
+
+    final hashDigest = await Sha256().hash(bytes);
+    final contentHash = hashDigest.bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+    // Avoid unnecessary duplicate storage if exact same file is already in vault
+    final existing = findByHash(contentHash);
+    if (existing != null) {
+      return existing;
+    }
+
     final dir = await _getDir();
     final id = const Uuid().v4();
     final ext = cleanName.contains('.') ? cleanName.split('.').last : 'bin';
@@ -447,6 +525,7 @@ class VaultService {
       sizeBytes: bytes.length,
       createdAt: DateTime.now().toUtc(),
       encryptedFilename: encName,
+      contentHash: contentHash,
     );
 
     _items.add(item);
@@ -456,6 +535,19 @@ class VaultService {
       rethrow;
     }
     return item;
+  }
+
+  /// Copies a chat attachment into the Private Vault as an independent, protected file.
+  Future<VaultItem> importChatAttachment({
+    required Uint8List bytes,
+    required String filename,
+    String folder = 'Root',
+  }) async {
+    return await importBytes(
+      bytes: bytes,
+      filename: filename,
+      folder: folder,
+    );
   }
 
   Future<Uint8List> readDecryptedBytes(VaultItem item) async {

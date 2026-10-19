@@ -2,14 +2,20 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../core/widgets/actions.dart';
 import '../../core/security/encrypted_media_cache.dart';
+import '../../core/security/media_cache_service.dart';
+import '../../core/services/device_settings.dart';
+import '../../core/widgets/actions.dart';
 import '../../providers/app_providers.dart';
 import '../vault/vault_screen.dart';
 
 class StorageBreakdown {
   const StorageBreakdown({
     required this.cacheBytes,
+    required this.imageBytes,
+    required this.videoBytes,
+    required this.audioBytes,
+    required this.documentBytes,
     required this.mediaBytes,
     required this.databaseBytes,
     required this.vaultBytes,
@@ -19,6 +25,10 @@ class StorageBreakdown {
   });
 
   final int cacheBytes;
+  final int imageBytes;
+  final int videoBytes;
+  final int audioBytes;
+  final int documentBytes;
   final int mediaBytes;
   final int databaseBytes;
   final int vaultBytes;
@@ -92,7 +102,7 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
       var databaseBytes = 0;
       final largeFiles = <LargeFileItem>[];
 
-      // 1. Scan temp directory (cache)
+      // 1. Scan temp directory
       if (await tempDir.exists()) {
         await for (final file in tempDir.list(recursive: true, followLinks: false)) {
           if (file is File) {
@@ -110,14 +120,16 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
         }
       }
 
-      // The encrypted downloaded-attachment cache lives in app support, not
-      // Android's temporary directory. Count only the signed-in account.
+      // 2. Scan encrypted media cache & breakdown
       final owner = ref.read(supabaseProvider).auth.currentUser?.id;
+      MediaStorageStats? mediaBreakdown;
       if (owner != null) {
+        mediaBreakdown = await MediaCacheService().getStorageBreakdown(owner);
+        cacheBytes += mediaBreakdown.totalBytes;
         cacheBytes += await EncryptedMediaCache().diskBytes(owner);
       }
 
-      // 2. Scan private media directory
+      // 3. Scan private media directory
       final mediaDir = Directory('${appSupportDir.path}/private-media-v1');
       if (await mediaDir.exists()) {
         await for (final file in mediaDir.list(recursive: true, followLinks: false)) {
@@ -136,7 +148,7 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
         }
       }
 
-      // 3. Scan sqlite database files
+      // 4. Scan sqlite database files
       await for (final file in appSupportDir.list(followLinks: false)) {
         if (file is File && (file.path.endsWith('.db') || file.path.endsWith('.bin'))) {
           final len = await file.length();
@@ -144,7 +156,7 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
         }
       }
 
-      // 4. Scan vault files
+      // 5. Scan vault files
       final vault = ref.read(vaultServiceProvider);
       await vault.initialize();
       final vaultStats = await vault.getStats();
@@ -161,7 +173,7 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
         }
       }
 
-      // 5. Per-chat storage estimates
+      // 6. Per-chat storage estimates
       final chatSizes = <ChatStorageItem>[];
       try {
         final convList = await ref.read(messengerProvider).conversations().first;
@@ -181,6 +193,10 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
         setState(() {
           _stats = StorageBreakdown(
             cacheBytes: cacheBytes,
+            imageBytes: mediaBreakdown?.imageBytes ?? 0,
+            videoBytes: mediaBreakdown?.videoBytes ?? 0,
+            audioBytes: mediaBreakdown?.audioBytes ?? 0,
+            documentBytes: mediaBreakdown?.documentBytes ?? 0,
             mediaBytes: mediaBytes,
             databaseBytes: databaseBytes,
             vaultBytes: vaultBytes,
@@ -200,9 +216,9 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Clear temporary media cache?'),
+        title: const Text('Clear temporary cache?'),
         content: const Text(
-          'Remove temporary media and downloaded encrypted attachments from this device? Previously opened media may need to download again. Messages, unsent drafts and Private Vault files will NOT be deleted.',
+          'Remove temporary media and decrypted stream buffers from this device? Previously opened media will remain safe in the offline cache. Messages, drafts and Private Vault files will NOT be deleted.',
         ),
         actions: [
           TextButton(
@@ -211,7 +227,7 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Clear cache'),
+            child: const Text('Clear temporary cache'),
           ),
         ],
       ),
@@ -219,6 +235,7 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
     if (confirm != true || !mounted) return;
 
     await act(context, () async {
+      await MediaCacheService().clearTemporaryCache();
       final tempDir = await getTemporaryDirectory();
       if (await tempDir.exists()) {
         await for (final child in tempDir.list(followLinks: false)) {
@@ -227,12 +244,172 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
           } catch (_) {}
         }
       }
-      final owner = ref.read(supabaseProvider).auth.currentUser?.id;
-      if (owner != null) await EncryptedMediaCache().clear(owner);
       await _loadStorage();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reusable cache cleared')),
+          const SnackBar(content: Text('Temporary cache cleared')),
+        );
+      }
+    });
+  }
+
+  Future<void> _clearDownloadedChatMedia() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear downloaded chat media?'),
+        content: const Text(
+          'Remove all downloaded chat photos, videos, voice messages and documents from device storage? Original chat messages will NOT be deleted, and attachments can be re-downloaded from Supabase when needed. Private Vault files are completely protected.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear chat media'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    await act(context, () async {
+      final owner = ref.read(supabaseProvider).auth.currentUser?.id;
+      if (owner != null) {
+        await MediaCacheService().clearDownloadedChatMedia(owner);
+        await EncryptedMediaCache().clear(owner);
+      }
+      await _loadStorage();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Downloaded chat media cleared')),
+        );
+      }
+    });
+  }
+
+  Future<void> _clearConversationCacheDialog() async {
+    final conversations = _stats?.chatSizes ?? [];
+    if (conversations.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No active conversations found')),
+      );
+      return;
+    }
+
+    final chosen = await showDialog<ChatStorageItem>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select conversation to clear'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: conversations.length,
+            separatorBuilder: (_, _) => const Divider(height: 1),
+            itemBuilder: (c, i) {
+              final chat = conversations[i];
+              return ListTile(
+                title: Text(chat.title),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                onTap: () => Navigator.pop(ctx, chat),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+    if (chosen == null || !mounted) return;
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Clear media for "${chosen.title}"?'),
+        content: const Text(
+          'All cached attachments for this conversation will be removed from device storage. Messages remain untouched.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    await act(context, () async {
+      final owner = ref.read(supabaseProvider).auth.currentUser?.id;
+      if (owner != null) {
+        await MediaCacheService().clearConversationCache(owner, chosen.conversationId);
+      }
+      await _loadStorage();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Media cleared for ${chosen.title}')),
+        );
+      }
+    });
+  }
+
+  Future<void> _clearThumbnails() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Clear cached thumbnails?'),
+        content: const Text(
+          'Remove cached media thumbnails? Full attachments remain untouched, and thumbnails will regenerate as you scroll through messages.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Clear thumbnails'),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    await act(context, () async {
+      final owner = ref.read(supabaseProvider).auth.currentUser?.id;
+      if (owner != null) {
+        await MediaCacheService().clearThumbnails(owner);
+      }
+      await _loadStorage();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Thumbnails cache cleared')),
+        );
+      }
+    });
+  }
+
+  Future<void> _runAutoCleanup() async {
+    await act(context, () async {
+      final owner = ref.read(supabaseProvider).auth.currentUser?.id;
+      if (owner != null) {
+        await MediaCacheService().prune(owner);
+      }
+      await _loadStorage();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Automatic LRU cache cleanup completed')),
         );
       }
     });
@@ -282,9 +459,11 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final settings = ref.watch(deviceSettingsProvider);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Storage Manager'),
+        title: const Text('Storage & Data'),
         actions: [
           IconButton(
             tooltip: 'Refresh',
@@ -332,12 +511,20 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
                             child: Row(
                               children: [
                                 _ProgressBarSegment(
-                                  flex: _stats!.mediaBytes + 1,
+                                  flex: _stats!.imageBytes + 1,
                                   color: Colors.blue,
                                 ),
                                 _ProgressBarSegment(
-                                  flex: _stats!.cacheBytes + 1,
-                                  color: Colors.amber,
+                                  flex: _stats!.videoBytes + 1,
+                                  color: Colors.orange,
+                                ),
+                                _ProgressBarSegment(
+                                  flex: _stats!.audioBytes + 1,
+                                  color: Colors.teal,
+                                ),
+                                _ProgressBarSegment(
+                                  flex: _stats!.documentBytes + 1,
+                                  color: Colors.indigo,
                                 ),
                                 _ProgressBarSegment(
                                   flex: _stats!.vaultBytes + 1,
@@ -357,9 +544,11 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
                           spacing: 16,
                           runSpacing: 8,
                           children: [
-                            _LegendIndicator(color: Colors.blue, label: 'Media: ${_formatBytes(_stats!.mediaBytes)}'),
-                            _LegendIndicator(color: Colors.amber, label: 'Cache: ${_formatBytes(_stats!.cacheBytes)}'),
-                            _LegendIndicator(color: Colors.purple, label: 'Vault: ${_formatBytes(_stats!.vaultBytes)}'),
+                            _LegendIndicator(color: Colors.blue, label: 'Photos: ${_formatBytes(_stats!.imageBytes)}'),
+                            _LegendIndicator(color: Colors.orange, label: 'Videos: ${_formatBytes(_stats!.videoBytes)}'),
+                            _LegendIndicator(color: Colors.teal, label: 'Audio: ${_formatBytes(_stats!.audioBytes)}'),
+                            _LegendIndicator(color: Colors.indigo, label: 'Docs: ${_formatBytes(_stats!.documentBytes)}'),
+                            _LegendIndicator(color: Colors.purple, label: 'Private Vault: ${_formatBytes(_stats!.vaultBytes)}'),
                             _LegendIndicator(color: Colors.green, label: 'Chats DB: ${_formatBytes(_stats!.databaseBytes)}'),
                           ],
                         ),
@@ -369,17 +558,186 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Quick Cleanup Actions
-                ListTile(
-                  leading: const Icon(Icons.cleaning_services_outlined),
-                  title: const Text('Clear Reusable Cache'),
-                  subtitle: Text('Free up ${_formatBytes(_stats!.cacheBytes)} of encrypted media and temporary data'),
-                  trailing: TextButton(
-                    onPressed: _stats!.cacheBytes > 0 ? _clearTempCache : null,
-                    child: const Text('Clean'),
+                // Max Cache Size Section
+                Text(
+                  'Maximum Cache Size',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Automatically removes least recently used chat media when exceeded. Private Vault data is never deleted.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).hintColor),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.2)),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<CacheSizeLimit>(
+                        isExpanded: true,
+                        value: settings?.cacheSizeLimit ?? CacheSizeLimit.gb2,
+                        items: CacheSizeLimit.values.map((limit) {
+                          return DropdownMenuItem<CacheSizeLimit>(
+                            value: limit,
+                            child: Text(limit.label),
+                          );
+                        }).toList(),
+                        onChanged: (newLimit) {
+                          if (newLimit != null) {
+                            settings?.setCacheSizeLimit(newLimit);
+                            MediaCacheService.globalMaxCacheBytes = newLimit.bytes;
+                            setState(() {});
+                          }
+                        },
+                      ),
+                    ),
                   ),
                 ),
-                const Divider(),
+                const SizedBox(height: 16),
+
+                // Automatic Media Downloads Section
+                Text(
+                  'Automatic Media Download',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Configure network policy for offline background caching.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Theme.of(context).hintColor),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    children: [
+                      _AutoDownloadTile(
+                        icon: Icons.photo_outlined,
+                        title: 'Photos',
+                        current: settings?.autoDownloadPhotos ?? AutoDownloadPolicy.wifiOnly,
+                        onChanged: (p) {
+                          if (p != null) {
+                            settings?.setAutoDownloadPhotos(p);
+                            setState(() {});
+                          }
+                        },
+                      ),
+                      const Divider(height: 1),
+                      _AutoDownloadTile(
+                        icon: Icons.videocam_outlined,
+                        title: 'Videos',
+                        current: settings?.autoDownloadVideos ?? AutoDownloadPolicy.manual,
+                        onChanged: (p) {
+                          if (p != null) {
+                            settings?.setAutoDownloadVideos(p);
+                            setState(() {});
+                          }
+                        },
+                      ),
+                      const Divider(height: 1),
+                      _AutoDownloadTile(
+                        icon: Icons.mic_none_outlined,
+                        title: 'Voice messages',
+                        current: settings?.autoDownloadVoice ?? AutoDownloadPolicy.wifiAndCellular,
+                        onChanged: (p) {
+                          if (p != null) {
+                            settings?.setAutoDownloadVoice(p);
+                            setState(() {});
+                          }
+                        },
+                      ),
+                      const Divider(height: 1),
+                      _AutoDownloadTile(
+                        icon: Icons.description_outlined,
+                        title: 'Documents',
+                        current: settings?.autoDownloadDocuments ?? AutoDownloadPolicy.manual,
+                        onChanged: (p) {
+                          if (p != null) {
+                            settings?.setAutoDownloadDocuments(p);
+                            setState(() {});
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Cache Cleanup Actions Section
+                Text(
+                  'Cache Maintenance',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    side: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.cleaning_services_outlined),
+                        title: const Text('Clear Temporary Cache'),
+                        subtitle: const Text('Free temporary decrypted stream buffers'),
+                        trailing: TextButton(
+                          onPressed: _clearTempCache,
+                          child: const Text('Clear'),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.folder_delete_outlined),
+                        title: const Text('Clear Downloaded Chat Media'),
+                        subtitle: Text('Frees ${_formatBytes(_stats!.cacheBytes)} across all chats'),
+                        trailing: TextButton(
+                          onPressed: _stats!.cacheBytes > 0 ? _clearDownloadedChatMedia : null,
+                          child: const Text('Clear'),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.chat_bubble_outline),
+                        title: const Text('Clear Selected Conversation Media'),
+                        subtitle: const Text('Choose a specific chat to free up cached media'),
+                        trailing: TextButton(
+                          onPressed: _clearConversationCacheDialog,
+                          child: const Text('Select'),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.photo_size_select_actual_outlined),
+                        title: const Text('Clear Cached Thumbnails'),
+                        subtitle: const Text('Reclaims thumbnail storage; regenerates as you scroll'),
+                        trailing: TextButton(
+                          onPressed: _clearThumbnails,
+                          child: const Text('Clear'),
+                        ),
+                      ),
+                      const Divider(height: 1),
+                      ListTile(
+                        leading: const Icon(Icons.auto_mode_outlined),
+                        title: const Text('Run Auto-Cleanup Now'),
+                        subtitle: const Text('Applies least-recently-used cache eviction immediately'),
+                        trailing: TextButton(
+                          onPressed: _runAutoCleanup,
+                          child: const Text('Run'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 // Large Files Section
                 Row(
@@ -444,7 +802,7 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
                       const SizedBox(width: 10),
                       const Expanded(
                         child: Text(
-                          'Local cache cleanup frees device storage. It does NOT delete cloud messages or uncommitted offline drafts. Private vault files are protected.',
+                          'Local cache cleanup frees device storage. It does NOT delete cloud messages or uncommitted offline drafts. Private Vault files are protected and never deleted by automatic cleanup.',
                           style: TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                       ),
@@ -453,6 +811,40 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
                 ),
               ],
             ),
+    );
+  }
+}
+
+class _AutoDownloadTile extends StatelessWidget {
+  const _AutoDownloadTile({
+    required this.icon,
+    required this.title,
+    required this.current,
+    required this.onChanged,
+  });
+
+  final IconData icon;
+  final String title;
+  final AutoDownloadPolicy current;
+  final ValueChanged<AutoDownloadPolicy?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      trailing: DropdownButtonHideUnderline(
+        child: DropdownButton<AutoDownloadPolicy>(
+          value: current,
+          items: AutoDownloadPolicy.values.map((policy) {
+            return DropdownMenuItem(
+              value: policy,
+              child: Text(policy.label),
+            );
+          }).toList(),
+          onChanged: onChanged,
+        ),
+      ),
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/security/vault_service.dart';
@@ -15,6 +16,17 @@ import '../../providers/app_providers.dart';
 import '../media/document_viewer.dart';
 import '../media/full_screen_image_viewer.dart';
 import '../media/full_screen_video_viewer.dart';
+
+enum VaultSortOrder {
+  newest('Newest first'),
+  oldest('Oldest first'),
+  nameAsc('Name (A to Z)'),
+  nameDesc('Name (Z to A)'),
+  size('File size');
+
+  const VaultSortOrder(this.label);
+  final String label;
+}
 
 final vaultServiceProvider = Provider<VaultService>((ref) => VaultService());
 
@@ -34,6 +46,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   String _selectedFolder = 'All';
   VaultCategory? _selectedCategory;
   VaultStorageStats? _stats;
+  VaultSortOrder _sortOrder = VaultSortOrder.newest;
 
   @override
   void initState() {
@@ -173,6 +186,8 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         } finally {
           if (await privateFile.exists()) await privateFile.delete();
         }
+      } else if (item.category == VaultCategory.audio) {
+        await _playVaultAudio(item, bytes);
       } else {
         // Plain text or generic document viewer
         final ext = item.filename.split('.').last.toLowerCase();
@@ -223,6 +238,34 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         bytes.fillRange(0, bytes.length, 0); // Minimize plaintext lifetime.
       }
     });
+  }
+
+  Future<void> _playVaultAudio(VaultItem item, Uint8List bytes) async {
+    final tempDir = await getTemporaryDirectory();
+    final ext = item.filename.contains('.')
+        ? item.filename.split('.').last.toLowerCase()
+        : 'm4a';
+    final tempFile = File('${tempDir.path}/vault_audio_${item.id}.$ext');
+    await tempFile.writeAsBytes(bytes, flush: true);
+
+    try {
+      if (!mounted) return;
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (ctx) => _VaultAudioPlayerSheet(
+          filename: item.filename,
+          audioFile: tempFile,
+        ),
+      );
+    } finally {
+      if (await tempFile.exists()) {
+        try {
+          await tempFile.delete();
+        } catch (_) {}
+      }
+    }
   }
 
   Future<void> _exportItem(VaultItem item, Uint8List bytes) async {
@@ -304,12 +347,52 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       category: _selectedCategory,
     );
 
+    switch (_sortOrder) {
+      case VaultSortOrder.newest:
+        filteredItems.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        break;
+      case VaultSortOrder.oldest:
+        filteredItems.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        break;
+      case VaultSortOrder.nameAsc:
+        filteredItems.sort((a, b) => a.filename.toLowerCase().compareTo(b.filename.toLowerCase()));
+        break;
+      case VaultSortOrder.nameDesc:
+        filteredItems.sort((a, b) => b.filename.toLowerCase().compareTo(a.filename.toLowerCase()));
+        break;
+      case VaultSortOrder.size:
+        filteredItems.sort((a, b) => b.sizeBytes.compareTo(a.sizeBytes));
+        break;
+    }
+
     final folders = ['All', ..._vault.folders];
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Private File Vault'),
         actions: [
+          PopupMenuButton<VaultSortOrder>(
+            tooltip: 'Sort files',
+            icon: const Icon(Icons.sort),
+            initialValue: _sortOrder,
+            onSelected: (order) => setState(() => _sortOrder = order),
+            itemBuilder: (ctx) => [
+              for (final order in VaultSortOrder.values)
+                PopupMenuItem(
+                  value: order,
+                  child: Row(
+                    children: [
+                      if (_sortOrder == order)
+                        const Icon(Icons.check, size: 16)
+                      else
+                        const SizedBox(width: 16),
+                      const SizedBox(width: 8),
+                      Text(order.label),
+                    ],
+                  ),
+                ),
+            ],
+          ),
           IconButton(
             tooltip: 'Vault storage info',
             icon: const Icon(Icons.pie_chart_outline),
@@ -618,3 +701,225 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     );
   }
 }
+
+class _VaultAudioPlayerSheet extends StatefulWidget {
+  const _VaultAudioPlayerSheet({
+    required this.filename,
+    required this.audioFile,
+  });
+
+  final String filename;
+  final File audioFile;
+
+  @override
+  State<_VaultAudioPlayerSheet> createState() => _VaultAudioPlayerSheetState();
+}
+
+class _VaultAudioPlayerSheetState extends State<_VaultAudioPlayerSheet> {
+  late final AudioPlayer _player;
+  bool _playing = false;
+  Duration _position = Duration.zero;
+  Duration _duration = Duration.zero;
+  double _speed = 1.0;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _player = AudioPlayer();
+    _initAudio();
+  }
+
+  Future<void> _initAudio() async {
+    try {
+      final dur = await _player.setFilePath(widget.audioFile.path);
+      if (dur != null) {
+        _duration = dur;
+      }
+      _player.playerStateStream.listen((state) {
+        if (!mounted) return;
+        setState(() {
+          _playing = state.playing && state.processingState != ProcessingState.completed;
+          if (state.processingState == ProcessingState.completed) {
+            _position = _duration;
+          }
+        });
+      });
+      _player.positionStream.listen((pos) {
+        if (!mounted) return;
+        setState(() => _position = pos);
+      });
+      _player.durationStream.listen((d) {
+        if (!mounted || d == null) return;
+        setState(() => _duration = d);
+      });
+      setState(() => _loading = false);
+      await _player.play();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+          _error = 'Failed to load audio: $e';
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _player.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      padding: EdgeInsets.fromLTRB(
+        20,
+        16,
+        20,
+        MediaQuery.of(context).padding.bottom + 20,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Theme.of(context).dividerColor,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primaryContainer,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.audiotrack,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.filename,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Private Vault Audio',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).hintColor,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_loading)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: CircularProgressIndicator(),
+            )
+          else if (_error != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              child: Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            )
+          else ...[
+            Slider(
+              value: _position.inMilliseconds
+                  .clamp(0, _duration.inMilliseconds)
+                  .toDouble(),
+              max: (_duration.inMilliseconds > 0 ? _duration.inMilliseconds : 1)
+                  .toDouble(),
+              onChanged: (val) {
+                _player.seek(Duration(milliseconds: val.round()));
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(_formatDuration(_position), style: const TextStyle(fontSize: 12)),
+                  Text(_formatDuration(_duration), style: const TextStyle(fontSize: 12)),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                TextButton(
+                  onPressed: () {
+                    final nextSpeed = _speed == 1.0 ? 1.5 : (_speed == 1.5 ? 2.0 : 1.0);
+                    setState(() => _speed = nextSpeed);
+                    _player.setSpeed(nextSpeed);
+                  },
+                  child: Text(
+                    '$_speed×',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                IconButton.filled(
+                  iconSize: 40,
+                  icon: Icon(_playing ? Icons.pause : Icons.play_arrow),
+                  onPressed: () {
+                    if (_playing) {
+                      _player.pause();
+                    } else {
+                      if (_position >= _duration) {
+                        _player.seek(Duration.zero);
+                      }
+                      _player.play();
+                    }
+                  },
+                ),
+                IconButton(
+                  tooltip: 'Replay 10s',
+                  icon: const Icon(Icons.replay_10),
+                  onPressed: () {
+                    final target = _position - const Duration(seconds: 10);
+                    _player.seek(target < Duration.zero ? Duration.zero : target);
+                  },
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+

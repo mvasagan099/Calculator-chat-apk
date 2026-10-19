@@ -1,7 +1,29 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../security/lock_controller.dart';
 import '../theme/app_theme.dart';
+
+enum CacheSizeLimit {
+  mb500(500 * 1024 * 1024, '500 MB'),
+  gb1(1024 * 1024 * 1024, '1 GB'),
+  gb2(2 * 1024 * 1024 * 1024, '2 GB (Default)'),
+  gb5(5 * 1024 * 1024 * 1024, '5 GB'),
+  unlimited(-1, 'Unlimited');
+
+  const CacheSizeLimit(this.bytes, this.label);
+  final int bytes;
+  final String label;
+}
+
+enum AutoDownloadPolicy {
+  wifiOnly('Wi-Fi only'),
+  wifiAndCellular('Wi-Fi and mobile data'),
+  manual('Manual');
+
+  const AutoDownloadPolicy(this.label);
+  final String label;
+}
 
 enum NotificationPrivacy {
   generic('Generic (hides sender & text)'),
@@ -172,5 +194,84 @@ class DeviceSettings extends ChangeNotifier {
     lock.biometricsEnabled = value;
     await preferences.setBool(key('biometrics'), value);
     notifyListeners();
+  }
+
+  CacheSizeLimit get cacheSizeLimit {
+    final name = preferences.getString(key('storage.cache_size_limit'));
+    return CacheSizeLimit.values.where((c) => c.name == name).firstOrNull ?? CacheSizeLimit.gb2;
+  }
+
+  Future<void> setCacheSizeLimit(CacheSizeLimit limit) async {
+    await preferences.setString(key('storage.cache_size_limit'), limit.name);
+    notifyListeners();
+  }
+
+  AutoDownloadPolicy get autoDownloadPhotos {
+    final name = preferences.getString(key('storage.auto_download.photos'));
+    return AutoDownloadPolicy.values.where((p) => p.name == name).firstOrNull ?? AutoDownloadPolicy.wifiOnly;
+  }
+
+  Future<void> setAutoDownloadPhotos(AutoDownloadPolicy policy) async {
+    await preferences.setString(key('storage.auto_download.photos'), policy.name);
+    notifyListeners();
+  }
+
+  AutoDownloadPolicy get autoDownloadVideos {
+    final name = preferences.getString(key('storage.auto_download.videos'));
+    return AutoDownloadPolicy.values.where((p) => p.name == name).firstOrNull ?? AutoDownloadPolicy.manual;
+  }
+
+  Future<void> setAutoDownloadVideos(AutoDownloadPolicy policy) async {
+    await preferences.setString(key('storage.auto_download.videos'), policy.name);
+    notifyListeners();
+  }
+
+  AutoDownloadPolicy get autoDownloadVoice {
+    final name = preferences.getString(key('storage.auto_download.voice'));
+    return AutoDownloadPolicy.values.where((p) => p.name == name).firstOrNull ?? AutoDownloadPolicy.wifiAndCellular;
+  }
+
+  Future<void> setAutoDownloadVoice(AutoDownloadPolicy policy) async {
+    await preferences.setString(key('storage.auto_download.voice'), policy.name);
+    notifyListeners();
+  }
+
+  AutoDownloadPolicy get autoDownloadDocuments {
+    final name = preferences.getString(key('storage.auto_download.documents'));
+    return AutoDownloadPolicy.values.where((p) => p.name == name).firstOrNull ?? AutoDownloadPolicy.manual;
+  }
+
+  Future<void> setAutoDownloadDocuments(AutoDownloadPolicy policy) async {
+    await preferences.setString(key('storage.auto_download.documents'), policy.name);
+    notifyListeners();
+  }
+
+  bool shouldAutoDownload(String mediaType, List<ConnectivityResult> connectivity) {
+    if (connectivity.contains(ConnectivityResult.none) || connectivity.isEmpty) return false;
+    final isWifi = connectivity.contains(ConnectivityResult.wifi) ||
+                   connectivity.contains(ConnectivityResult.ethernet);
+    final isCellular = connectivity.contains(ConnectivityResult.mobile);
+
+    final policy = switch (mediaType.toLowerCase()) {
+      'image' || 'photo' => autoDownloadPhotos,
+      'video' => autoDownloadVideos,
+      'audio' || 'voice' => autoDownloadVoice,
+      _ => autoDownloadDocuments,
+    };
+
+    return switch (policy) {
+      AutoDownloadPolicy.manual => false,
+      AutoDownloadPolicy.wifiOnly => isWifi,
+      AutoDownloadPolicy.wifiAndCellular => isWifi || isCellular,
+    };
+  }
+
+  Future<bool> checkAutoDownload(String mediaType) async {
+    try {
+      final connectivity = await Connectivity().checkConnectivity();
+      return shouldAutoDownload(mediaType, connectivity);
+    } catch (_) {
+      return false;
+    }
   }
 }

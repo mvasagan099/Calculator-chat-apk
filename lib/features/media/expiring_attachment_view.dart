@@ -329,6 +329,8 @@ class _ExpiringAttachmentViewState extends ConsumerState<ExpiringAttachmentView>
                       expiresAt: deadline,
                       filename: widget.attachment['filename'],
                       initialPosition: video.value.position,
+                      attachment: widget.attachment,
+                      client: widget.client,
                     ),
                   ),
                 );
