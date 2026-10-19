@@ -7,6 +7,7 @@ import 'package:calculator_messenger/core/security/vault_service.dart';
 import 'package:calculator_messenger/core/services/device_settings.dart';
 import 'package:calculator_messenger/core/security/lock_controller.dart';
 import 'lock_biometric_test.dart' show ImmediatePinVault;
+import 'sqlite_test_factory.dart';
 import 'package:calculator_messenger/features/notifications/app_update.dart';
 import 'package:calculator_messenger/models/message_edit.dart';
 
@@ -114,7 +115,7 @@ void main() {
     test('VaultService full import, AES-GCM encryption, decryption, rename, move, delete lifecycle', () async {
       final tempDir = Directory.systemTemp.createTempSync('calc_vault_test_');
       try {
-        final vault = VaultService(customDir: tempDir);
+        final vault = VaultService(customDir: tempDir, factory: sqliteTestFactory);
         await vault.initialize();
 
         final rawBytes = Uint8List.fromList(utf8.encode('TopSecretConfidentialVaultContent2026'));
@@ -158,6 +159,7 @@ void main() {
         await vault.deleteItem(item.id);
         expect(vault.items.isEmpty, isTrue);
         expect(await diskFile.exists(), isFalse);
+        await vault.close();
       } finally {
         if (await tempDir.exists()) {
           await tempDir.delete(recursive: true);
