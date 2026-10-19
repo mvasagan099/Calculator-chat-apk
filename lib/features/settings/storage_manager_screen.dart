@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../core/widgets/actions.dart';
+import '../../core/security/encrypted_media_cache.dart';
 import '../../providers/app_providers.dart';
 import '../vault/vault_screen.dart';
 
@@ -109,6 +110,13 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
         }
       }
 
+      // The encrypted downloaded-attachment cache lives in app support, not
+      // Android's temporary directory. Count only the signed-in account.
+      final owner = ref.read(supabaseProvider).auth.currentUser?.id;
+      if (owner != null) {
+        cacheBytes += await EncryptedMediaCache().diskBytes(owner);
+      }
+
       // 2. Scan private media directory
       final mediaDir = Directory('${appSupportDir.path}/private-media-v1');
       if (await mediaDir.exists()) {
@@ -194,7 +202,7 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Clear temporary media cache?'),
         content: const Text(
-          'This removes locally cached preview thumbnails and temporary streaming files. Messages, unsent drafts, and private vault files will NOT be deleted.',
+          'Remove temporary media and downloaded encrypted attachments from this device? Previously opened media may need to download again. Messages, unsent drafts and Private Vault files will NOT be deleted.',
         ),
         actions: [
           TextButton(
@@ -219,10 +227,12 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
           } catch (_) {}
         }
       }
+      final owner = ref.read(supabaseProvider).auth.currentUser?.id;
+      if (owner != null) await EncryptedMediaCache().clear(owner);
       await _loadStorage();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Temporary cache cleared')),
+          const SnackBar(content: Text('Reusable cache cleared')),
         );
       }
     });
@@ -362,8 +372,8 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
                 // Quick Cleanup Actions
                 ListTile(
                   leading: const Icon(Icons.cleaning_services_outlined),
-                  title: const Text('Clear Temporary Cache'),
-                  subtitle: Text('Free up ${_formatBytes(_stats!.cacheBytes)} of reusable temp data'),
+                  title: const Text('Clear Reusable Cache'),
+                  subtitle: Text('Free up ${_formatBytes(_stats!.cacheBytes)} of encrypted media and temporary data'),
                   trailing: TextButton(
                     onPressed: _stats!.cacheBytes > 0 ? _clearTempCache : null,
                     child: const Text('Clean'),
