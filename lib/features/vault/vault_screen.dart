@@ -553,6 +553,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
 
   Future<void> _createFolderDialog() async {
     final folderName = await askText(context, 'New vault folder');
+    if (!mounted) return;
     if (folderName != null && folderName.trim().isNotEmpty) {
       await act(context, () async {
         await _vault.addFolder(folderName.trim());
