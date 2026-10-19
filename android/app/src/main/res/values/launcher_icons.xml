@@ -2,4 +2,13 @@
     <color name="launcher_midnight">#152B47</color>
     <color name="launcher_graphite">#30343D</color>
     <color name="launcher_sunrise">#A85B31</color>
+    <color name="launcher_notebook">#fffcf0</color>
+    <color name="launcher_blue_gloss">#178bfa</color>
+    <color name="launcher_mono_tiles">#ffffff</color>
+    <color name="launcher_kawaii">#ffe6ef</color>
+    <color name="launcher_retro">#d4cbbb</color>
+    <color name="launcher_cyberpunk">#a900a8</color>
+    <color name="launcher_neon">#050608</color>
+    <color name="launcher_pastel">#f8ddf8</color>
+    <color name="launcher_dark_orange">#28282e</color>
 </resources>
