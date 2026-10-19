@@ -89,7 +89,14 @@ class _ExpiringAttachmentViewState extends ConsumerState<ExpiringAttachmentView>
     });
     try {
       final data = await (widget.loader?.call() ??
-          MediaService(widget.client).download(
+          MediaService(
+            widget.client,
+            canUseLocalCache: () =>
+                mounted &&
+                lock.unlocked &&
+                ref.read(authServiceProvider)?.signedIn == true &&
+                ref.read(authServiceProvider)?.deviceAuthorized == true,
+          ).download(
             widget.attachment,
             onProgress: (p) {
               if (mounted) setState(() => downloadProgress = p);
