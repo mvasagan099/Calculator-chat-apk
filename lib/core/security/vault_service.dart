@@ -116,7 +116,8 @@ class VaultStorageStats {
 /// Contents are NEVER copied to public Android gallery folders or uploaded to cloud.
 class VaultService {
   VaultService({this.customDir, SecretKey? customKey, DatabaseFactory? factory})
-      : _customKey = customKey,
+      : // ignore: prefer_initializing_formals -- keep public test fixture parameter name
+        _customKey = customKey,
         _factory = factory ?? databaseFactory;
 
   final Directory? customDir;
