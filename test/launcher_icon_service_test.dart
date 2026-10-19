@@ -24,7 +24,9 @@ void main() {
     debugDefaultTargetPlatformOverride = null;
   });
   test('all launcher choices are distinct, named calculator icons', () {
-    expect(LauncherIconService.options.map((e) => e.id).toSet().length, 4);
+    expect(LauncherIconService.options.map((e) => e.id).toSet().length, 13);
+    expect(LauncherIconService.options.take(4).map((e) => e.id), ['classic', 'midnight', 'graphite', 'sunrise']);
+    expect(LauncherIconService.options.skip(4).every((e) => e.assetPath != null), isTrue);
     expect(LauncherIconService.find('missing').id, 'classic');
   });
   test('Android icon choice switches launcher component without changing chat settings', () async {

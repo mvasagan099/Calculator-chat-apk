@@ -87,6 +87,87 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity-alias>
+        <activity-alias android:name=".LauncherNotebook"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_notebook"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherBlueGloss"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_blue_gloss"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherMonoTiles"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_mono_tiles"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherKawaii"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_kawaii"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherRetro"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_retro"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherCyberpunk"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_cyberpunk"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherNeon"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_neon"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherPastel"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_pastel"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias android:name=".LauncherDarkOrange"
+            android:enabled="false" android:exported="true"
+            android:label="Calculator" android:icon="@mipmap/ic_launcher_dark_orange"
+            android:targetActivity=".MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
         <service android:name=".CallForegroundService" android:exported="false" android:foregroundServiceType="microphone|camera" android:stopWithTask="false" />
         <service android:name=".ProjectionForegroundService" android:exported="false" android:foregroundServiceType="mediaProjection" android:stopWithTask="true" />
         <service

@@ -49,30 +49,78 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> selectCalculatorIcon() async {
     final selected = await showModalBottomSheet<String>(
       context: context,
-      showDragHandle: true,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (sheetContext) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Choose calculator icon', style: Theme.of(sheetContext).textTheme.headlineSmall),
-            const SizedBox(height: 8),
-            const Text('Changes the Android home-screen icon, not your calculator PIN or private chats.'),
-            const SizedBox(height: 12),
-            FutureBuilder<String>(future: _launcherIcon, builder: (context, current) => Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [for (final option in LauncherIconService.options)
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  leading: CalculatorIconPreview(option: option, size: 46),
-                  title: Text(option.label),
-                  subtitle: Text(option.description),
-                  trailing: current.data == option.id ? const Icon(Icons.check_circle_rounded) : null,
-                  onTap: () => Navigator.of(sheetContext).pop(option.id),
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .78,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Choose calculator icon',
+                        style: Theme.of(sheetContext).textTheme.headlineSmall),
+                    const SizedBox(height: 8),
+                    Text('${LauncherIconService.options.length} icons available',
+                        style: Theme.of(sheetContext).textTheme.bodyMedium),
+                    const SizedBox(height: 4),
+                    const Text('Changes the Android home-screen icon only. Your calculator PIN and private chats are unchanged.'),
+                  ],
                 ),
-              ],
-            )),
-          ]),
+              ),
+              Expanded(
+                child: FutureBuilder<String>(
+                  future: _launcherIcon,
+                  builder: (context, current) => GridView.builder(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: MediaQuery.sizeOf(sheetContext).width >= 600 ? 4 : 3,
+                      crossAxisSpacing: 8,
+                      mainAxisSpacing: 8,
+                      childAspectRatio: .85,
+                    ),
+                    itemCount: LauncherIconService.options.length,
+                    itemBuilder: (_, index) {
+                      final option = LauncherIconService.options[index];
+                      final active = current.data == option.id;
+                      return Card(
+                        margin: EdgeInsets.zero,
+                        color: active ? Theme.of(sheetContext).colorScheme.primaryContainer : null,
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () => Navigator.of(sheetContext).pop(option.id),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                            child: Column(
+                              children: [
+                                Expanded(child: Center(
+                                  child: CalculatorIconPreview(option: option, size: 66),
+                                )),
+                                const SizedBox(height: 5),
+                                Text(option.label, maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: Theme.of(sheetContext).textTheme.labelMedium),
+                                if (active)
+                                  Icon(Icons.check_circle_rounded,
+                                      size: 16,
+                                      color: Theme.of(sheetContext).colorScheme.primary)
+                                else
+                                  const SizedBox(height: 16),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -455,7 +503,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ListTile(
                     leading: const Icon(Icons.apps_rounded),
                     title: const Text('Calculator app icon'),
-                    subtitle: const Text('Classic, Midnight, Graphite or Sunrise'),
+                    subtitle: const Text('Choose from 13 calculator styles'),
                     trailing: FutureBuilder<String>(future: _launcherIcon, builder: (context, state) {
                       final selected = LauncherIconService.find(state.data ?? 'classic');
                       return CalculatorIconPreview(option: selected, size: 38);

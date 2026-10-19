@@ -14,6 +14,15 @@ object LauncherIconSwitcher {
         "midnight" to "LauncherMidnight",
         "graphite" to "LauncherGraphite",
         "sunrise" to "LauncherSunrise",
+        "notebook" to "LauncherNotebook",
+        "blue_gloss" to "LauncherBlueGloss",
+        "mono_tiles" to "LauncherMonoTiles",
+        "kawaii" to "LauncherKawaii",
+        "retro" to "LauncherRetro",
+        "cyberpunk" to "LauncherCyberpunk",
+        "neon" to "LauncherNeon",
+        "pastel" to "LauncherPastel",
+        "dark_orange" to "LauncherDarkOrange",
     )
     private fun component(context: Context, name: String) =
         ComponentName(context.packageName, context.packageName + "." + name)

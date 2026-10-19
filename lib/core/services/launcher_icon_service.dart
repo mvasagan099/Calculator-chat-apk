@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 class CalculatorLauncherIcon {
-  const CalculatorLauncherIcon(this.id, this.label, this.description, this.background, this.foreground);
+  const CalculatorLauncherIcon(this.id, this.label, this.description, this.background, this.foreground, {this.assetPath});
   final String id, label, description;
   final Color background, foreground;
+  final String? assetPath;
 }
 
 class LauncherIconService {
@@ -18,6 +19,15 @@ class LauncherIconService {
     CalculatorLauncherIcon('midnight', 'Midnight', 'Deep navy blue', Color(0xff152b47), Color(0xffdceafa)),
     CalculatorLauncherIcon('graphite', 'Graphite', 'Minimal dark gray', Color(0xff30343d), Color(0xffeff1f5)),
     CalculatorLauncherIcon('sunrise', 'Sunrise', 'Warm amber', Color(0xffa85b31), Color(0xffffe7c3)),
+    CalculatorLauncherIcon('notebook', 'Notebook', 'Hand-drawn notebook calculator', Color(0xfffff9dc), const Color(0xffffffff), assetPath: 'assets/launcher_icons/ic_launcher_notebook.webp'),
+    CalculatorLauncherIcon('blue_gloss', 'Blue Gloss', 'Glossy blue calculator', Color(0xff0079fc), const Color(0xffffffff), assetPath: 'assets/launcher_icons/ic_launcher_blue_gloss.webp'),
+    CalculatorLauncherIcon('mono_tiles', 'Mono Tiles', 'Bold black and white', Color(0xffffffff), const Color(0xffffffff), assetPath: 'assets/launcher_icons/ic_launcher_mono_tiles.webp'),
+    CalculatorLauncherIcon('kawaii', 'Kawaii', 'Smiling pastel calculator', Color(0xffffe1ef), const Color(0xffffffff), assetPath: 'assets/launcher_icons/ic_launcher_kawaii.webp'),
+    CalculatorLauncherIcon('retro', 'Retro', 'Vintage pocket calculator', Color(0xffdbd1c5), const Color(0xffffffff), assetPath: 'assets/launcher_icons/ic_launcher_retro.webp'),
+    CalculatorLauncherIcon('cyberpunk', 'Cyberpunk', 'Vibrant cyber neon', Color(0xff51077e), const Color(0xffffffff), assetPath: 'assets/launcher_icons/ic_launcher_cyberpunk.webp'),
+    CalculatorLauncherIcon('neon', 'Neon', 'Electric black neon', Color(0xff09090d), const Color(0xffffffff), assetPath: 'assets/launcher_icons/ic_launcher_neon.webp'),
+    CalculatorLauncherIcon('pastel', 'Pastel', 'Soft colorful calculator', Color(0xffffdefb), const Color(0xffffffff), assetPath: 'assets/launcher_icons/ic_launcher_pastel.webp'),
+    CalculatorLauncherIcon('dark_orange', 'Dark Orange', 'Dark circles and amber equals', Color(0xff29292d), const Color(0xffffffff), assetPath: 'assets/launcher_icons/ic_launcher_dark_orange.webp'),
   ];
   static CalculatorLauncherIcon find(String id) =>
       options.firstWhere((icon) => icon.id == id, orElse: () => options.first);
@@ -51,7 +61,18 @@ class CalculatorIconPreview extends StatelessWidget {
         borderRadius: BorderRadius.circular(size * .25),
         color: option.background,
       ),
-      child: Icon(Icons.calculate_rounded, color: option.foreground, size: size * .67),
+      clipBehavior: Clip.antiAlias,
+      child: option.assetPath == null
+          ? Icon(Icons.calculate_rounded, color: option.foreground, size: size * .67)
+          : Image.asset(
+              option.assetPath!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (context, error, stack) =>
+                  Icon(Icons.calculate_rounded, color: option.foreground, size: size * .67),
+            ),
     ),
   );
 }
