@@ -1,11 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/security/local_retention.dart';
 import '../../core/security/private_media_files.dart';
@@ -35,7 +35,51 @@ class AttachmentView extends ConsumerStatefulWidget {
   ConsumerState<AttachmentView> createState() => _AttachmentViewState();
 }
 
-class _AttachmentViewState extends ConsumerState<AttachmentView> {
+class _AttachmentViewState extends ConsumerState<AttachmentView>
+    with WidgetsBindingObserver {
+  late final lock = ref.read(lockProvider);
+  File? _audioTemp;
+
+  MediaService _media() => MediaService(
+    widget.client,
+    canUseLocalCache: () =>
+        mounted &&
+        lock.unlocked &&
+        ref.read(authServiceProvider)?.signedIn == true &&
+        ref.read(authServiceProvider)?.deviceAuthorized == true,
+  );
+
+  void _locked() {
+    if (!lock.unlocked) unawaited(_releaseAudio());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) unawaited(_releaseAudio());
+  }
+
+  Future<void> _releaseAudio() async {
+    final current = player;
+    player = null;
+    final temp = _audioTemp;
+    _audioTemp = null;
+    await _playerState?.cancel();
+    await _positionSub?.cancel();
+    await _durationSub?.cancel();
+    _playerState = null;
+    _positionSub = null;
+    _durationSub = null;
+    try { await current?.stop(); } catch (_) {}
+    try { await current?.dispose(); } catch (_) {}
+    if (temp != null) {
+      try { if (await temp.exists()) await temp.delete(); } catch (_) {}
+    }
+    if (mounted) setState(() {
+      playing = false;
+      audioPosition = Duration.zero;
+      audioDuration = Duration.zero;
+    });
+  }
   Map<String, dynamic> get attachment => {
     ...widget.attachment,
     if (widget.expiresAt != null)
@@ -58,6 +102,8 @@ class _AttachmentViewState extends ConsumerState<AttachmentView> {
   @override
   void initState() {
     super.initState();
+    lock.addListener(_locked);
+    WidgetsBinding.instance.addObserver(this);
     speed = widget.preferredSpeed ?? 1.0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -72,13 +118,9 @@ class _AttachmentViewState extends ConsumerState<AttachmentView> {
 
   @override
   void dispose() {
-    _playerState?.cancel();
-    _positionSub?.cancel();
-    _durationSub?.cancel();
-    try {
-      player?.stop();
-    } catch (_) {}
-    player?.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    lock.removeListener(_locked);
+    unawaited(_releaseAudio());
     super.dispose();
   }
 
@@ -113,19 +155,32 @@ class _AttachmentViewState extends ConsumerState<AttachmentView> {
         if (mounted && dur != null) setState(() => audioDuration = dur);
       });
       try {
-        final source = await MediaService(widget.client).signedUrl(attachment);
-        if (!mounted) return;
-        await current.setUrl(source);
-        if (!mounted) return;
+        final data = await _media().download(attachment);
+        if (!mounted || !lock.unlocked ||
+            ref.read(authServiceProvider)?.deviceAuthorized != true) {
+          data.fillRange(0, data.length, 0);
+          throw StateError('Private audio is locked');
+        }
+        final rawName = attachment['filename']?.toString() ?? 'audio.m4a';
+        final extension = rawName.split('.').last.toLowerCase();
+        final file = await PrivateMediaFiles().save(
+          data,
+          extension: extension,
+          expiresAt: attachmentDeadline(attachment),
+        );
+        data.fillRange(0, data.length, 0);
+        if (!mounted || !lock.unlocked) {
+          await file.delete();
+          throw StateError('Private audio is locked');
+        }
+        _audioTemp = file;
+        await current.setFilePath(file.path);
+        if (!mounted || !lock.unlocked) throw StateError('Audio closed');
         await current.setSpeed(speed);
       } catch (_) {
         if (mounted) {
-          await _playerState?.cancel();
-          await _positionSub?.cancel();
-          await _durationSub?.cancel();
-          player = null;
-          await current.dispose();
-          setState(() => audioFailed = true);
+          await _releaseAudio();
+          if (mounted) setState(() => audioFailed = true);
         }
         rethrow;
       } finally {
@@ -175,7 +230,7 @@ class _AttachmentViewState extends ConsumerState<AttachmentView> {
       });
       Uint8List bytes;
       try {
-        bytes = await MediaService(widget.client).download(
+        bytes = await _media().download(
           a,
           onProgress: (p) {
             if (mounted) setState(() => downloadProgress = p);
@@ -202,20 +257,9 @@ class _AttachmentViewState extends ConsumerState<AttachmentView> {
       return;
     }
 
-    // For other documents (PDF, ZIP, VCF, etc.): try launching signed URL directly.
-    try {
-      final url = await MediaService(widget.client).signedUrl(a);
-      final uri = Uri.parse(url);
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (launched) return;
-    } catch (_) {
-      // Fall through to downloading and sharing/opening.
-    }
-
-    // If external URL launch is not supported or fails, download and share.
+    // Reuse locally encrypted documents before contacting Storage.
+    // The decrypted temporary file is removed after the Android share/open
+    // chooser is dismissed; it is never added to the permanent vault.
     setState(() {
       downloading = true;
       downloadFailed = false;
@@ -223,7 +267,7 @@ class _AttachmentViewState extends ConsumerState<AttachmentView> {
     });
     Uint8List bytes;
     try {
-      bytes = await MediaService(widget.client).download(
+      bytes = await _media().download(
         a,
         onProgress: (p) {
           if (mounted) setState(() => downloadProgress = p);
@@ -262,7 +306,7 @@ class _AttachmentViewState extends ConsumerState<AttachmentView> {
     final a = attachment;
     late final Uint8List bytes;
     try {
-      bytes = await MediaService(widget.client).download(
+      bytes = await _media().download(
         a,
         onProgress: (value) {
           if (mounted) setState(() => downloadProgress = value);
