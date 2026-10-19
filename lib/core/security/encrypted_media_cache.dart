@@ -37,12 +37,15 @@ class EncryptedMediaCache {
   Future<Directory> _ownerFolder(String owner) async =>
       Directory('${(await _root()).path}/${await _hash(owner)}');
 
-  static int _lastWriteEpochMs = 0;
+  int _lastWriteEpochMs = 0;
+  final List<String> _recentPaths = [];
 
   Future<void> _touch(File file) async {
+    _recentPaths.remove(file.path);
+    _recentPaths.add(file.path);
     var nowMs = clock().millisecondsSinceEpoch;
     if (nowMs <= _lastWriteEpochMs) {
-      nowMs = _lastWriteEpochMs + 10;
+      nowMs = _lastWriteEpochMs + 1000;
     }
     _lastWriteEpochMs = nowMs;
     try {
@@ -257,7 +260,16 @@ class EncryptedMediaCache {
         try { if (await entry.exists()) await entry.delete(); } catch (_) {}
       }
     }
-    entries.sort((a, b) => a.$3.compareTo(b.$3));
+    entries.sort((a, b) {
+      final cmp = a.$3.compareTo(b.$3);
+      if (cmp != 0) return cmp;
+      final idxA = _recentPaths.indexOf(a.$1.path);
+      final idxB = _recentPaths.indexOf(b.$1.path);
+      if (idxA != -1 && idxB != -1) {
+        return idxA.compareTo(idxB);
+      }
+      return a.$1.path.compareTo(b.$1.path);
+    });
     for (final (file, size, _) in entries) {
       if (total <= maxCacheBytes) break;
       try { await file.delete(); total -= size; } catch (_) {}
