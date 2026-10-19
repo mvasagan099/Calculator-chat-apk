@@ -37,6 +37,19 @@ class EncryptedMediaCache {
   Future<Directory> _ownerFolder(String owner) async =>
       Directory('${(await _root()).path}/${await _hash(owner)}');
 
+  static int _lastWriteEpochMs = 0;
+
+  Future<void> _touch(File file) async {
+    var nowMs = clock().millisecondsSinceEpoch;
+    if (nowMs <= _lastWriteEpochMs) {
+      nowMs = _lastWriteEpochMs + 10;
+    }
+    _lastWriteEpochMs = nowMs;
+    try {
+      await file.setLastModified(DateTime.fromMillisecondsSinceEpoch(nowMs));
+    } catch (_) {}
+  }
+
   Future<File> _file(String owner, String path, String mime, int size) async =>
       File('${(await _ownerFolder(owner)).path}/${await _hash('$owner|$path|$mime|$size')}.bin');
 
@@ -152,7 +165,7 @@ class EncryptedMediaCache {
         aad: utf8.encode(_aad(owner, path, mime, size, expiry)),
       ));
       if (plain.length != size) throw const FormatException('Cache size mismatch');
-      await file.setLastModified(current);
+      await _touch(file);
       return plain;
     } catch (_) {
       try { if (await file.exists()) await file.delete(); } catch (_) {}
@@ -196,6 +209,7 @@ class EncryptedMediaCache {
     try {
       await temp.writeAsBytes(sealed, flush: true);
       await temp.rename(file.path);
+      await _touch(file);
     } finally {
       if (await temp.exists()) await temp.delete();
     }
