@@ -72,7 +72,13 @@ class TestDevice implements CallDevice {
   }
 
   @override
-  Future<void> start(String session, String callId, bool video) async {
+  Future<void> start(
+    String session,
+    String callId,
+    bool video, {
+    String? contactName,
+    int? startTime,
+  }) async {
     await startPending?.future;
     active = session;
   }

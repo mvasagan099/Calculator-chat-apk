@@ -25,7 +25,9 @@ class CallController extends ChangeNotifier {
     this.createTransport,
   ) {
     AndroidCallDevice.channel.setMethodCallHandler((call) async {
-      if (call.method == 'endCall' && call.arguments == callId) await end();
+      if (call.method == 'endCall' && (call.arguments == null || call.arguments == callId)) {
+        await end();
+      }
       if (call.method == 'pipChanged') {
         inPip = call.arguments == true;
         _notify();
@@ -340,7 +342,40 @@ class CallController extends ChangeNotifier {
       transport.addListener(_mediaChanged);
       await transport.connect(grant);
       if (!_current(attempt)) return;
-      await device.start(attempt.serviceId, id, useCamera);
+      String contactName = 'Call';
+      final isGroup = metadata?['group_call'] == true;
+      if (isGroup) {
+        contactName = 'Group Call';
+      } else {
+        final currentUid = backend.userId;
+        final participants = (metadata?['participants'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+        final other = participants.firstWhere(
+          (p) => p['user_id'] != currentUid,
+          orElse: () => const {},
+        );
+        if (other['display_name'] != null && (other['display_name'] as String).trim().isNotEmpty) {
+          contactName = (other['display_name'] as String).trim();
+        } else if (metadata?['caller_name'] != null && (metadata?['caller_name'] as String).trim().isNotEmpty) {
+          contactName = (metadata?['caller_name'] as String).trim();
+        } else {
+          contactName = 'Contact';
+        }
+      }
+      int? startEpoch;
+      if (metadata?['answered_at'] != null) {
+        try {
+          startEpoch = DateTime.parse(metadata!['answered_at']).millisecondsSinceEpoch;
+        } catch (_) {}
+      }
+      startEpoch ??= DateTime.now().millisecondsSinceEpoch;
+
+      await device.start(
+        attempt.serviceId,
+        id,
+        useCamera,
+        contactName: contactName,
+        startTime: startEpoch,
+      );
       if (!_current(attempt)) return;
       await transport.microphone(true);
       if (!_current(attempt)) return;

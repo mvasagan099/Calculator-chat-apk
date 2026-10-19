@@ -89,8 +89,14 @@ class MainActivity : FlutterFragmentActivity(), SensorEventListener {
                         } }
                         CallForegroundService.session = id
                         CallForegroundService.callId = callId
+                        val contactName = call.argument<String>("contactName") ?: "Contact"
+                        val startTime = (call.argument<Number>("startTime"))?.toLong() ?: System.currentTimeMillis()
                         val intent = Intent(this, CallForegroundService::class.java)
-                            .putExtra("id", id).putExtra("video", call.argument<Boolean>("video") ?: false)
+                            .putExtra("id", id)
+                            .putExtra("callId", callId)
+                            .putExtra("contactName", contactName)
+                            .putExtra("startTime", startTime)
+                            .putExtra("video", call.argument<Boolean>("video") ?: false)
                         try {
                             if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent) else startService(intent)
                         } catch (e: RuntimeException) {

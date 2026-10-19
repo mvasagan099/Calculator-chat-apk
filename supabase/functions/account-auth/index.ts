@@ -93,9 +93,17 @@ export async function handleAccount(req: Request, dependencies = accountDependen
       try {
         // Admin-only email_confirm affects this synthetic identity, not global
         // Auth settings. No real address is accepted, requested or sent mail.
-        const { data, error } = await admin.auth.admin.createUser({ email: alias, password, email_confirm: true,
-          app_metadata: { calculator_signup_intent: intent } });
-        if (!error && data.user) owner = data.user.id;
+        const { data, error } = await admin.auth.admin.createUser({
+          email: alias, password, email_confirm: true,
+          app_metadata: { calculator_signup_intent: intent },
+          user_metadata: { display_name: name, name: name },
+        });
+        if (!error && data.user) {
+          owner = data.user.id;
+          try {
+            await admin.from("profiles").update({ display_name: name }).eq("id", owner);
+          } catch (_) {}
+        }
       } finally {
         await admin.rpc("account_discard_intent", { intent });
       }

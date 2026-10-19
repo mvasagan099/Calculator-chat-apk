@@ -220,6 +220,7 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void lock() {
+    authenticating = false;
     cancelPendingUnlock();
     final token = _pickerToken;
     if (token != null) unawaited(_mediaPicker.cancel(token).catchError((Object _) {}));
@@ -258,6 +259,7 @@ class LockController extends ChangeNotifier with WidgetsBindingObserver {
   // Cancels a disposed calculator's in-flight result without notifying widgets
   // during route teardown. Existing foreground/background guards still apply.
   void cancelPendingUnlock() {
+    authenticating = false;
     ++_epoch;
     if (_biometricPrompt) unawaited(_cancelBiometrics());
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -7,6 +8,10 @@ import '../../core/widgets/private_scaffold.dart';
 import '../../core/widgets/actions.dart';
 import 'call_initiator.dart';
 
+// In-memory cache for fast lookups and offline profile display
+final _offlineNameCache = <String, String>{};
+final _offlineAvatarCache = <String, String>{};
+
 class CallHistoryScreen extends ConsumerStatefulWidget {
   const CallHistoryScreen({super.key});
   @override
@@ -14,15 +19,165 @@ class CallHistoryScreen extends ConsumerStatefulWidget {
 }
 
 class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
-  late final stream = ref.read(messengerProvider).watch(
-    ['calls'],
-    () async => await ref
-        .read(supabaseProvider)
-        .from('calls')
-        .select('*,call_history(outcome)')
-        .order('created_at', ascending: false)
-        .limit(100),
-  );
+  late final Stream<List<Map<String, dynamic>>> _callsStream;
+  StreamSubscription<List<Map<String, dynamic>>>? _conversationsSub;
+  final Map<String, Map<String, dynamic>> _conversationMap = {};
+
+  @override
+  void initState() {
+    super.initState();
+    final messenger = ref.read(messengerProvider);
+    final supabase = ref.read(supabaseProvider);
+
+    // Keep conversation titles and avatars populated from messenger cache
+    _conversationsSub = messenger.conversations().listen((convs) {
+      if (mounted) {
+        setState(() {
+          for (final c in convs) {
+            final id = c['id'] as String?;
+            if (id != null) {
+              _conversationMap[id] = c;
+              if (c['title'] != null) {
+                _offlineNameCache[id] = c['title'] as String;
+              }
+              if (c['avatar_path'] != null) {
+                _offlineAvatarCache[id] = c['avatar_path'] as String;
+              }
+            }
+          }
+        });
+      }
+    });
+
+    _callsStream = messenger.watch(
+      ['calls', 'call_history', 'conversations'],
+      () async {
+        try {
+          final res = await supabase
+              .from('calls')
+              .select('''
+                *,
+                call_history(outcome),
+                caller:caller_id(id, display_name, avatar_path),
+                conversations(
+                  id,
+                  kind,
+                  groups(name, avatar_path),
+                  conversation_members(
+                    user_id,
+                    profiles(id, display_name, avatar_path)
+                  )
+                )
+              ''')
+              .order('created_at', ascending: false)
+              .limit(100);
+          return (res as List).cast<Map<String, dynamic>>();
+        } catch (_) {
+          // Fallback if joined select is restricted or schema differs
+          final res = await supabase
+              .from('calls')
+              .select('*,call_history(outcome)')
+              .order('created_at', ascending: false)
+              .limit(100);
+          return (res as List).cast<Map<String, dynamic>>();
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _conversationsSub?.cancel();
+    super.dispose();
+  }
+
+  ({String title, String? avatarPath, bool isGroup}) _resolveCallParty(
+    Map<String, dynamic> call,
+    String? myUid,
+  ) {
+    final cid = call['conversation_id'] as String?;
+    final isGroup = call['group_call'] == true;
+
+    // 1. Try joined data
+    final conv = call['conversations'] as Map<String, dynamic>?;
+    if (conv != null) {
+      if (isGroup) {
+        final groupName = conv['groups']?['name'] as String?;
+        if (groupName != null && groupName.isNotEmpty) {
+          if (cid != null) _offlineNameCache[cid] = groupName;
+          return (title: groupName, avatarPath: conv['groups']?['avatar_path'] as String?, isGroup: true);
+        }
+      } else {
+        final members = (conv['conversation_members'] as List?)?.cast<Map<String, dynamic>>() ?? const [];
+        for (final m in members) {
+          if (m['user_id'] != myUid) {
+            final prof = m['profiles'] as Map<String, dynamic>?;
+            final name = prof?['display_name'] as String?;
+            if (name != null && name.trim().isNotEmpty) {
+              if (cid != null) _offlineNameCache[cid] = name.trim();
+              final av = prof?['avatar_path'] as String?;
+              if (cid != null && av != null) _offlineAvatarCache[cid] = av;
+              return (title: name.trim(), avatarPath: av, isGroup: false);
+            }
+          }
+        }
+      }
+    }
+
+    // 2. Caller profile if incoming
+    if (call['caller_id'] != myUid) {
+      final caller = call['caller'] as Map<String, dynamic>?;
+      final callerName = caller?['display_name'] as String? ?? call['caller_name'] as String?;
+      if (callerName != null && callerName.trim().isNotEmpty) {
+        final av = caller?['avatar_path'] as String?;
+        if (cid != null) {
+          _offlineNameCache[cid] = callerName.trim();
+          if (av != null) _offlineAvatarCache[cid] = av;
+        }
+        return (title: callerName.trim(), avatarPath: av, isGroup: isGroup);
+      }
+    }
+
+    // 3. Cached conversation map from messengerProvider
+    if (cid != null && _conversationMap.containsKey(cid)) {
+      final cached = _conversationMap[cid]!;
+      final title = cached['title'] as String?;
+      if (title != null && title.trim().isNotEmpty) {
+        return (
+          title: title.trim(),
+          avatarPath: cached['avatar_path'] as String?,
+          isGroup: isGroup || cached['kind'] == 'group',
+        );
+      }
+    }
+
+    // 4. Offline static cache
+    if (cid != null && _offlineNameCache.containsKey(cid)) {
+      return (
+        title: _offlineNameCache[cid]!,
+        avatarPath: _offlineAvatarCache[cid],
+        isGroup: isGroup,
+      );
+    }
+
+    return (
+      title: isGroup ? 'Group Call' : 'Contact',
+      avatarPath: null,
+      isGroup: isGroup,
+    );
+  }
+
+  String _getInitials(String name) {
+    final clean = name.trim();
+    if (clean.isEmpty) return '?';
+    final parts = clean.split(RegExp(r'\s+'));
+    if (parts.length >= 2) {
+      final first = parts[0].characters.firstOrNull ?? '';
+      final second = parts[1].characters.firstOrNull ?? '';
+      return (first + second).toUpperCase();
+    }
+    return clean.characters.take(2).toString().toUpperCase();
+  }
 
   Widget _buildSkeletonLoading(BuildContext context) {
     final theme = Theme.of(context);
@@ -132,7 +287,7 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
     title: 'Calls',
     index: 2,
     body: StreamBuilder<List<Map<String, dynamic>>>(
-      stream: stream,
+      stream: _callsStream,
       builder: (context, s) {
         if (s.hasError) return LoadError(retry: () => context.go('/calls'));
         if (!s.hasData) return _buildSkeletonLoading(context);
@@ -149,10 +304,13 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
           itemBuilder: (context, i) {
             final c = calls[i];
             final isVideo = c['video'] == true;
-            final isGroup = c['group_call'] == true;
             final isOutgoing = c['caller_id'] == myUid;
             final outcome = (c['call_history'] as List?)?.firstOrNull?['outcome'] ?? c['state'];
             final isMissed = !isOutgoing && (outcome == 'missed' || outcome == 'rejected' || outcome == 'busy' || outcome == 'cancelled');
+
+            final party = _resolveCallParty(c, myUid);
+            final title = party.title;
+            final initials = _getInitials(title);
 
             IconData statusIcon;
             Color statusColor;
@@ -183,9 +341,8 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
                 ? DateFormat.yMMMd().add_Hm().format(createdAt)
                 : '';
 
-            final callTypeTitle = isGroup
-                ? (isVideo ? 'Group Video Call' : 'Group Voice Call')
-                : (isVideo ? 'Video Call' : 'Voice Call');
+            final callTypeLabel = isVideo ? 'Video' : 'Voice';
+            final directionLabel = isOutgoing ? 'Outgoing' : (isMissed ? 'Missed' : 'Incoming');
 
             return InkWell(
               onTap: () => context.push('/call/${c['id']}'),
@@ -195,22 +352,27 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
                   children: [
                     Stack(
                       children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: BoxDecoration(
-                            color: isMissed
-                                ? theme.colorScheme.errorContainer.withValues(alpha: 0.5)
-                                : theme.colorScheme.surfaceContainerHighest,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            isVideo ? Icons.videocam_rounded : Icons.call_rounded,
-                            color: isMissed
-                                ? theme.colorScheme.error
-                                : theme.colorScheme.onSurfaceVariant,
-                            size: 24,
-                          ),
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundColor: isMissed
+                              ? theme.colorScheme.errorContainer
+                              : (party.isGroup
+                                  ? theme.colorScheme.secondaryContainer
+                                  : theme.colorScheme.primaryContainer),
+                          foregroundColor: isMissed
+                              ? theme.colorScheme.onErrorContainer
+                              : (party.isGroup
+                                  ? theme.colorScheme.onSecondaryContainer
+                                  : theme.colorScheme.onPrimaryContainer),
+                          child: party.isGroup
+                              ? const Icon(Icons.group_rounded, size: 24)
+                              : Text(
+                                  initials,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16,
+                                  ),
+                                ),
                         ),
                         Positioned(
                           right: 0,
@@ -232,7 +394,9 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            callTypeTitle,
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodyLarge?.copyWith(
                               fontWeight: FontWeight.w600,
                               color: isMissed ? theme.colorScheme.error : null,
@@ -241,19 +405,29 @@ class _CallHistoryScreenState extends ConsumerState<CallHistoryScreen> {
                           const SizedBox(height: 3),
                           Row(
                             children: [
+                              Icon(
+                                isVideo ? Icons.videocam_rounded : Icons.call_rounded,
+                                size: 14,
+                                color: statusColor,
+                              ),
+                              const SizedBox(width: 4),
                               Text(
-                                isOutgoing ? 'Outgoing' : (isMissed ? 'Missed' : 'Incoming'),
+                                '$directionLabel $callTypeLabel',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: statusColor,
                                   fontWeight: FontWeight.w500,
                                 ),
                               ),
-                              Text(
-                                ' · $formattedDate$durationLabel',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: theme.colorScheme.onSurfaceVariant,
+                              Flexible(
+                                child: Text(
+                                  ' · $formattedDate$durationLabel',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
                                 ),
                               ),
                             ],

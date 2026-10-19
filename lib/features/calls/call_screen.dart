@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -46,6 +47,29 @@ class CallScreen extends ConsumerStatefulWidget {
 }
 
 class _CallScreenState extends ConsumerState<CallScreen> {
+  bool _controlsVisible = true;
+  Timer? _controlsTimer;
+
+  void _startControlsTimer() {
+    _controlsTimer?.cancel();
+    _controlsTimer = Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _controlsVisible = false);
+    });
+  }
+
+  void _toggleControls() {
+    setState(() {
+      _controlsVisible = !_controlsVisible;
+      if (_controlsVisible) _startControlsTimer();
+    });
+  }
+
+  @override
+  void dispose() {
+    _controlsTimer?.cancel();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -327,7 +351,11 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                   ),
                 Expanded(
                   child: active
-                      ? ParticipantGrid(room: controller.room, names: names)
+                      ? ParticipantGrid(
+                          room: controller.room,
+                          names: names,
+                          onTapBackground: _toggleControls,
+                        )
                       : ListView(
                           children: [
                             for (final p in participants)
@@ -374,8 +402,13 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                     ],
                   )
                 else if (active)
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 250),
+                    opacity: (call?['video'] == true && !_controlsVisible) ? 0.0 : 1.0,
+                    child: IgnorePointer(
+                      ignoring: call?['video'] == true && !_controlsVisible,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.6),
@@ -503,29 +536,38 @@ class _CallScreenState extends ConsumerState<CallScreen> {
                       ],
                     ),
                   ),
+                ),
+              ),
                 const SizedBox(height: 8),
                 if (!controller.finished &&
                     ['ringing', 'accepted'].contains(state) &&
                     !needsAnswer &&
                     !canRejoin)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.error,
-                        foregroundColor: Theme.of(context).colorScheme.onError,
-                        padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      ),
-                      onPressed: () => act(context, controller.end),
-                      icon: const Icon(Icons.call_end),
-                      label: Text(
-                        call?['group_call'] == true
-                            ? 'Leave call'
-                            : state == 'ringing'
-                            ? 'Cancel call'
-                            : 'End call',
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                  AnimatedOpacity(
+                    duration: const Duration(milliseconds: 250),
+                    opacity: (call?['video'] == true && active && !_controlsVisible) ? 0.0 : 1.0,
+                    child: IgnorePointer(
+                      ignoring: call?['video'] == true && active && !_controlsVisible,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Theme.of(context).colorScheme.error,
+                            foregroundColor: Theme.of(context).colorScheme.onError,
+                            padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 14),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                          ),
+                          onPressed: () => act(context, controller.end),
+                          icon: const Icon(Icons.call_end),
+                          label: Text(
+                            call?['group_call'] == true
+                                ? 'Leave call'
+                                : state == 'ringing'
+                                ? 'Cancel call'
+                                : 'End call',
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
                       ),
                     ),
                   )

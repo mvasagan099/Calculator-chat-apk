@@ -292,12 +292,19 @@ class AuthService extends ChangeNotifier {
   Future<void> signUp(String username, String displayName, String mobile,
       String password, String confirmation) async {
     AccountInput.password(password, confirmation);
+    final validDisplayName = AccountInput.displayName(displayName);
     await _authenticateAccount({
       'action': 'signup', 'username': AccountInput.username(username),
-      'display_name': AccountInput.displayName(displayName),
+      'display_name': validDisplayName,
       'recovery_phone': AccountInput.recoveryPhone(mobile),
       'password': password, 'confirm_password': confirmation,
     });
+    final user = client?.auth.currentUser;
+    if (user != null) {
+      try {
+        await client!.from('profiles').update({'display_name': validDisplayName}).eq('id', user.id);
+      } catch (_) {}
+    }
   }
 
   Future<void> recoverAccount(String userId, String code, String password, String confirmation) async {

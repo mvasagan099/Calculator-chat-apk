@@ -74,7 +74,13 @@ class MockDevice implements CallDevice {
   Future<void> permissions(bool video) async {}
 
   @override
-  Future<void> start(String session, String callId, bool video) async {}
+  Future<void> start(
+    String session,
+    String callId,
+    bool video, {
+    String? contactName,
+    int? startTime,
+  }) async {}
 
   @override
   Future<void> stop(String id) async {}

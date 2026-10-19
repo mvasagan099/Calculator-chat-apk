@@ -24,7 +24,6 @@ import '../notifications/notification_service.dart';
 import '../messaging/starred_messages_screen.dart';
 import '../vault/vault_screen.dart';
 import 'storage_manager_screen.dart';
-import 'diagnostics_screen.dart';
 import '../notifications/app_update_dialog.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -345,23 +344,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                   color: Theme.of(context).colorScheme.onSurfaceVariant,
                                 ),
                               ),
-                              const SizedBox(height: 6),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.4),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: Text(
-                                  'ID: ${profile['public_id']}',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    fontFeatures: const [FontFeature.tabularFigures()],
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
-                                ),
-                              ),
+
                             ],
                           ),
                         ),
@@ -770,16 +753,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const Divider(),
             const Padding(
               padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
-              child: Text('Diagnostics & App Version', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-            ),
-            ListTile(
-              leading: const Icon(Icons.network_check),
-              title: const Text('Connection diagnostics'),
-              subtitle: const Text('Test connectivity to auth, database, realtime, and media storage'),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ConnectionDiagnosticsScreen()),
-              ),
+              child: Text('App Version & Updates', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
             ),
             ListTile(
               leading: const Icon(Icons.system_update_outlined),

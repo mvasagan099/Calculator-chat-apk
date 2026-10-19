@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -41,6 +41,9 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   late final VaultService _vault = ref.read(vaultServiceProvider);
   bool _authenticated = false;
   bool _loading = true;
+  bool _needsBiometricPrompt = false;
+  bool _isAuthenticating = false;
+  String? _biometricStatus;
   String? _error;
   String _searchQuery = '';
   String _selectedFolder = 'All';
@@ -55,25 +58,107 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   }
 
   Future<void> _checkAuthAndLoad() async {
-    if (mounted) setState(() { _loading = true; _error = null; });
     final device = ref.read(deviceSettingsProvider);
-    if (device?.vaultBiometricsEnabled == true) {
-      final lock = ref.read(lockProvider);
-      final epoch = lock.securityEpoch;
-      bool ok = false;
-      try {
-        ok = await LocalAuthentication().authenticate(
-          localizedReason: 'Verify private vault access',
-          biometricOnly: true,
-          persistAcrossBackgrounding: false,
-        );
-      } catch (_) {
-        // Missing or cancelled biometric authorization must fail closed.
-      }
-      if (!ok || !lock.privateActionValid(epoch)) {
-        if (mounted) Navigator.of(context).pop();
+    if (device?.vaultBiometricsEnabled == true && !_authenticated) {
+      setState(() {
+        _loading = false;
+        _needsBiometricPrompt = true;
+        _error = null;
+      });
+      await _authenticateWithBiometrics();
+    } else {
+      _authenticated = true;
+      await _loadVault();
+    }
+  }
+
+  Future<void> _authenticateWithBiometrics() async {
+    if (_isAuthenticating) return;
+    _isAuthenticating = true;
+    if (mounted) {
+      setState(() {
+        _isAuthenticating = true;
+        _error = null;
+      });
+    }
+
+    try {
+      final auth = LocalAuthentication();
+      final canCheck = await auth.canCheckBiometrics;
+      final isSupported = await auth.isDeviceSupported();
+
+      if (!canCheck && !isSupported) {
+        if (mounted) {
+          setState(() {
+            _biometricStatus = 'Biometric authentication is not supported or enrolled on this device.';
+            _isAuthenticating = false;
+            _loading = false;
+          });
+        }
         return;
       }
+
+      final lock = ref.read(lockProvider);
+      final epoch = lock.securityEpoch;
+
+      final ok = await auth.authenticate(
+        localizedReason: 'Verify private vault access',
+        biometricOnly: true,
+        persistAcrossBackgrounding: false,
+      );
+
+      if (ok && lock.privateActionValid(epoch)) {
+        if (mounted) {
+          setState(() {
+            _authenticated = true;
+            _needsBiometricPrompt = false;
+            _isAuthenticating = false;
+          });
+          await _loadVault();
+        }
+        return;
+      } else {
+        if (mounted) {
+          setState(() {
+            _biometricStatus = 'Authentication cancelled or unverified. Tap to retry.';
+            _isAuthenticating = false;
+            _loading = false;
+          });
+        }
+      }
+    } on PlatformException catch (e) {
+      if (mounted) {
+        setState(() {
+          _biometricStatus = switch (e.code) {
+            'LockedOut' => 'Too many attempts. Biometrics temporarily locked.',
+            'PermanentlyLockedOut' => 'Biometrics permanently locked. Device unlock required.',
+            'NotAvailable' => 'Biometric hardware unavailable.',
+            'NotEnrolled' => 'No fingerprint or biometrics enrolled.',
+            _ => 'Authentication failed: ${e.message ?? e.code}',
+          };
+          _isAuthenticating = false;
+          _loading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _biometricStatus = 'Authentication failed. Please retry.';
+          _isAuthenticating = false;
+          _loading = false;
+        });
+      }
+    } finally {
+      _isAuthenticating = false;
+    }
+  }
+
+  Future<void> _loadVault() async {
+    if (mounted) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
     }
     try {
       await _vault.initialize();
@@ -88,12 +173,12 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         _authenticated = true;
         _loading = false;
       });
-    } catch (_) {
+    } catch (error) {
       if (mounted) {
         setState(() {
           _error = 'Could not open the local encrypted vault. Your existing '
-              'files were preserved. Check available device storage and retry. '
-              'Do not clear app data or reinstall if you have private files.';
+              'files were preserved. Check available device storage and retry.\n'
+              'Details: $error';
           _loading = false;
         });
       }
@@ -328,6 +413,46 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                   onPressed: _checkAuthAndLoad,
                   icon: const Icon(Icons.refresh),
                   label: const Text('Retry opening vault'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    if (_needsBiometricPrompt && !_authenticated) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Private File Vault')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.fingerprint, size: 72, color: Colors.blueAccent),
+                const SizedBox(height: 20),
+                Text(
+                  'Private Vault Locked',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _biometricStatus ?? 'Biometric verification is required to view your encrypted files.',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).hintColor,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                FilledButton.icon(
+                  onPressed: _isAuthenticating ? null : _authenticateWithBiometrics,
+                  icon: const Icon(Icons.fingerprint),
+                  label: const Text('Unlock with Fingerprint'),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
                 ),
               ],
             ),

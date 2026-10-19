@@ -30,6 +30,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
   final engine = CalculatorEngine();
   Future<void> press(String key) async {
     if (busy) {
+      if (key == '=') return;
       ++_operation;
       busy = false;
       // Continuing a calculation cancels the pending unlock, not its persisted

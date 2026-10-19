@@ -81,7 +81,13 @@ class SupabaseCallBackend implements CallBackend {
 
 abstract interface class CallDevice {
   Future<void> permissions(bool video);
-  Future<void> start(String session, String callId, bool video);
+  Future<void> start(
+    String session,
+    String callId,
+    bool video, {
+    String? contactName,
+    int? startTime,
+  });
   Future<void> stop(String id);
   Future<bool> projectionConsent();
   Future<void> projection(String session, bool enabled);
@@ -99,11 +105,19 @@ class AndroidCallDevice implements CallDevice {
   Future<void> permissions(bool video) =>
       channel.invokeMethod<void>('requestPermissions', {'video': video});
   @override
-  Future<void> start(String session, String callId, bool video) =>
+  Future<void> start(
+    String session,
+    String callId,
+    bool video, {
+    String? contactName,
+    int? startTime,
+  }) =>
       channel.invokeMethod<void>('startCall', {
         'id': session,
         'callId': callId,
         'video': video,
+        'contactName': ?contactName,
+        'startTime': ?startTime,
       });
   @override
   Future<bool> projectionConsent() => Helper.requestCapturePermission();

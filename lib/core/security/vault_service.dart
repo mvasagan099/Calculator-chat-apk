@@ -125,11 +125,12 @@ class VaultStorageStats {
 class VaultService {
   VaultService({this.customDir, SecretKey? customKey, DatabaseFactory? factory})
       : _customKey = customKey,
-        _factory = factory ?? databaseFactory;
+        _factory = factory;
 
   final Directory? customDir;
   final SecretKey? _customKey;
-  final DatabaseFactory _factory;
+  final DatabaseFactory? _factory;
+  DatabaseFactory get _dbFactory => _factory ?? databaseFactory;
   final AesGcm _aes = AesGcm.with256bits();
 
   // v1 encrypted manifest is retained until a verified SQLite migration.
@@ -189,8 +190,26 @@ class VaultService {
     }
 
     const storageKey = 'calculator.private_vault_v1.aes_key';
-    const storage = FlutterSecureStorage();
-    String? encoded = await storage.read(key: storageKey);
+    const storage = FlutterSecureStorage(
+      aOptions: AndroidOptions(
+        resetOnError: false,
+        migrateOnAlgorithmChange: true,
+        migrateWithBackup: true,
+      ),
+    );
+
+    // Read with transient retry to tolerate momentary Android Keystore availability hiccups.
+    String? encoded;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        encoded = await storage.read(key: storageKey);
+        if (encoded != null) break;
+      } catch (_) {
+        if (attempt == 2) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    }
+
     if (encoded != null) {
       final decoded = base64Decode(encoded);
       if (decoded.length != 32) throw StateError('Invalid protected vault key');
@@ -208,9 +227,9 @@ class VaultService {
     if (await legacyFile.exists()) {
       final bytes = await legacyFile.readAsBytes();
       if (bytes.length != 32) throw StateError('Invalid legacy vault key');
-      encoded = base64Encode(bytes);
-      await storage.write(key: storageKey, value: encoded);
-      if (await storage.read(key: storageKey) != encoded) {
+      final encodedBytes = base64Encode(bytes);
+      await storage.write(key: storageKey, value: encodedBytes);
+      if (await storage.read(key: storageKey) != encodedBytes) {
         throw StateError('Unable to migrate vault key securely');
       }
       await legacyFile.delete();
@@ -226,9 +245,6 @@ class VaultService {
     final generated = await _aes.newSecretKey();
     encoded = base64Encode(await generated.extractBytes());
     await storage.write(key: storageKey, value: encoded);
-    if (await storage.read(key: storageKey) != encoded) {
-      throw StateError('Unable to protect the new vault key');
-    }
     return _key = generated;
   }
 
@@ -246,10 +262,14 @@ class VaultService {
     final dir = await _getDir();
     final legacy = File('${dir.path}/$_metaFile');
     try {
+      if (_db != null) {
+        try { await _db?.close(); } catch (_) {}
+        _db = null;
+      }
       // Read the existing key before touching metadata. Never generate a new
       // key over an existing encrypted vault.
       await _getKey();
-      final db = await _factory.openDatabase(
+      final db = await _dbFactory.openDatabase(
         '${dir.path}/$_indexFile',
         options: OpenDatabaseOptions(
           version: 1,
@@ -269,7 +289,17 @@ class VaultService {
         ),
       );
       _db = db;
-      final rows = await db.query('vault_state', where: 'id = ?', whereArgs: [1]);
+      List<Map<String, Object?>> rows = const [];
+      try {
+        rows = await db.query('vault_state', where: 'id = ?', whereArgs: [1]);
+      } catch (_) {
+        // Table may be corrupted or unreadable; ensure table exists.
+        await db.execute(
+          'CREATE TABLE IF NOT EXISTS vault_state (id INTEGER PRIMARY KEY CHECK(id = 1), '
+          'nonce BLOB NOT NULL, payload BLOB NOT NULL, tag BLOB NOT NULL)',
+        );
+      }
+
       if (rows.isNotEmpty) {
         _decodeState(await _decryptState(rows.single));
       } else if (await legacy.exists()) {
@@ -287,42 +317,7 @@ class VaultService {
         // Delete only after the new encrypted SQLite state is verified.
         await legacy.delete();
       } else {
-        // Recover any existing orphaned encrypted files instead of throwing fatal errors.
-        final children = await dir.list(followLinks: false).toList();
-        final encFiles = children.whereType<File>().where((file) => file.path.endsWith('.enc')).toList();
-        if (encFiles.isNotEmpty) {
-          final key = await _getKey();
-          for (final file in encFiles) {
-            final encName = file.uri.pathSegments.last;
-            final id = encName.replaceFirst(RegExp(r'\.enc$'), '');
-            try {
-              final raw = await file.readAsBytes();
-              if (raw.length >= 28) {
-                final nonce = raw.sublist(0, 12);
-                final mac = Mac(raw.sublist(raw.length - 16));
-                final cipherText = raw.sublist(12, raw.length - 16);
-                final plain = await _aes.decrypt(
-                  SecretBox(cipherText, nonce: nonce, mac: mac),
-                  secretKey: key,
-                );
-                final ext = _detectExtension(plain);
-                final hash = (await Sha256().hash(plain)).bytes
-                    .map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-                _items.add(VaultItem(
-                  id: id,
-                  filename: 'recovered_$id.$ext',
-                  folder: 'Root',
-                  category: VaultCategory.fromExtension(ext),
-                  sizeBytes: plain.length,
-                  createdAt: await file.lastModified(),
-                  encryptedFilename: encName,
-                  contentHash: hash,
-                ));
-              }
-            } catch (_) {}
-          }
-        }
-        await _saveManifest();
+        await _recoverEncryptedFiles(dir);
       }
       _initialized = true;
     } catch (error) {
@@ -333,9 +328,47 @@ class VaultService {
       _folders..clear()..addAll({'Root', 'Personal', 'Work', 'Financial'});
       throw StateError(
         'Private vault could not open locally. Existing encrypted files are '
-        'preserved; do not clear app data. Cause: ${error.runtimeType}',
+        'preserved; do not clear app data. Cause: ${error.runtimeType}: $error',
       );
     }
+  }
+
+  Future<void> _recoverEncryptedFiles(Directory dir) async {
+    final children = await dir.list(followLinks: false).toList();
+    final encFiles = children.whereType<File>().where((file) => file.path.endsWith('.enc')).toList();
+    if (encFiles.isNotEmpty) {
+      final key = await _getKey();
+      for (final file in encFiles) {
+        final encName = file.uri.pathSegments.last;
+        final id = encName.replaceFirst(RegExp(r'\.enc$'), '');
+        try {
+          final raw = await file.readAsBytes();
+          if (raw.length >= 28) {
+            final nonce = raw.sublist(0, 12);
+            final mac = Mac(raw.sublist(raw.length - 16));
+            final cipherText = raw.sublist(12, raw.length - 16);
+            final plain = await _aes.decrypt(
+              SecretBox(cipherText, nonce: nonce, mac: mac),
+              secretKey: key,
+            );
+            final ext = _detectExtension(plain);
+            final hash = (await Sha256().hash(plain)).bytes
+                .map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+            _items.add(VaultItem(
+              id: id,
+              filename: 'recovered_$id.$ext',
+              folder: 'Root',
+              category: VaultCategory.fromExtension(ext),
+              sizeBytes: plain.length,
+              createdAt: await file.lastModified(),
+              encryptedFilename: encName,
+              contentHash: hash,
+            ));
+          }
+        } catch (_) {}
+      }
+    }
+    await _saveManifest();
   }
 
   Map<String, dynamic> _stateData() => {

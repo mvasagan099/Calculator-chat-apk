@@ -74,6 +74,7 @@ class StorageManagerScreen extends ConsumerStatefulWidget {
 
 class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
   bool _loading = true;
+  String _statusMessage = 'Scanning storage…';
   StorageBreakdown? _stats;
   final Set<String> _selectedLargeFiles = {};
 
@@ -91,7 +92,10 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
   }
 
   Future<void> _loadStorage() async {
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _statusMessage = 'Scanning storage breakdown…';
+    });
 
     try {
       final tempDir = await getTemporaryDirectory();
@@ -100,78 +104,84 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
       var cacheBytes = 0;
       var mediaBytes = 0;
       var databaseBytes = 0;
+      var vaultBytes = 0;
       final largeFiles = <LargeFileItem>[];
 
-      // 1. Scan temp directory
+      // 1. Scan temporary directory (isolated cache)
       if (await tempDir.exists()) {
-        await for (final file in tempDir.list(recursive: true, followLinks: false)) {
-          if (file is File) {
-            final len = await file.length();
-            cacheBytes += len;
-            if (len > 2 * 1024 * 1024) {
-              largeFiles.add(LargeFileItem(
-                path: file.path,
-                filename: file.uri.pathSegments.last,
-                sizeBytes: len,
-                source: 'Cache',
-              ));
+        try {
+          await for (final file in tempDir.list(recursive: true, followLinks: false)) {
+            if (file is File) {
+              try {
+                final len = await file.length();
+                cacheBytes += len;
+                if (len > 2 * 1024 * 1024) {
+                  largeFiles.add(LargeFileItem(
+                    path: file.path,
+                    filename: file.uri.pathSegments.last,
+                    sizeBytes: len,
+                    source: 'Temporary Cache',
+                  ));
+                }
+              } catch (_) {}
             }
           }
-        }
+        } catch (_) {}
       }
 
-      // 2. Scan encrypted media cache & breakdown
+      // 2. Query MediaCacheService for exact media breakdown
       final owner = ref.read(supabaseProvider).auth.currentUser?.id;
       MediaStorageStats? mediaBreakdown;
       if (owner != null) {
-        mediaBreakdown = await MediaCacheService().getStorageBreakdown(owner);
-        cacheBytes += mediaBreakdown.totalBytes;
-        cacheBytes += await EncryptedMediaCache().diskBytes(owner);
+        try {
+          mediaBreakdown = await MediaCacheService().getStorageBreakdown(owner);
+          mediaBytes = mediaBreakdown.totalBytes;
+        } catch (_) {}
       }
 
-      // 3. Scan private media directory
+      // 3. Scan private media directory for large files and fallback count
       final mediaDir = Directory('${appSupportDir.path}/private-media-v1');
       if (await mediaDir.exists()) {
-        await for (final file in mediaDir.list(recursive: true, followLinks: false)) {
-          if (file is File) {
-            final len = await file.length();
-            mediaBytes += len;
-            if (len > 2 * 1024 * 1024) {
-              largeFiles.add(LargeFileItem(
-                path: file.path,
-                filename: file.uri.pathSegments.last,
-                sizeBytes: len,
-                source: 'Media',
-              ));
+        try {
+          var scannedMediaBytes = 0;
+          await for (final file in mediaDir.list(recursive: true, followLinks: false)) {
+            if (file is File) {
+              try {
+                final len = await file.length();
+                scannedMediaBytes += len;
+                if (len > 2 * 1024 * 1024) {
+                  largeFiles.add(LargeFileItem(
+                    path: file.path,
+                    filename: file.uri.pathSegments.last,
+                    sizeBytes: len,
+                    source: 'Chat Media',
+                  ));
+                }
+              } catch (_) {}
             }
           }
-        }
+          if (mediaBytes == 0) mediaBytes = scannedMediaBytes;
+        } catch (_) {}
       }
 
-      // 4. Scan sqlite database files
-      await for (final file in appSupportDir.list(followLinks: false)) {
-        if (file is File && (file.path.endsWith('.db') || file.path.endsWith('.bin'))) {
-          final len = await file.length();
-          databaseBytes += len;
+      // 4. Scan database files (.db, .sqlite, .bin)
+      try {
+        await for (final file in appSupportDir.list(followLinks: false)) {
+          if (file is File && (file.path.endsWith('.db') || file.path.endsWith('.bin') || file.path.endsWith('.sqlite'))) {
+            try {
+              databaseBytes += await file.length();
+            } catch (_) {}
+          }
         }
-      }
+      } catch (_) {}
 
-      // 5. Scan vault files
-      final vault = ref.read(vaultServiceProvider);
-      await vault.initialize();
-      final vaultStats = await vault.getStats();
-      final vaultBytes = vaultStats.vaultBytes;
-
-      for (final item in vault.items) {
-        if (item.sizeBytes > 2 * 1024 * 1024) {
-          largeFiles.add(LargeFileItem(
-            path: item.id,
-            filename: item.filename,
-            sizeBytes: item.sizeBytes,
-            source: 'Vault (${item.folder})',
-          ));
-        }
-      }
+      // 5. Query Private Vault stats (safely, NEVER add vault files to bulk deletion largeFiles!)
+      try {
+        final vault = ref.read(vaultServiceProvider);
+        await vault.initialize();
+        final vaultStats = await vault.getStats();
+        vaultBytes = vaultStats.vaultBytes;
+      } catch (_) {}
 
       // 6. Per-chat storage estimates
       final chatSizes = <ChatStorageItem>[];
@@ -473,7 +483,23 @@ class _StorageManagerScreenState extends ConsumerState<StorageManagerScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const CircularProgressIndicator(),
+                  if (_statusMessage.isNotEmpty) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _statusMessage,
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ],
+              ),
+            )
           : _stats == null
           ? const Center(child: Text('Failed to calculate storage.'))
           : ListView(
