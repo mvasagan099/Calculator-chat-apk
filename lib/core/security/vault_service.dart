@@ -6,6 +6,7 @@ import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:sqflite/sqflite.dart';
 
 enum VaultCategory {
   images,
@@ -114,17 +115,25 @@ class VaultStorageStats {
 /// Encrypted with AES-GCM-256 and isolated in app-internal support directories.
 /// Contents are NEVER copied to public Android gallery folders or uploaded to cloud.
 class VaultService {
-  VaultService({this.customDir, this._customKey});
+  VaultService({this.customDir, SecretKey? customKey, DatabaseFactory? factory})
+      : _customKey = customKey,
+        _factory = factory ?? databaseFactory;
 
   final Directory? customDir;
   final SecretKey? _customKey;
+  final DatabaseFactory _factory;
   final AesGcm _aes = AesGcm.with256bits();
 
+  // v1 encrypted manifest is retained until a verified SQLite migration.
   static const _metaFile = 'vault_manifest.enc';
   static const _keyFile = 'vault_device.key';
+  static const _indexFile = 'vault_index.sqlite';
+  static const _indexAad = 'calculator-private-vault:index:v1';
 
   Directory? _vaultDirectory;
   SecretKey? _key;
+  Database? _db;
+  Future<void>? _initializing;
   final List<VaultItem> _items = [];
   final Set<String> _folders = {'Root', 'Personal', 'Work', 'Financial'};
   bool _initialized = false;
@@ -154,11 +163,17 @@ class VaultService {
     final legacyFile = File('${dir.path}/$_keyFile');
 
     if (customDir != null) {
-      // Isolated test fixtures do not depend on the Android Keystore plugin.
+      // Host test fixture, never used in production.
       if (await legacyFile.exists()) {
         final bytes = await legacyFile.readAsBytes();
         if (bytes.length != 32) throw StateError('Invalid test vault key');
         return _key = SecretKey(bytes);
+      }
+      if (await File('${dir.path}/$_indexFile').exists() ||
+          await File('${dir.path}/$_metaFile').exists() ||
+          (await dir.list(followLinks: false).toList()).whereType<File>()
+              .any((file) => file.path.endsWith('.enc'))) {
+        throw StateError('Missing local vault test key; encrypted files preserved');
       }
       final key = await _aes.newSecretKey();
       await legacyFile.writeAsBytes(await key.extractBytes(), flush: true);
@@ -193,7 +208,10 @@ class VaultService {
       await legacyFile.delete();
       return _key = SecretKey(bytes);
     }
-    if (await File('${dir.path}/$_metaFile').exists()) {
+    if (await File('${dir.path}/$_metaFile').exists() ||
+        await File('${dir.path}/$_indexFile').exists() ||
+        (await dir.list(followLinks: false).toList())
+            .whereType<File>().any((file) => file.path.endsWith('.enc'))) {
       throw StateError('Vault key missing; encrypted files preserved');
     }
 
@@ -206,60 +224,160 @@ class VaultService {
     return _key = generated;
   }
 
-  Future<void> initialize() async {
-    if (_initialized) return;
-    final dir = await _getDir();
-    final manifestFile = File('${dir.path}/$_metaFile');
+  /// The SQLite file contains only authenticated ciphertext. Filenames,
+  /// folder names and categories cannot be read from the raw database.
+  /// The encrypted original file blobs stay in the existing app-private folder.
+  Future<void> initialize() {
+    if (_initialized) return Future<void>.value();
+    return _initializing ??= _initializeIndex().whenComplete(() {
+      _initializing = null;
+    });
+  }
 
-    if (await manifestFile.exists()) {
-      try {
-        final encryptedBytes = await manifestFile.readAsBytes();
-        if (encryptedBytes.length <= 28) {
-          throw const FormatException('Invalid encrypted vault manifest');
+  Future<void> _initializeIndex() async {
+    final dir = await _getDir();
+    final legacy = File('${dir.path}/$_metaFile');
+    try {
+      // Read the existing key before touching metadata. Never generate a new
+      // key over an existing encrypted vault.
+      await _getKey();
+      final db = await _factory.openDatabase(
+        '${dir.path}/$_indexFile',
+        options: OpenDatabaseOptions(
+          version: 1,
+          singleInstance: false,
+          onConfigure: (database) async {
+            await database.rawQuery('PRAGMA journal_mode=WAL');
+            await database.execute('PRAGMA synchronous=FULL');
+            await database.execute('PRAGMA secure_delete=ON');
+          },
+          onCreate: (database, _) async {
+            await database.execute(
+              'CREATE TABLE vault_state (id INTEGER PRIMARY KEY CHECK(id = 1), '
+              'nonce BLOB NOT NULL, payload BLOB NOT NULL, tag BLOB NOT NULL)',
+            );
+          },
+        ),
+      );
+      _db = db;
+      final rows = await db.query('vault_state', where: 'id = ?', whereArgs: [1]);
+      if (rows.isNotEmpty) {
+        _decodeState(await _decryptState(rows.single));
+      } else if (await legacy.exists()) {
+        // Upgrade the existing AES-GCM manifest transactionally; keep all
+        // encrypted file blobs in their original location and format.
+        final bytes = await legacy.readAsBytes();
+        if (bytes.length <= 28) throw const FormatException('Invalid legacy vault manifest');
+        _decodeState(await _decryptPayload(bytes));
+        await _saveManifest();
+        final migrated = await db.query('vault_state', where: 'id = ?', whereArgs: [1]);
+        if (migrated.length != 1 ||
+            jsonEncode(await _decryptState(migrated.single)) != jsonEncode(_stateData())) {
+          throw StateError('Vault migration verification failed');
         }
-        {
-          final nonce = encryptedBytes.sublist(0, 12);
-          final mac = Mac(encryptedBytes.sublist(encryptedBytes.length - 16));
-          final cipherText = encryptedBytes.sublist(12, encryptedBytes.length - 16);
-          final key = await _getKey();
-          final clearBytes = await _aes.decrypt(
-            SecretBox(cipherText, nonce: nonce, mac: mac),
-            secretKey: key,
-          );
-          final data = jsonDecode(utf8.decode(clearBytes)) as Map<String, dynamic>;
-          final rawItems = (data['items'] as List? ?? []).cast<Map<String, dynamic>>();
-          _items.clear();
-          for (final j in rawItems) {
-            _items.add(VaultItem.fromJson(j));
-          }
-          final rawFolders = (data['folders'] as List? ?? []).cast<String>();
-          _folders.addAll(rawFolders);
+        // Delete only after the new encrypted SQLite state is verified.
+        await legacy.delete();
+      } else {
+        // An empty SQLite index must never hide ciphertext left by a failed
+        // import, partial migration, database loss or downgrade.
+        final children = await dir.list(followLinks: false).toList();
+        if (children.whereType<File>().any((file) => file.path.endsWith('.enc'))) {
+          throw StateError('Encrypted vault files exist without an index; recovery required');
         }
-      } catch (_) {
-        // Never reset metadata or overwrite existing ciphertext after a
-        // decrypt/key/migration failure. Recovery must be explicit.
-        throw StateError('Vault cannot be decrypted; preserve encrypted files');
+        await _saveManifest();
       }
+      _initialized = true;
+    } catch (error) {
+      try { await _db?.close(); } catch (_) {}
+      _db = null;
+      _initialized = false;
+      _items.clear();
+      _folders..clear()..addAll({'Root', 'Personal', 'Work', 'Financial'});
+      throw StateError(
+        'Private vault could not open locally. Existing encrypted files are '
+        'preserved; do not clear app data. Cause: ${error.runtimeType}',
+      );
     }
-    _initialized = true;
+  }
+
+  Map<String, dynamic> _stateData() => {
+    'items': _items.map((item) => item.toJson()).toList(),
+    'folders': _folders.toList(),
+  };
+
+  void _decodeState(Map<String, dynamic> data) {
+    final rawItems = data['items'];
+    final rawFolders = data['folders'];
+    if (rawItems is! List || rawFolders is! List) {
+      throw const FormatException('Invalid vault index');
+    }
+    final imported = <VaultItem>[];
+    final ids = <String>{};
+    for (final value in rawItems) {
+      if (value is! Map<String, dynamic>) throw const FormatException('Invalid vault entry');
+      final item = VaultItem.fromJson(value);
+      if (!ids.add(item.id) ||
+          !RegExp(r'^[0-9a-fA-F-]{36}\.enc$').hasMatch(item.encryptedFilename)) {
+        throw const FormatException('Invalid encrypted vault item');
+      }
+      imported.add(item);
+    }
+    final folders = rawFolders.cast<String>().toSet()..add('Root');
+    _items..clear()..addAll(imported);
+    _folders..clear()..addAll(folders);
+  }
+
+  Future<Map<String, dynamic>> _decryptPayload(List<int> bytes) async {
+    if (bytes.length <= 28) throw const FormatException('Invalid encrypted vault payload');
+    final plain = await _aes.decrypt(
+      SecretBox(
+        bytes.sublist(12, bytes.length - 16),
+        nonce: bytes.sublist(0, 12),
+        mac: Mac(bytes.sublist(bytes.length - 16)),
+      ),
+      secretKey: await _getKey(),
+    );
+    return jsonDecode(utf8.decode(plain)) as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> _decryptState(Map<String, Object?> row) async {
+    final clear = await _aes.decrypt(
+      SecretBox(
+        row['payload'] as Uint8List,
+        nonce: row['nonce'] as Uint8List,
+        mac: Mac(row['tag'] as Uint8List),
+      ),
+      secretKey: await _getKey(),
+      aad: utf8.encode(_indexAad),
+    );
+    return jsonDecode(utf8.decode(clear)) as Map<String, dynamic>;
   }
 
   Future<void> _saveManifest() async {
-    final dir = await _getDir();
-    final manifestFile = File('${dir.path}/$_metaFile');
-    final payload = jsonEncode({
-      'items': _items.map((i) => i.toJson()).toList(),
-      'folders': _folders.toList(),
+    final db = _db;
+    if (db == null) throw StateError('Private vault SQLite is not open');
+    final box = await _aes.encrypt(
+      utf8.encode(jsonEncode(_stateData())),
+      secretKey: await _getKey(),
+      aad: utf8.encode(_indexAad),
+    );
+    await db.transaction((txn) async {
+      await txn.insert('vault_state', {
+        'id': 1,
+        'nonce': Uint8List.fromList(box.nonce),
+        'payload': Uint8List.fromList(box.cipherText),
+        'tag': Uint8List.fromList(box.mac.bytes),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
     });
-    final clearBytes = utf8.encode(payload);
-    final key = await _getKey();
-    final secretBox = await _aes.encrypt(clearBytes, secretKey: key);
-    final fullPayload = Uint8List.fromList([
-      ...secretBox.nonce,
-      ...secretBox.cipherText,
-      ...secretBox.mac.bytes,
-    ]);
-    await manifestFile.writeAsBytes(fullPayload, flush: true);
+  }
+
+  Future<void> close() async {
+    await _initializing;
+    await _db?.close();
+    _db = null;
+    _key = null;
+    _initialized = false;
+    _items.clear();
   }
 
   Future<VaultItem> importFile({
@@ -271,16 +389,21 @@ class VaultService {
     if (!await file.exists()) {
       throw const FileSystemException('Source file does not exist');
     }
-    final rawBytes = await file.readAsBytes();
-    if (rawBytes.isEmpty) {
-      throw const FormatException('Cannot import empty file');
+    final length = await file.length();
+    if (length == 0) throw const FormatException('Cannot import empty file');
+    if (length > 100 * 1024 * 1024) {
+      throw const FormatException('Vault imports must be 100 MB or smaller');
     }
-    final originalName = customName ?? file.uri.pathSegments.last;
-    return importBytes(
-      bytes: rawBytes,
-      filename: originalName,
-      folder: folder,
-    );
+    final rawBytes = await file.readAsBytes();
+    try {
+      return await importBytes(
+        bytes: rawBytes,
+        filename: customName ?? file.uri.pathSegments.last,
+        folder: folder,
+      );
+    } finally {
+      rawBytes.fillRange(0, rawBytes.length, 0);
+    }
   }
 
   Future<VaultItem> importBytes({
@@ -289,9 +412,17 @@ class VaultService {
     String folder = 'Root',
   }) async {
     await initialize();
+    if (bytes.isEmpty) throw const FormatException('Cannot import empty file');
+    if (bytes.length > 100 * 1024 * 1024) {
+      throw const FormatException('Vault imports must be 100 MB or smaller');
+    }
+    final cleanName = filename.replaceAll(RegExp(r'[\\/]'), '_').trim();
+    if (cleanName.isEmpty || cleanName == '.' || cleanName == '..') {
+      throw const FormatException('Invalid vault filename');
+    }
     final dir = await _getDir();
     final id = const Uuid().v4();
-    final ext = filename.contains('.') ? filename.split('.').last : 'bin';
+    final ext = cleanName.contains('.') ? cleanName.split('.').last : 'bin';
     final encName = '$id.enc';
     final targetFile = File('${dir.path}/$encName');
 
@@ -307,7 +438,7 @@ class VaultService {
     final category = VaultCategory.fromExtension(ext);
     final item = VaultItem(
       id: id,
-      filename: filename,
+      filename: cleanName,
       folder: _folders.contains(folder) ? folder : 'Root',
       category: category,
       sizeBytes: bytes.length,
@@ -316,12 +447,20 @@ class VaultService {
     );
 
     _items.add(item);
-    await _saveManifest();
+    try { await _saveManifest(); } catch (_) {
+      _items.removeWhere((entry) => entry.id == item.id);
+      // Preserve ciphertext for recovery if the index write fails.
+      rethrow;
+    }
     return item;
   }
 
   Future<Uint8List> readDecryptedBytes(VaultItem item) async {
     await initialize();
+    if (!_items.any((stored) =>
+        stored.id == item.id && stored.encryptedFilename == item.encryptedFilename)) {
+      throw StateError('File not present in private vault index');
+    }
     final dir = await _getDir();
     final file = File('${dir.path}/${item.encryptedFilename}');
     if (!await file.exists()) {
@@ -346,19 +485,28 @@ class VaultService {
     await initialize();
     final index = _items.indexWhere((i) => i.id == id);
     if (index == -1) return;
-    final clean = newName.trim();
-    if (clean.isEmpty) return;
-    _items[index] = _items[index].copyWith(filename: clean);
-    await _saveManifest();
+    final clean = newName.replaceAll(RegExp(r'[\\/]'), '_').trim();
+    if (clean.isEmpty || clean == '.' || clean == '..') return;
+    final previous = _items[index];
+    _items[index] = previous.copyWith(filename: clean);
+    try { await _saveManifest(); } catch (_) { _items[index] = previous; rethrow; }
   }
 
   Future<void> moveItem(String id, String targetFolder) async {
     await initialize();
     final index = _items.indexWhere((i) => i.id == id);
     if (index == -1) return;
-    addFolder(targetFolder);
-    _items[index] = _items[index].copyWith(folder: targetFolder);
-    await _saveManifest();
+    final previous = _items[index];
+    final oldFolders = Set<String>.from(_folders);
+    final clean = targetFolder.trim();
+    if (clean.isEmpty) return;
+    _folders.add(clean);
+    _items[index] = previous.copyWith(folder: clean);
+    try { await _saveManifest(); } catch (_) {
+      _items[index] = previous;
+      _folders..clear()..addAll(oldFolders);
+      rethrow;
+    }
   }
 
   Future<void> deleteItem(String id) async {
@@ -366,32 +514,36 @@ class VaultService {
     final index = _items.indexWhere((i) => i.id == id);
     if (index == -1) return;
     final item = _items.removeAt(index);
+    try { await _saveManifest(); } catch (_) {
+      _items.insert(index, item);
+      rethrow;
+    }
     final dir = await _getDir();
     final file = File('${dir.path}/${item.encryptedFilename}');
-    if (await file.exists()) {
-      try {
-        await file.delete();
-      } catch (_) {}
-    }
-    await _saveManifest();
+    if (await file.exists()) await file.delete();
   }
 
-  void addFolder(String folder) {
+  Future<void> addFolder(String folder) async {
+    await initialize();
     final clean = folder.trim();
-    if (clean.isNotEmpty) {
-      _folders.add(clean);
-    }
+    if (clean.isEmpty || _folders.contains(clean)) return;
+    _folders.add(clean);
+    try { await _saveManifest(); } catch (_) { _folders.remove(clean); rethrow; }
   }
 
   Future<void> removeFolder(String folder) async {
-    if (folder == 'Root') return;
+    await initialize();
+    if (folder == 'Root' || !_folders.contains(folder)) return;
+    final previous = List<VaultItem>.from(_items);
     _folders.remove(folder);
     for (var i = 0; i < _items.length; i++) {
-      if (_items[i].folder == folder) {
-        _items[i] = _items[i].copyWith(folder: 'Root');
-      }
+      if (_items[i].folder == folder) _items[i] = _items[i].copyWith(folder: 'Root');
     }
-    await _saveManifest();
+    try { await _saveManifest(); } catch (_) {
+      _items..clear()..addAll(previous);
+      _folders.add(folder);
+      rethrow;
+    }
   }
 
   List<VaultItem> filter({
@@ -425,20 +577,23 @@ class VaultService {
       vaultBytes: totalBytes,
       fileCount: _items.length,
       categoryBytes: catMap,
-      freeDeviceBytes: 1024 * 1024 * 1024 * 10, // ~10 GB fallback
+      freeDeviceBytes: 0, // Available storage is unknown; do not fabricate it.
     );
   }
 
   Future<void> clearVault() async {
+    // Destructive: caller must obtain explicit confirmation.
+    await close();
     final dir = await _getDir();
     if (await dir.exists()) {
       await dir.delete(recursive: true);
       await dir.create(recursive: true);
     }
-    _items.clear();
-    _folders.clear();
-    _folders.addAll(['Root', 'Personal', 'Work', 'Financial']);
-    _key = null;
-    _initialized = false;
+    if (customDir == null) {
+      await const FlutterSecureStorage().delete(
+        key: 'calculator.private_vault_v1.aes_key',
+      );
+    }
+    _folders..clear()..addAll({'Root', 'Personal', 'Work', 'Financial'});
   }
 }

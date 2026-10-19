@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../core/security/vault_service.dart';
 import '../../core/security/private_media_files.dart';
 import 'package:local_auth/local_auth.dart';
@@ -28,6 +29,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   late final VaultService _vault = ref.read(vaultServiceProvider);
   bool _authenticated = false;
   bool _loading = true;
+  String? _error;
   String _searchQuery = '';
   String _selectedFolder = 'All';
   VaultCategory? _selectedCategory;
@@ -40,6 +42,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   }
 
   Future<void> _checkAuthAndLoad() async {
+    if (mounted) setState(() { _loading = true; _error = null; });
     final device = ref.read(deviceSettingsProvider);
     if (device?.vaultBiometricsEnabled == true) {
       final lock = ref.read(lockProvider);
@@ -59,13 +62,28 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
         return;
       }
     }
-    await _vault.initialize();
-    _stats = await _vault.getStats();
-    if (mounted) {
+    try {
+      await _vault.initialize();
+      final stats = await _vault.getStats();
+      if (!mounted) return;
+      if (!ref.read(lockProvider).unlocked) {
+        Navigator.of(context).pop();
+        return;
+      }
       setState(() {
+        _stats = stats;
         _authenticated = true;
         _loading = false;
       });
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _error = 'Could not open the local encrypted vault. Your existing '
+              'files were preserved. Check available device storage and retry. '
+              'Do not clear app data or reinstall if you have private files.';
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -92,6 +110,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       final file = File(picked.path);
       await _vault.importFile(
         file: file,
+        customName: picked.name,
         folder: _selectedFolder == 'All' ? 'Root' : _selectedFolder,
       );
       await _refresh();
@@ -111,6 +130,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
       final file = File(result.first.path!);
       await _vault.importFile(
         file: file,
+        customName: result.first.name,
         folder: _selectedFolder == 'All' ? 'Root' : _selectedFolder,
       );
       await _refresh();
@@ -125,7 +145,8 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   Future<void> _viewItem(VaultItem item) async {
     await act(context, () async {
       final bytes = await _vault.readDecryptedBytes(item);
-      if (!mounted) return;
+      try {
+        if (!mounted) return;
 
       if (item.category == VaultCategory.images) {
         await Navigator.of(context).push(
@@ -198,7 +219,9 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
           );
         }
       }
-      bytes.fillRange(0, bytes.length, 0); // Zero out secure decrypted buffer
+      } finally {
+        bytes.fillRange(0, bytes.length, 0); // Minimize plaintext lifetime.
+      }
     });
   }
 
@@ -224,18 +247,51 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
     );
     if (confirm != true || !mounted) return;
 
-    final tempDir = await Directory.systemTemp.createTemp('vault-export-');
-    final tempFile = File('${tempDir.path}/${item.filename}');
-    await tempFile.writeAsBytes(bytes);
-    await SharePlus.instance.share(ShareParams(files: [XFile(tempFile.path)], text: item.filename));
+    final base = await getTemporaryDirectory();
+    final tempDir = await base.createTemp('vault-export-');
+    // A legacy filename must not escape the app-private export directory.
+    final sanitized = item.filename.replaceAll(RegExp(r'[\\/]'), '_');
+    final safeName = sanitized.isEmpty || sanitized == '.' || sanitized == '..'
+        ? 'vault-export.bin' : sanitized;
+    final tempFile = File('${tempDir.path}/$safeName');
     try {
-      await tempFile.delete();
-      await tempDir.delete(recursive: true);
-    } catch (_) {}
+      await tempFile.writeAsBytes(bytes, flush: true);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(tempFile.path)], text: safeName),
+      );
+    } finally {
+      // This clears only the app-owned temporary export, not the user's copy
+      // explicitly saved into another app through the Android share sheet.
+      try { await tempDir.delete(recursive: true); } catch (_) {}
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_error != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Private File Vault')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 48),
+                const SizedBox(height: 16),
+                Text(_error!, textAlign: TextAlign.center),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: _checkAuthAndLoad,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('Retry opening vault'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
     if (_loading || !_authenticated) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -290,12 +346,8 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
                       color: Theme.of(context).hintColor,
                     ),
                   ),
-                  Text(
-                    'Device free: ${_formatBytes(_stats!.freeDeviceBytes)}',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Theme.of(context).hintColor,
-                    ),
-                  ),
+                  const Text('Stored only on this device',
+                      style: TextStyle(fontSize: 12)),
                 ],
               ),
             ),
@@ -469,7 +521,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
             ListTile(
               leading: const Icon(Icons.photo_library_outlined),
               title: const Text('Import photo or video'),
-              subtitle: const Text('Encrypt and move into private vault'),
+              subtitle: const Text('Encrypt a local copy; original remains outside vault'),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _importMedia(false);
@@ -478,7 +530,7 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
             ListTile(
               leading: const Icon(Icons.camera_alt_outlined),
               title: const Text('Take photo directly into vault'),
-              subtitle: const Text('Never saved to public camera gallery'),
+              subtitle: const Text('Encrypt photo into app-private vault storage'),
               onTap: () {
                 Navigator.pop(sheetContext);
                 _importMedia(true);
@@ -502,8 +554,10 @@ class _VaultScreenState extends ConsumerState<VaultScreen> {
   Future<void> _createFolderDialog() async {
     final folderName = await askText(context, 'New vault folder');
     if (folderName != null && folderName.trim().isNotEmpty) {
-      _vault.addFolder(folderName.trim());
-      setState(() => _selectedFolder = folderName.trim());
+      await act(context, () async {
+        await _vault.addFolder(folderName.trim());
+        if (mounted) setState(() => _selectedFolder = folderName.trim());
+      });
     }
   }
 
