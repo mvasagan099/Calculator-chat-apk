@@ -348,14 +348,15 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
     } finally {
       if (mounted) setState(() => downloading = false);
     }
-    if (!mounted || visualAttachmentExpired(a, DateTime.now())) {
+    if (!_canUsePrivateMedia ||
+        (_attachmentExpiry != null && !_attachmentExpiry!.isAfter(DateTime.now()))) {
       bytes.fillRange(0, bytes.length, 0);
       return;
     }
     final file = await PrivateMediaFiles().save(
       bytes,
       extension: (a['filename'] as String).split('.').last,
-      expiresAt: attachmentDeadline(a),
+      expiresAt: _attachmentExpiry,
     );
     try {
       await SharePlus.instance.share(ShareParams(files: [XFile(file.path)]));
