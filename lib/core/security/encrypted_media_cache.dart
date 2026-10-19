@@ -143,7 +143,9 @@ class EncryptedMediaCache {
     required Uint8List bytes,
   }) async {
     if (owner.isEmpty || !eligible(attachment) ||
-        bytes.length != attachment['size_bytes']) return;
+        bytes.length != attachment['size_bytes']) {
+      return;
+    }
     final deadline = expiration(attachment);
     if (!deadline.isAfter(clock())) return;
     final path = attachment['object_path'] as String;

@@ -51,7 +51,9 @@ class MediaService {
     void Function(double)? progress,
   ) async {
     if (!_cacheAuthorized(owner, token) ||
-        !EncryptedMediaCache.eligible(attachment)) return null;
+        !EncryptedMediaCache.eligible(attachment)) {
+      return null;
+    }
     Uint8List? result;
     try {
       result = await cache.read(owner: owner!, attachment: attachment);
@@ -76,7 +78,9 @@ class MediaService {
     Uint8List bytes,
   ) async {
     if (!_cacheAuthorized(owner, token) ||
-        !EncryptedMediaCache.eligible(attachment)) return;
+        !EncryptedMediaCache.eligible(attachment)) {
+      return;
+    }
     try {
       await cache.write(owner: owner!, attachment: attachment, bytes: bytes);
     } catch (_) {

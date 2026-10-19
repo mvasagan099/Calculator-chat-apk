@@ -86,11 +86,13 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
     if (temp != null) {
       try { if (await temp.exists()) await temp.delete(); } catch (_) {}
     }
-    if (mounted) setState(() {
-      playing = false;
-      audioPosition = Duration.zero;
-      audioDuration = Duration.zero;
-    });
+    if (mounted) {
+      setState(() {
+        playing = false;
+        audioPosition = Duration.zero;
+        audioDuration = Duration.zero;
+      });
+    }
   }
   Map<String, dynamic> get attachment => {
     ...widget.attachment,
@@ -274,6 +276,7 @@ class _AttachmentViewState extends ConsumerState<AttachmentView>
       }
       final text = utf8.decode(bytes, allowMalformed: true);
       bytes.fillRange(0, bytes.length, 0);
+      if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute<void>(
           builder: (_) => TextDocumentViewer(
