@@ -258,6 +258,28 @@ class VaultService {
     });
   }
 
+  /// Safely configures a SQLite PRAGMA across platforms and drivers.
+  ///
+  /// On Android, SQLiteDatabase.execSQL rejects PRAGMA statements that return
+  /// query results (such as `PRAGMA secure_delete=ON`), throwing:
+  /// "Queries can be performed using SQLiteDatabase query or rawQuery methods only."
+  ///
+  /// Executing via [Database.rawQuery] routes through Android's query pipeline,
+  /// safely consuming the result cursor. If a backend requires [Database.execute],
+  /// it falls back gracefully. If an engine does not support an optional PRAGMA,
+  /// it is caught safely so database opening and existing data access are never blocked.
+  static Future<void> _applyPragma(Database database, String pragma) async {
+    try {
+      await database.rawQuery(pragma);
+    } catch (_) {
+      try {
+        await database.execute(pragma);
+      } catch (_) {
+        // Optional PRAGMA unsupported by this engine; safely ignored.
+      }
+    }
+  }
+
   Future<void> _initializeIndex() async {
     final dir = await _getDir();
     final legacy = File('${dir.path}/$_metaFile');
@@ -278,7 +300,9 @@ class VaultService {
             // journal_mode is configured by sqflite on Android; changing it
             // from inside onConfigure can fail while the open transaction is
             // active, preventing an otherwise healthy local vault from opening.
-            await database.execute('PRAGMA secure_delete=ON');
+            await _applyPragma(database, 'PRAGMA secure_delete=ON');
+            await _applyPragma(database, 'PRAGMA foreign_keys=ON');
+            await _applyPragma(database, 'PRAGMA synchronous=FULL');
           },
           onCreate: (database, _) async {
             await database.execute(

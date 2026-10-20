@@ -129,6 +129,18 @@ class SqliteEncryptedCache implements LocalCache {
     )).bytes,
   ).replaceAll('=', '');
 
+  static Future<void> _applyPragma(Database db, String pragma) async {
+    try {
+      await db.rawQuery(pragma);
+    } catch (_) {
+      try {
+        await db.execute(pragma);
+      } catch (_) {
+        // Optional PRAGMA unsupported by this engine; safely ignored.
+      }
+    }
+  }
+
   @override
   Future<void> initialize() async {
     if (_db != null) return;
@@ -163,9 +175,9 @@ class SqliteEncryptedCache implements LocalCache {
           version: 1,
           singleInstance: false,
           onConfigure: (db) async {
-            await db.rawQuery('PRAGMA journal_mode=WAL');
-            await db.execute('PRAGMA synchronous=FULL');
-            await db.execute('PRAGMA secure_delete=ON');
+            await _applyPragma(db, 'PRAGMA journal_mode=WAL');
+            await _applyPragma(db, 'PRAGMA synchronous=FULL');
+            await _applyPragma(db, 'PRAGMA secure_delete=ON');
           },
           onCreate: (db, _) async {
             await db.execute(

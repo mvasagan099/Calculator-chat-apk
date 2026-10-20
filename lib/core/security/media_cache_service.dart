@@ -233,6 +233,18 @@ class MediaCacheService {
     return key;
   }
 
+  static Future<void> _applyPragma(Database database, String pragma) async {
+    try {
+      await database.rawQuery(pragma);
+    } catch (_) {
+      try {
+        await database.execute(pragma);
+      } catch (_) {
+        // Optional PRAGMA unsupported by this engine; safely ignored.
+      }
+    }
+  }
+
   Future<Database> _getDatabase(String accountId) async {
     if (_dbHandles.containsKey(accountId)) return _dbHandles[accountId]!;
     final dir = await _accountDir(accountId);
@@ -244,7 +256,7 @@ class MediaCacheService {
         version: 1,
         singleInstance: false,
         onConfigure: (database) async {
-          await database.execute('PRAGMA secure_delete=ON');
+          await _applyPragma(database, 'PRAGMA secure_delete=ON');
         },
         onCreate: (database, _) async {
           await database.execute('''
